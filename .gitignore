@@ -1,0 +1,9 @@
+node_modules
+dist
+data
+.env
+*.log
+
+# Local agent notes and sample workbooks may contain private data.
+.superpowers/
+*.xlsx
