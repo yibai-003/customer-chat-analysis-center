@@ -9,6 +9,7 @@ describe("usePollingTimer", () => {
     const callback = vi.fn();
     const view = renderHook(({ enabled }) => usePollingTimer(enabled, callback, 1000), { initialProps: { enabled: true } });
     act(() => vi.advanceTimersByTime(3000));
+    await act(async () => { await Promise.resolve(); });
     expect(callback).toHaveBeenCalledTimes(3);
     view.unmount();
     act(() => vi.advanceTimersByTime(3000));
