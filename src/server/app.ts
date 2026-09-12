@@ -20,6 +20,14 @@ import { getAnalysisCapacity } from "./services/analysis-capacity-service";
 import { initializeKnowledgeSync, type KnowledgeSync } from "./services/knowledge/knowledge-sync-service";
 import { setHotTopicKnowledgeSync } from "./services/knowledge/hot-topic-service";
 
+function isXlsxFile(filePath: string): boolean {
+  try {
+    const signature = fs.readFileSync(filePath).subarray(0, 4);
+    return signature.length === 4 && signature[0] === 0x50 && signature[1] === 0x4b
+      && (signature[2] === 0x03 || signature[2] === 0x05 || signature[2] === 0x07);
+  } catch { return false; }
+}
+
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
   analysisCapacityProvider?: typeof getAnalysisCapacity;
@@ -84,7 +92,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   });
   app.get("/api/records/:id", (req, res) => { const record = getRecord(req.params.id); return record ? ok(res, record) : fail(res, "记录不存在", 404); });
   app.post("/api/jobs/import", upload.single("file"), async (req, res) => {
-    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx")) {
+    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path)) {
       if (req.file) fs.rmSync(req.file.path, { force: true });
       return fail(res, "请上传 .xlsx 文件");
     }
@@ -114,7 +122,7 @@ export function createApp(dependencies: AppDependencies = {}) {
     return job ? ok(res, job) : fail(res, "导入任务不存在", 404);
   });
   app.post("/api/jobs/import-preview", upload.single("file"), async (req, res) => {
-    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx")) {
+    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path)) {
       if (req.file) fs.rmSync(req.file.path, { force: true });
       return fail(res, "请上传 .xlsx 文件");
     }

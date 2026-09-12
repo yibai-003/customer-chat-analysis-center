@@ -41,6 +41,15 @@ function removeFile(filePath: string | undefined): void {
   }
 }
 
+function isXlsxFile(filePath: string | undefined): boolean {
+  if (!filePath) return false;
+  try {
+    const signature = fs.readFileSync(filePath).subarray(0, 4);
+    return signature.length === 4 && signature[0] === 0x50 && signature[1] === 0x4b
+      && (signature[2] === 0x03 || signature[2] === 0x05 || signature[2] === 0x07);
+  } catch { return false; }
+}
+
 function parseColumns(value: unknown): KnowledgeColumn[] | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (Array.isArray(value)) return value as KnowledgeColumn[];
@@ -133,7 +142,7 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
     upload.single("file"),
     async (req, res) => {
       const uploadedPath = req.file?.path;
-      if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx")) {
+      if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path)) {
         removeFile(uploadedPath);
         return fail(res, "请上传 .xlsx 文件");
       }
