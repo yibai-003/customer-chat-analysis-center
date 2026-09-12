@@ -18,6 +18,7 @@ import { normalizeUploadedFilename } from "./utils/encoding";
 import { createKnowledgeRouter } from "./routes/knowledge-routes";
 import { getAnalysisCapacity } from "./services/analysis-capacity-service";
 import { initializeKnowledgeSync, type KnowledgeSync } from "./services/knowledge/knowledge-sync-service";
+import { setHotTopicKnowledgeSync } from "./services/knowledge/hot-topic-service";
 
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
@@ -30,6 +31,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   fs.mkdirSync(config.dataDir, { recursive: true });
   const knowledgeSync = dependencies.knowledgeSync ?? (process.env.NODE_ENV === "test" ? undefined : initializeKnowledgeSync());
   if (!knowledgeSync) initDb();
+  setHotTopicKnowledgeSync(knowledgeSync);
   const app = express();
   app.use(express.json({ limit: "2mb" }));
   app.use((req, res, next) => {
