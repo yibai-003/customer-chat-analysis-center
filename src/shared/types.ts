@@ -135,6 +135,8 @@ export interface KnowledgeItem {
   isEnabled: boolean;
   sourceRowNumber?: number;
   updatedAt: string;
+  /** 当前关联的不同对话记录数，重新解析同一记录不重复计数。 */
+  occurrenceCount?: number;
 }
 
 export interface KnowledgeImportPreview {
@@ -210,6 +212,10 @@ export interface AnalysisField {
   candidateLimit?: number;
   matchFieldKey?: string;
   knowledgeColumn?: string;
+  /** AI 字段产出后，是否将结果沉淀到所属板块知识库。 */
+  knowledgeSyncEnabled?: boolean;
+  /** 单次分析最多新增的热点问题词条数。 */
+  knowledgeCaptureLimit?: 1 | 2;
 }
 
 export type AnalysisFieldInput = Partial<AnalysisField> & {

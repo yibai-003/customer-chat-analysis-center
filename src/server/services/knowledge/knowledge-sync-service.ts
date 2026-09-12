@@ -31,7 +31,7 @@ const schemas = {
     image_enabled: flag, depends_on_json: json(z.array(text)), sort_order: integer,
     execution_type: z.enum(["ai", "knowledge_match", "knowledge_extract"]), export_enabled: flag,
     knowledge_base_id: id.nullable(), candidate_limit: integer, match_field_key: text.nullable(),
-    knowledge_column: text.nullable(), is_enabled: flag,
+    knowledge_column: text.nullable(), knowledge_sync_enabled: flag.optional().default(0), knowledge_capture_limit: z.union([z.literal(1), z.literal(2)]).optional().default(2), is_enabled: flag,
   }).strict(),
   bases: z.object({
     id, section_id: id, name: text, original_filename: text,
@@ -94,6 +94,11 @@ export function captureCatalog(): Catalog {
   for (const group of groups) {
     const columns = Object.keys(schemas[group].shape);
     result[group] = db.prepare(`SELECT ${columns.join(",")} FROM ${tables[group]} ORDER BY id`).all();
+    if (group === "fields") for (const row of result[group] as Record<string, unknown>[]) {
+      // Keep the digest of pre-feature catalogs stable so an upgrade is not a sync conflict.
+      if (row.knowledge_sync_enabled === 0) delete row.knowledge_sync_enabled;
+      if (row.knowledge_capture_limit === 2) delete row.knowledge_capture_limit;
+    }
   }
   return validateCatalog(result);
 }
@@ -123,6 +128,10 @@ export function restoreCatalog(input: unknown) {
     for (const group of ["sections", "bases", "fields", "items"] as Group[]) {
       for (const row of catalog[group]) {
         const values: Record<string, unknown> = { ...row, created_at: timestamp, updated_at: timestamp };
+        if (group === "fields") {
+          values.knowledge_sync_enabled ??= 0;
+          values.knowledge_capture_limit ??= 2;
+        }
         if (group === "bases") values.item_count = catalog.items.filter((i) => i.knowledge_base_id === row.id).length;
         if (group === "items") {
           const item = row as Catalog["items"][number];

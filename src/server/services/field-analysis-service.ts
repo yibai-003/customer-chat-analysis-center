@@ -9,6 +9,8 @@ import { validateAnalysisResult } from "../ai/result-validator";
 import { createFieldRun, getFieldResultContext } from "./field-run-service";
 import { matchKnowledgeItem } from "./knowledge/knowledge-match-service";
 import { extractKnowledgeValue } from "./knowledge/knowledge-extract-service";
+import { captureHotTopicQuestions } from "./knowledge/hot-topic-service";
+import { isHotTopicField } from "../../shared/hot-topic";
 import type { AnalysisField, AnalysisFieldRun } from "../../shared/types";
 
 export interface FieldExecutionState {
@@ -74,7 +76,7 @@ function dependencyValues(
   sourceFields: Record<string, string>,
   context: Record<string, unknown>,
 ) {
-  return Object.fromEntries(field.dependsOn.map((key) => [key, sourceFields[key] ?? context[key]]));
+  return Object.fromEntries(field.dependsOn.map((key) => [key, context[key] ?? sourceFields[key]]));
 }
 
 async function runAiField(
@@ -248,6 +250,10 @@ async function runField(
   context: Record<string, unknown>,
   image: Buffer | null,
 ) {
+  if (isHotTopicField(field) && field.knowledgeSyncEnabled) {
+    const run = await captureHotTopicQuestions({ recordId, field, dependencies: dependencyValues(field, record.sourceFields, context) });
+    return { result: run.result, status: run.status === "completed" ? "completed" as const : "needs_review" as const, errorMessage: run.errorMessage, run };
+  }
   switch (field.executionType ?? "ai") {
     case "knowledge_match":
       return runKnowledgeMatch(recordId, sectionName, record, field, context);
@@ -307,7 +313,7 @@ export async function analyzeField(recordId: string, sectionId: string, fieldKey
     ? await fs.readFile(record.imagePath)
     : null;
   const context = getFieldResultContext(recordId, field.dependsOn, sectionId);
-  const dependencyValues = Object.fromEntries(field.dependsOn.map((key) => [key, record.sourceFields[key] ?? context[key]]));
+  const dependencyValues = Object.fromEntries(field.dependsOn.map((key) => [key, context[key] ?? record.sourceFields[key]]));
   const missing = field.dependsOn.filter((key) => dependencyValues[key] === undefined);
   if (missing.length) throw new Error(`依赖字段未完成：${missing.join(", ")}`);
   const run = await runField(recordId, section.name, record, field, dependencyValues, image);

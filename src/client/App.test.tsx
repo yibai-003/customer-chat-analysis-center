@@ -4,9 +4,21 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AnalysisCapacity, AnalysisSection, Job, RecordDetail, RecordPage, RecordSummary } from "../shared/types";
 import App from "./App";
-import { formatFieldResult } from "./App";
+import { Detail, formatFieldResult } from "./App";
 
 describe("field result formatting", () => {
+  it("shows the latest retry result and the reason for review", async () => {
+    const recordDetail = detail(record("page-1", 1));
+    const common = { recordId: recordDetail.id, fieldId: "hot-field", sectionId: section.id, fieldKey: "question", dependencies: {}, createdAt: "2026-09-12" };
+    recordDetail.fieldRuns = [
+      { ...common, id: "new-run", status: "needs_review", result: { question: "" }, errorMessage: "问题语义匹配需要复核，未写入知识库" },
+      { ...common, id: "old-run", status: "completed", result: { question: "旧问题" } },
+    ];
+    await act(async () => root.render(<Detail record={recordDetail} section={{ ...section, outputSchema: [{ key: "question", label: "高频问题", type: "string" }] }}
+      fields={[]} setRecord={vi.fn()} onAnalyze={vi.fn()} onRetry={vi.fn()} onSave={vi.fn()} busy={false} />));
+    expect(host.querySelector<HTMLTextAreaElement>(".detail-block .result-field textarea")?.value).toBe("");
+    expect(host.textContent).toContain("问题语义匹配需要复核，未写入知识库");
+  });
   it("renders structured results as readable JSON", () => {
     expect(formatFieldResult({ 问题现象: "未说明" })).toBe('{\n  "问题现象": "未说明"\n}');
   });

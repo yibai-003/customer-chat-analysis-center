@@ -6,6 +6,7 @@ import type { AnalysisField, AnalysisSection, KnowledgeBase, KnowledgeColumn } f
 import { knowledgeApi } from "../api/knowledge-api";
 import { FieldConfigEditor } from "./FieldConfigEditor";
 import { SectionConfigDialog } from "./SectionConfigDialog";
+import { HOT_TOPIC_PROMPT } from "../../shared/hot-topic";
 
 const section: AnalysisSection = {
   id: "refund",
@@ -142,6 +143,19 @@ afterEach(async () => {
 });
 
 describe("FieldConfigEditor knowledge modes", () => {
+  it("configures capture only for the hot-topic AI field and applies the prompt explicitly", async () => {
+    const onChange = vi.fn();
+    const hotField = field({ sectionId: "hot-topic", key: "高频问题", label: "高频问题", knowledgeSyncEnabled: true });
+    await renderUi(<FieldConfigEditor fields={[hotField]} sourceFields={["高频问题"]} onChange={onChange} onAdd={vi.fn()} onRemove={vi.fn()} />);
+    expect((control("启用高频问题知识沉淀") as HTMLInputElement).checked).toBe(true);
+    expect(control("每条记录最多提炼问题数").value).toBe("2");
+    await click(button("使用问题提炼提示词"));
+    expect(onChange).toHaveBeenCalledWith(0, expect.objectContaining({ prompt: HOT_TOPIC_PROMPT, type: "string", imageEnabled: false, required: false }));
+    await click(control("启用高频问题知识沉淀"));
+    expect(onChange).toHaveBeenCalledWith(0, { knowledgeSyncEnabled: false });
+    await renderUi(<FieldConfigEditor fields={[{ ...hotField, sectionId: "refund" }]} onChange={onChange} onAdd={vi.fn()} onRemove={vi.fn()} />);
+    expect(host.querySelector('[aria-label="启用高频问题知识沉淀"]')).toBeNull();
+  });
   it("shows the existing prompt, image, required, and dependency controls for AI fields", async () => {
     const listBases = vi.spyOn(knowledgeApi, "listBases").mockResolvedValue([base]);
     await renderUi(<FieldConfigEditor

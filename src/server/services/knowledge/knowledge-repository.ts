@@ -37,6 +37,7 @@ function mapKnowledgeItem(row: any): KnowledgeItem {
     isEnabled: Boolean(row.is_enabled),
     sourceRowNumber: row.source_row_number ?? undefined,
     updatedAt: row.updated_at,
+    occurrenceCount: row.occurrence_count ?? 0,
   };
 }
 
@@ -176,7 +177,8 @@ export function listKnowledgeItems(
     WHERE ${whereSql}
   `).get(...parameters) as { count: number }).count;
   const rows = db.prepare(`
-    SELECT *
+    SELECT *, (SELECT COUNT(DISTINCT record_id) FROM hot_topic_record_questions
+      WHERE knowledge_item_id = knowledge_items.id) AS occurrence_count
     FROM knowledge_items
     WHERE ${whereSql}
     ORDER BY updated_at DESC, id

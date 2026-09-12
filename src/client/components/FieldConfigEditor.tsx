@@ -1,5 +1,6 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import type { AnalysisField, AnalysisFieldType } from "../../shared/types";
+import { HOT_TOPIC_PROMPT, isHotTopicField } from "../../shared/hot-topic";
 import { DependencySelect } from "./DependencySelect";
 import { PromptEditor } from "./PromptEditor";
 import { KnowledgeFieldSettings, executionTypeLabel } from "./KnowledgeFieldSettings";
@@ -18,9 +19,9 @@ export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, sourceFie
   const effectiveSectionId = sectionId ?? fields[0]?.sectionId;
   const changeExecutionType = (index: number, field: AnalysisField, executionType: AnalysisField["executionType"]) => {
     if (executionType === "knowledge_match") {
-      onChange(index, { executionType, exportEnabled: false, outputColumn: "" });
+      onChange(index, { executionType, exportEnabled: false, outputColumn: "", ...(field.knowledgeSyncEnabled ? { knowledgeSyncEnabled: false } : {}) });
     } else if (executionType === "knowledge_extract") {
-      onChange(index, { executionType, exportEnabled: field.exportEnabled ?? true });
+      onChange(index, { executionType, exportEnabled: field.exportEnabled ?? true, ...(field.knowledgeSyncEnabled ? { knowledgeSyncEnabled: false } : {}) });
     } else {
       onChange(index, { executionType: "ai", exportEnabled: true });
     }
@@ -47,6 +48,15 @@ export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, sourceFie
         {field.executionType !== "knowledge_match" && <label>Excel 输出列<input aria-label="Excel 输出列" value={field.outputColumn ?? ""} readOnly /> </label>}
       </div>
       <div className="field-mode-label">当前方式：{executionTypeLabel(field.executionType)}</div>
+      {isHotTopicField(field) && <div className="hot-topic-capture">
+        <div><strong>高频问题知识沉淀</strong><p>优先匹配本板块已启用的问题库；无匹配时自动补充到「热点话题问题库」。</p></div>
+        <label className="hot-topic-capture-toggle"><input aria-label="启用高频问题知识沉淀" type="checkbox" checked={Boolean(field.knowledgeSyncEnabled)} onChange={(event) => onChange(index, { knowledgeSyncEnabled: event.target.checked })} />启用知识沉淀</label>
+        {field.knowledgeSyncEnabled && <div className="hot-topic-capture-options">
+          <label>每条记录最多提炼<select aria-label="每条记录最多提炼问题数" value={field.knowledgeCaptureLimit ?? 2} onChange={(event) => onChange(index, { knowledgeCaptureLimit: Number(event.target.value) as 1 | 2 })}><option value={1}>1 个问题词条</option><option value={2}>2 个问题词条</option></select></label>
+          <p>已有词条与新增词条合计不超过上限；没有明确问题时留空。问题库需有一个结果列。同一记录重试不重复计数，语义不确定时标记复核。</p>
+          <button type="button" className="hot-topic-prompt-button" onClick={() => onChange(index, { prompt: HOT_TOPIC_PROMPT, type: "string", required: false, imageEnabled: false, options: [] })}>使用问题提炼提示词</button>
+        </div>}
+      </div>}
       {field.executionType !== "knowledge_extract" && <PromptEditor value={field.prompt} onChange={(prompt) => onChange(index, { prompt })} />}
       {field.executionType !== "knowledge_extract" && <label>可选值<input aria-label="可选值" value={(field.options ?? []).join(", ")} placeholder="价格问题, 产品问题" onChange={(event) => onChange(index, { options: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} /></label>}
       {field.executionType !== "knowledge_extract" && <div className="field-flags">
@@ -74,3 +84,4 @@ export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, sourceFie
     {!fields.length && <div className="no-results">当前板块还没有解析字段</div>}
   </div>;
 }
+

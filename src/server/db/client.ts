@@ -84,6 +84,8 @@ export function initDb(options: { preserveConfiguration?: boolean } = {}) {
       candidate_limit INTEGER NOT NULL DEFAULT 15,
       match_field_key TEXT,
       knowledge_column TEXT,
+      knowledge_sync_enabled INTEGER NOT NULL DEFAULT 0,
+      knowledge_capture_limit INTEGER NOT NULL DEFAULT 2,
       is_enabled INTEGER NOT NULL DEFAULT 1, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
       UNIQUE(section_id, key),
       FOREIGN KEY(section_id) REFERENCES analysis_sections(id) ON DELETE CASCADE
@@ -131,6 +133,14 @@ export function initDb(options: { preserveConfiguration?: boolean } = {}) {
       FOREIGN KEY(record_id) REFERENCES records(id) ON DELETE CASCADE,
       FOREIGN KEY(field_id) REFERENCES analysis_fields(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS hot_topic_record_questions (
+      record_id TEXT NOT NULL, field_id TEXT NOT NULL, knowledge_item_id TEXT NOT NULL,
+      question TEXT NOT NULL, evidence TEXT NOT NULL, origin TEXT NOT NULL,
+      PRIMARY KEY(record_id, field_id, knowledge_item_id),
+      FOREIGN KEY(record_id) REFERENCES records(id) ON DELETE CASCADE,
+      FOREIGN KEY(field_id) REFERENCES analysis_fields(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_hot_topic_questions_item ON hot_topic_record_questions(knowledge_item_id);
   `);
   const sectionColumns = db.prepare("PRAGMA table_info(analysis_sections)").all() as Array<{ name: string }>;
   if (!sectionColumns.some((column) => column.name === "source_fields_json")) {
@@ -153,6 +163,8 @@ export function initDb(options: { preserveConfiguration?: boolean } = {}) {
     ["candidate_limit", "INTEGER NOT NULL DEFAULT 15"],
     ["match_field_key", "TEXT"],
     ["knowledge_column", "TEXT"],
+    ["knowledge_sync_enabled", "INTEGER NOT NULL DEFAULT 0"],
+    ["knowledge_capture_limit", "INTEGER NOT NULL DEFAULT 2"],
   ] as const;
   for (const [name, definition] of fieldMigrations) {
     if (!fieldColumns.some((column) => column.name === name)) {

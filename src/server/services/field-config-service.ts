@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { db } from "../db/client";
 import type { AnalysisField, AnalysisFieldInput, AnalysisFieldType } from "../../shared/types";
+import { isHotTopicField } from "../../shared/hot-topic";
 
 export type AnalysisFieldLike = Pick<
   AnalysisField,
@@ -15,6 +16,8 @@ export type AnalysisFieldLike = Pick<
   | "candidateLimit"
   | "matchFieldKey"
   | "knowledgeColumn"
+  | "knowledgeSyncEnabled"
+  | "knowledgeCaptureLimit"
 >>;
 
 const now = () => new Date().toISOString();
@@ -40,6 +43,8 @@ function mapField(row: any): AnalysisField {
     candidateLimit: row.candidate_limit ?? 15,
     matchFieldKey: row.match_field_key ?? undefined,
     knowledgeColumn: row.knowledge_column ?? undefined,
+    knowledgeSyncEnabled: Boolean(row.knowledge_sync_enabled),
+    knowledgeCaptureLimit: row.knowledge_capture_limit ?? 2,
   };
 }
 
@@ -60,6 +65,13 @@ export function validateFieldGraph(fields: AnalysisFieldLike[], sourceFields: st
     keys.add(field.key);
   }
   for (const field of fields) {
+    if (field.knowledgeSyncEnabled && (!isHotTopicField(field) || field.type !== "string")) {
+      errors.push(`知识沉淀仅支持热点话题板块的高频问题文本字段：${field.key}`);
+    }
+    if (field.knowledgeSyncEnabled && !field.dependsOn.length) errors.push(`知识沉淀必须依赖截图解析或客户问题：${field.key}`);
+    if (field.knowledgeCaptureLimit !== undefined && ![1, 2].includes(field.knowledgeCaptureLimit)) {
+      errors.push(`单次问题数必须为 1 或 2：${field.key}`);
+    }
     if (field.executionType === "knowledge_match" && !field.knowledgeBaseId) {
       errors.push(`知识匹配字段未选择知识库：${field.key}`);
     }
@@ -117,6 +129,9 @@ export function upsertField(input: AnalysisFieldInput): AnalysisField {
   if (!section) throw new Error("板块不存在");
   const existing = input.id ? getField(input.id) : undefined;
   const executionType = input.executionType ?? existing?.executionType ?? "ai";
+  if (input.knowledgeSyncEnabled && !isHotTopicField({ ...input, executionType })) {
+    throw new Error("知识沉淀仅支持热点话题板块的高频问题 AI 字段");
+  }
   const requestedMatchFieldKey = input.matchFieldKey ?? existing?.matchFieldKey;
   const matchFieldKey = executionType === "knowledge_extract" ? requestedMatchFieldKey : undefined;
   const dependsOn = input.dependsOn ?? existing?.dependsOn ?? [];
@@ -151,6 +166,8 @@ export function upsertField(input: AnalysisFieldInput): AnalysisField {
     candidateLimit: input.candidateLimit ?? existing?.candidateLimit ?? 15,
     matchFieldKey: applicableMatchFieldKey,
     knowledgeColumn: applicableKnowledgeColumn,
+    knowledgeSyncEnabled: isHotTopicField({ ...input, executionType }) && (input.knowledgeSyncEnabled ?? existing?.knowledgeSyncEnabled ?? false),
+    knowledgeCaptureLimit: (input.knowledgeCaptureLimit ?? existing?.knowledgeCaptureLimit ?? 2) as 1 | 2,
   };
   const errors = validateFieldGraph(
     [...listFields(input.sectionId).filter((item) => item.id !== field.id), field],
@@ -160,17 +177,19 @@ export function upsertField(input: AnalysisFieldInput): AnalysisField {
   const timestamp = now();
   db.prepare(`INSERT INTO analysis_fields
     (id,section_id,key,label,field_type,prompt,options_json,output_column,is_required,image_enabled,depends_on_json,sort_order,
-     execution_type,export_enabled,knowledge_base_id,candidate_limit,match_field_key,knowledge_column,is_enabled,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+     execution_type,export_enabled,knowledge_base_id,candidate_limit,match_field_key,knowledge_column,knowledge_sync_enabled,knowledge_capture_limit,is_enabled,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     ON CONFLICT(id) DO UPDATE SET section_id=excluded.section_id,key=excluded.key,label=excluded.label,
       field_type=excluded.field_type,prompt=excluded.prompt,options_json=excluded.options_json,output_column=excluded.output_column,is_required=excluded.is_required,
       image_enabled=excluded.image_enabled,depends_on_json=excluded.depends_on_json,
       execution_type=excluded.execution_type,export_enabled=excluded.export_enabled,knowledge_base_id=excluded.knowledge_base_id,
       candidate_limit=excluded.candidate_limit,match_field_key=excluded.match_field_key,knowledge_column=excluded.knowledge_column,
+      knowledge_sync_enabled=excluded.knowledge_sync_enabled,knowledge_capture_limit=excluded.knowledge_capture_limit,
       sort_order=excluded.sort_order,is_enabled=excluded.is_enabled,updated_at=excluded.updated_at`)
     .run(field.id, field.sectionId, field.key, field.label, field.type, field.prompt, JSON.stringify(field.options), field.outputColumn ?? null, field.required ? 1 : 0,
       field.imageEnabled ? 1 : 0, JSON.stringify(field.dependsOn), field.sortOrder, field.executionType, field.exportEnabled ? 1 : 0,
-      field.knowledgeBaseId ?? null, field.candidateLimit, field.matchFieldKey ?? null, field.knowledgeColumn ?? null, field.isEnabled ? 1 : 0,
+      field.knowledgeBaseId ?? null, field.candidateLimit, field.matchFieldKey ?? null, field.knowledgeColumn ?? null,
+      field.knowledgeSyncEnabled ? 1 : 0, field.knowledgeCaptureLimit, field.isEnabled ? 1 : 0,
       timestamp, timestamp);
   return getField(field.id)!;
 }

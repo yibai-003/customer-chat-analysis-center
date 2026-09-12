@@ -1,4 +1,4 @@
-import fs from "node:fs";
+﻿import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -7,6 +7,7 @@ import { captureCatalog, KnowledgeSync, restoreCatalog } from "./knowledge-sync-
 import { upsertKnowledgeBase, upsertKnowledgeItem, deleteKnowledgeBase } from "./knowledge-repository";
 import { searchKnowledge } from "./knowledge-search-service";
 import { createApp } from "../../app";
+import { upsertField, getField } from "../field-config-service";
 
 let directory: string;
 let sync: KnowledgeSync;
@@ -30,6 +31,25 @@ function seedKnowledge() {
 }
 
 describe("portable knowledge catalog", () => {
+  it("round-trips capture settings and accepts old catalogs without changing their hash", () => {
+    seedKnowledge(); sync.initialize(false);
+    const oldContents = fs.readFileSync(sync.file, "utf8");
+    expect(oldContents).toContain("knowledge_sync_enabled");
+    sync.initialize(false);
+    expect(fs.readFileSync(sync.file, "utf8")).toBe(oldContents);
+    const field = upsertField({ sectionId: "hot-topic", key: "高频问题", label: "高频问题", type: "string",
+      prompt: "提炼", dependsOn: ["topic"], knowledgeSyncEnabled: true, knowledgeCaptureLimit: 1, imageEnabled: false });
+    const catalog = captureCatalog();
+    expect(catalog.fields.find((item) => item.id === field.id)).toMatchObject({ knowledge_sync_enabled: 1, knowledge_capture_limit: 1 });
+    restoreCatalog(catalog);
+    expect(getField(field.id)).toMatchObject({ knowledgeSyncEnabled: true, knowledgeCaptureLimit: 1 });
+    const legacy = structuredClone(catalog);
+    const row = legacy.fields.find((item) => item.id === field.id)!;
+    delete (row as any).knowledge_sync_enabled;
+    delete (row as any).knowledge_capture_limit;
+    restoreCatalog(legacy);
+    expect(getField(field.id)).toMatchObject({ knowledgeSyncEnabled: false, knowledgeCaptureLimit: 2 });
+  });
   it("restores Chinese content, IDs, field bindings and search indexes into an empty environment", () => {
     seedKnowledge(); sync.initialize(false);
     const catalog = captureCatalog();
@@ -114,3 +134,4 @@ describe("portable knowledge catalog", () => {
     } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
   });
 });
+
