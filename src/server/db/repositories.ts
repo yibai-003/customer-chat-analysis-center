@@ -122,7 +122,7 @@ export function updateJobSourcePath(jobId: string, sourcePath: string) {
 }
 export function acquireJobRun(jobId: string): boolean {
   const result = db.prepare(`UPDATE jobs SET run_token = ?, cancel_requested = 0, status = 'processing', updated_at = ?
-    WHERE id = ? AND run_token IS NULL AND status IN ('ready', 'failed', 'paused', 'completed')`).run(crypto.randomUUID(), now(), jobId);
+    WHERE id = ? AND run_token IS NULL AND status IN ('ready', 'failed', 'paused', 'cancelled', 'completed')`).run(crypto.randomUUID(), now(), jobId);
   return result.changes === 1;
 }
 export function releaseJobRun(jobId: string, status: Job["status"]) {
