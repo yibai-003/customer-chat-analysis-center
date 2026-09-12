@@ -146,6 +146,7 @@ npm run dev
 - `ANALYSIS_CONCURRENCY`: 批量解析默认 AI 并发数，默认 `2`
 - `ANALYSIS_BATCH_SIZE`: 批量解析默认每批记录数，默认 `20`，允许 `5-100`
 - `MIN_FREE_DISK_MB`: 上传后继续处理所需的最小剩余磁盘空间，默认 `512` MB，不能低于 `64` MB
+- `BACKUP_INTERVAL_HOURS`: 服务运行期间自动数据库备份间隔，默认 `24` 小时
 
 ## 验证
 
