@@ -17,8 +17,10 @@ import { analyzeField, retryField } from "./services/field-analysis-service";
 import { normalizeUploadedFilename } from "./utils/encoding";
 import { createKnowledgeRouter } from "./routes/knowledge-routes";
 import { getAnalysisCapacity } from "./services/analysis-capacity-service";
+import { initializeKnowledgeSync, type KnowledgeSync } from "./services/knowledge/knowledge-sync-service";
 
 interface AppDependencies {
+  knowledgeSync?: KnowledgeSync;
   analysisCapacityProvider?: typeof getAnalysisCapacity;
   analyzeJobRunner?: typeof analyzeJob;
   retryFailedJobStarter?: typeof retryFailedJob;
@@ -26,9 +28,30 @@ interface AppDependencies {
 
 export function createApp(dependencies: AppDependencies = {}) {
   fs.mkdirSync(config.dataDir, { recursive: true });
-  initDb();
+  const knowledgeSync = dependencies.knowledgeSync ?? (process.env.NODE_ENV === "test" ? undefined : initializeKnowledgeSync());
+  if (!knowledgeSync) initDb();
   const app = express();
   app.use(express.json({ limit: "2mb" }));
+  app.use((req, res, next) => {
+    const configurationChange = ["POST", "PATCH", "DELETE"].includes(req.method)
+      && (/^\/api\/(sections|fields|knowledge-bases|knowledge-items)(\/|$)/.test(req.path))
+      && !req.path.endsWith("/import-preview") && !req.path.endsWith("/search-test");
+    if (!knowledgeSync || !configurationChange) return next();
+    try { knowledgeSync.assertUnchanged(); } catch (error) {
+      return res.status(409).json({ success: false, data: null, error: (error as Error).message });
+    }
+    const sendJson = res.json.bind(res);
+    res.json = (body: any) => {
+      if (res.statusCode < 400 && body?.success === true) {
+        try { knowledgeSync.export(); } catch (error) {
+          res.status(500);
+          return sendJson({ success: false, data: null, error: `本地保存已完成，但知识库快照导出失败：${(error as Error).message}` });
+        }
+      }
+      return sendJson(body);
+    };
+    next();
+  });
   const upload = multer({ dest: path.join(config.dataDir, "uploads"), limits: { fileSize: config.maxUploadMb * 1024 * 1024 } });
   const ok = (res: express.Response, data: unknown) => res.json({ success: true, data, error: null });
   const fail = (res: express.Response, error: unknown, status = 400) => res.status(status).json({ success: false, data: null, error: error instanceof Error ? error.message : "请求失败" });

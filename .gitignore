@@ -7,3 +7,7 @@ data
 # Local agent notes and sample workbooks may contain private data.
 .superpowers/
 *.xlsx
+knowledge/*.tmp
+install*.out
+install*.err
+project-files.txt

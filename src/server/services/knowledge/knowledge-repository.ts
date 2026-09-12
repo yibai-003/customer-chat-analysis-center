@@ -133,6 +133,7 @@ export function deleteKnowledgeBase(id: string): void {
       WHERE knowledge_base_id = ?
     `).all(id) as Array<{ source_path: string | null }>;
     db.prepare("DELETE FROM knowledge_item_fts WHERE knowledge_base_id = ?").run(id);
+    db.prepare("UPDATE analysis_fields SET knowledge_base_id = NULL WHERE knowledge_base_id = ?").run(id);
     db.prepare("DELETE FROM knowledge_bases WHERE id = ?").run(id);
     const dataRoot = path.resolve(config.dataDir);
     for (const item of imports) {

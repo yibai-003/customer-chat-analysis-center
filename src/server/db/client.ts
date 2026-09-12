@@ -7,7 +7,7 @@ fs.mkdirSync(path.dirname(config.databasePath), { recursive: true });
 export const db = new Database(config.databasePath);
 db.pragma("foreign_keys = ON");
 
-export function initDb() {
+export function initDb(options: { preserveConfiguration?: boolean } = {}) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS model_configs (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL,
@@ -180,8 +180,11 @@ export function initDb() {
   db.exec("UPDATE model_configs SET purpose = CASE WHEN supports_vision = 1 THEN 'vision' ELSE 'text' END WHERE purpose IS NULL OR purpose = ''");
   db.exec("UPDATE model_configs SET is_purpose_default = is_default WHERE is_purpose_default = 0 AND is_default = 1");
   seedSections();
-  migrateLegacyFields();
-  migrateRefundAnalysisFields();
+  // A restored catalog owns its field definitions; legacy seeding must not reset them on restart.
+  if (!options.preserveConfiguration) {
+    migrateLegacyFields();
+    migrateRefundAnalysisFields();
+  }
 }
 
 function seedSections() {

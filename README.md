@@ -7,10 +7,56 @@
 ```powershell
 npm install
 Copy-Item .env.example .env
+npm run build
 npm run dev
 ```
 
 打开 `http://localhost:8787`。
+
+## 知识库随 GitHub 同步
+
+页面导入、编辑或删除知识库，以及保存板块和字段配置后，服务会自动更新
+`knowledge/catalog.json`。该文件纳入 Git 管理，包含知识条目、列用途映射、
+板块及父子关系、提示词、字段依赖、知识库绑定和导出设置。中文以 UTF-8 保存。
+内部 ID 保持稳定，迁移后字段无需重新选择知识库。
+
+数据保存到本地 JSON 后，运行以下命令提交并上传到当前分支：
+
+```powershell
+npm run knowledge:push
+```
+
+首次需安装 Git、登录目标 GitHub 账号，并配置 `git config user.name` 和
+`git config user.email`。`origin` 必须指向目标 GitHub 仓库。命令会重新导出、
+只提交知识快照文件，然后执行普通 `git push`；已有本地提交也会随当前分支推送。
+不会强制推送。推送失败时本地快照仍保留，可修复登录或先处理远端更新后重试。
+应用保存不会自动联网推送；需执行上述命令后，其他环境才能拉取到变更。
+同步功能的代码本身需要先提交到仓库一次。
+
+新环境使用：
+
+```powershell
+git clone https://github.com/yibai-003/customer-chat-analysis-center.git
+cd customer-chat-analysis-center
+npm install
+npm run build
+npm run dev
+```
+
+首次启动会自动恢复仓库中的知识库、板块及字段配置，并重建全文检索索引。
+无需重新上传原始知识 Excel。模型 API Key 仍需在新环境单独配置。
+
+已有环境更新时，先运行 `npm run knowledge:push` 保存本机配置，再停止服务、
+执行 `git pull --ff-only`，最后重启。仓库快照变更且本地无未同步修改时自动恢复。
+服务运行期间拉取到新快照会阻止继续编辑配置，提示先重启，避免旧数据库覆盖新文件。
+若本地和仓库各有修改，会报告冲突并保留两边数据；先合并 JSON（保留版本号和关联 ID），
+再在停止服务后运行 `npm run knowledge:restore`，明确采用合并后的仓库配置。
+恢复前会将整个旧数据库备份到 `data/backups/`，恢复使用数据库事务，失败时回滚。
+
+也可以运行 `npm run knowledge:export` 手动生成快照后自行提交。
+快照不包含模型账号/API Key、聊天截图、任务、分析/复核结果、知识导入历史或机器文件路径。
+`data/` 和 `.env` 继续被 Git 忽略；知识条目内容本身会作为仓库内容上传。
+这是知识配置同步，不是多环境业务数据库实时同步。
 
 首次使用时，在页面的“模型配置”中填写：
 

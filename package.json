@@ -3,7 +3,10 @@
     "dev": "tsx src/server/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "build": "vite build"
+    "build": "vite build",
+    "knowledge:export": "tsx src/server/knowledge-cli.ts export",
+    "knowledge:push": "tsx src/server/knowledge-cli.ts push",
+    "knowledge:restore": "tsx src/server/knowledge-cli.ts restore"
   },
   "type": "module",
   "dependencies": {

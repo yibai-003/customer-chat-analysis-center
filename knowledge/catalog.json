@@ -1,0 +1,3137 @@
+{
+  "version": 1,
+  "sections": [
+    {
+      "id": "chat",
+      "parent_id": null,
+      "name": "聊天问题",
+      "prompt": "识别本段客服聊天的核心问题。",
+      "output_schema_json": "[]",
+      "source_fields_json": "[]",
+      "sort_order": 1,
+      "is_enabled": 1,
+      "image_enabled": 1
+    },
+    {
+      "id": "hot-topic",
+      "parent_id": "chat",
+      "name": "热点话题",
+      "prompt": "提炼客户反复出现或具有代表性的热点问题。",
+      "output_schema_json": "[{\"key\":\"topic\",\"label\":\"热点主题\",\"type\":\"string\",\"required\":true},{\"key\":\"summary\",\"label\":\"问题摘要\",\"type\":\"string\"}]",
+      "source_fields_json": "[]",
+      "sort_order": 4,
+      "is_enabled": 1,
+      "image_enabled": 1
+    },
+    {
+      "id": "lost-deal",
+      "parent_id": "chat",
+      "name": "未成交分析",
+      "prompt": "分析客户没有成交的主要原因，并引用聊天依据。",
+      "output_schema_json": "[{\"key\":\"reason\",\"label\":\"未成交原因\",\"type\":\"string\",\"required\":true},{\"key\":\"evidence\",\"label\":\"聊天依据\",\"type\":\"string\"},{\"key\":\"confidence\",\"label\":\"置信度\",\"type\":\"number\"}]",
+      "source_fields_json": "[]",
+      "sort_order": 3,
+      "is_enabled": 1,
+      "image_enabled": 1
+    },
+    {
+      "id": "product",
+      "parent_id": null,
+      "name": "产品分析",
+      "prompt": "识别与产品、售后或服务相关的问题。",
+      "output_schema_json": "[]",
+      "source_fields_json": "[]",
+      "sort_order": 5,
+      "is_enabled": 1,
+      "image_enabled": 1
+    },
+    {
+      "id": "reception",
+      "parent_id": "chat",
+      "name": "接待流程质检",
+      "prompt": "检查客服是否完成问候、需求确认、方案说明和下一步引导。",
+      "output_schema_json": "[{\"key\":\"conclusion\",\"label\":\"质检结论\",\"type\":\"string\",\"required\":true},{\"key\":\"issueType\",\"label\":\"问题类型\",\"type\":\"string\"},{\"key\":\"suggestion\",\"label\":\"改进建议\",\"type\":\"string\"},{\"key\":\"confidence\",\"label\":\"置信度\",\"type\":\"number\"}]",
+      "source_fields_json": "[]",
+      "sort_order": 2,
+      "is_enabled": 1,
+      "image_enabled": 1
+    },
+    {
+      "id": "refund",
+      "parent_id": "product",
+      "name": "退款分析",
+      "prompt": "根据截图解析结果匹配退货原因知识库，并提取完整原因路径。",
+      "output_schema_json": "[{\"key\":\"reason\",\"label\":\"截图解析\",\"type\":\"object\",\"required\":true},{\"key\":\"responsibility\",\"label\":\"责任归因\",\"type\":\"string\"},{\"key\":\"suggestion\",\"label\":\"改进建议\",\"type\":\"string\"}]",
+      "source_fields_json": "[\"售后问题类型\",\"商品信息\",\"产品大类\",\"产品分类\",\"产品名称\"]",
+      "sort_order": 6,
+      "is_enabled": 1,
+      "image_enabled": 1
+    }
+  ],
+  "fields": [
+    {
+      "id": "60c0b094-04e6-4fe1-a265-4a4a19d38fb7",
+      "section_id": "refund",
+      "key": "reasonPathMatch",
+      "label": "原因路径匹配",
+      "field_type": "string",
+      "prompt": "根据截图解析结果和辅助字段，从退货原因知识库候选中选择最符合本次售后根因的唯一完整路径。只能选择候选条目，不得自建分类；证据不足时留空并进入复核。",
+      "options_json": "[]",
+      "output_column": "",
+      "is_required": 0,
+      "image_enabled": 0,
+      "depends_on_json": "[\"reason\",\"售后问题类型\",\"商品信息\",\"产品分类\",\"产品名称\"]",
+      "sort_order": 1,
+      "execution_type": "knowledge_match",
+      "export_enabled": 0,
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "91bff07a-8cb6-4b12-9a6a-d94a6c7f6e02",
+      "section_id": "refund",
+      "key": "一级选项",
+      "label": "一级选项",
+      "field_type": "string",
+      "prompt": "",
+      "options_json": "[]",
+      "output_column": "一级选项",
+      "is_required": 0,
+      "image_enabled": 0,
+      "depends_on_json": "[\"reasonPathMatch\"]",
+      "sort_order": 2,
+      "execution_type": "knowledge_extract",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": "reasonPathMatch",
+      "knowledge_column": "一级原因",
+      "is_enabled": 1
+    },
+    {
+      "id": "ad536550-8370-49b0-9eb8-92d4f90e1749",
+      "section_id": "refund",
+      "key": "二级选项",
+      "label": "二级选项",
+      "field_type": "string",
+      "prompt": "",
+      "options_json": "[]",
+      "output_column": "二级选项",
+      "is_required": 0,
+      "image_enabled": 0,
+      "depends_on_json": "[\"reasonPathMatch\"]",
+      "sort_order": 3,
+      "execution_type": "knowledge_extract",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": "reasonPathMatch",
+      "knowledge_column": "二级原因",
+      "is_enabled": 1
+    },
+    {
+      "id": "dc39d37d-c125-418a-82de-e09398a491ff",
+      "section_id": "refund",
+      "key": "三级选项",
+      "label": "三级选项",
+      "field_type": "string",
+      "prompt": "",
+      "options_json": "[]",
+      "output_column": "三级选项",
+      "is_required": 0,
+      "image_enabled": 0,
+      "depends_on_json": "[\"reasonPathMatch\"]",
+      "sort_order": 4,
+      "execution_type": "knowledge_extract",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": "reasonPathMatch",
+      "knowledge_column": "三级原因",
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-hot-topic-summary",
+      "section_id": "hot-topic",
+      "key": "summary",
+      "label": "问题摘要",
+      "field_type": "string",
+      "prompt": "提炼客户反复出现或具有代表性的热点问题。",
+      "options_json": "[]",
+      "output_column": "问题摘要",
+      "is_required": 0,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 1,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-hot-topic-topic",
+      "section_id": "hot-topic",
+      "key": "topic",
+      "label": "热点主题",
+      "field_type": "string",
+      "prompt": "提炼客户反复出现或具有代表性的热点问题。",
+      "options_json": "[]",
+      "output_column": "热点主题",
+      "is_required": 1,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 0,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-lost-deal-confidence",
+      "section_id": "lost-deal",
+      "key": "confidence",
+      "label": "置信度",
+      "field_type": "number",
+      "prompt": "分析客户没有成交的主要原因，并引用聊天依据。",
+      "options_json": "[]",
+      "output_column": "置信度",
+      "is_required": 0,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 2,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-lost-deal-evidence",
+      "section_id": "lost-deal",
+      "key": "evidence",
+      "label": "聊天依据",
+      "field_type": "string",
+      "prompt": "分析客户没有成交的主要原因，并引用聊天依据。",
+      "options_json": "[]",
+      "output_column": "聊天依据",
+      "is_required": 0,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 1,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-lost-deal-reason",
+      "section_id": "lost-deal",
+      "key": "reason",
+      "label": "未成交原因",
+      "field_type": "string",
+      "prompt": "分析客户没有成交的主要原因，并引用聊天依据。",
+      "options_json": "[]",
+      "output_column": "未成交原因",
+      "is_required": 1,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 0,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-reception-conclusion",
+      "section_id": "reception",
+      "key": "conclusion",
+      "label": "质检结论",
+      "field_type": "string",
+      "prompt": "检查客服是否完成问候、需求确认、方案说明和下一步引导。",
+      "options_json": "[]",
+      "output_column": "质检结论",
+      "is_required": 1,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 0,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-reception-confidence",
+      "section_id": "reception",
+      "key": "confidence",
+      "label": "置信度",
+      "field_type": "number",
+      "prompt": "检查客服是否完成问候、需求确认、方案说明和下一步引导。",
+      "options_json": "[]",
+      "output_column": "置信度",
+      "is_required": 0,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 3,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-reception-issueType",
+      "section_id": "reception",
+      "key": "issueType",
+      "label": "问题类型",
+      "field_type": "string",
+      "prompt": "检查客服是否完成问候、需求确认、方案说明和下一步引导。",
+      "options_json": "[]",
+      "output_column": "问题类型",
+      "is_required": 0,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 1,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-reception-suggestion",
+      "section_id": "reception",
+      "key": "suggestion",
+      "label": "改进建议",
+      "field_type": "string",
+      "prompt": "检查客服是否完成问候、需求确认、方案说明和下一步引导。",
+      "options_json": "[]",
+      "output_column": "改进建议",
+      "is_required": 0,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 2,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-refund-reason",
+      "section_id": "refund",
+      "key": "reason",
+      "label": "截图解析",
+      "field_type": "object",
+      "prompt": "你是淘系店铺售后聊天记录解析员，负责根据本行聊天截图，提取与售后问题直接相关的客观事实。\n\n【输入内容】\n\n聊天截图：\n{{截图内容}}\n\n辅助信息：\n- 平台售后问题类型：{{平台售后问题类型}}\n- 商品信息：{{商品信息}}\n- 产品大类：{{产品大类}}\n- 产品分类：{{产品分类}}\n- 产品名称：{{产品名称}}\n\n【解析要求】\n\n1. 读取本行全部聊天截图。如果存在多张截图，按照上传顺序，并结合截图中的聊天时间顺序合并理解。\n\n2. 区分消息发送方：\n   - 客户\n   - 客服/商家\n   - 系统或平台消息\n\n3. 只提取与本订单退货、退款、补偿、补发、商品问题、物流问题或售后服务直接相关的内容。\n\n4. 忽略以下内容：\n   - 导航栏、头像、昵称、输入框\n   - 广告、推荐内容、无关系统通知\n   - 表情、重复话术\n   - 与本次售后无关的闲聊\n   - 不能证明问题的营销或模板话术\n\n5. 对证据进行区分：\n   - 客户单方面描述：只能说明客户声称或反馈了某个问题\n   - 客服确认：客服明确确认问题、责任或处理结果\n   - 图片或测量凭证：聊天中出现的商品图片、故障图片、测量数据、检测结果\n   - 物流信息：物流轨迹、揽收、签收、停滞、破损等信息\n   - 系统信息：平台自动生成的退款、退货或订单状态\n\n6. 客户单方面说“质量有问题”“不好用”等，只能记录为客户反馈，不能直接认定为质量问题已被证实。除非截图中有客服确认、图片、测量结果、检测结果或其他明确证据。\n\n7. 辅助信息仅用于理解上下文，不能替代聊天证据：\n   - 不得仅根据平台售后问题类型推断真实原因\n   - 不得仅根据商品信息、产品分类或产品名称推断问题\n   - 不得补充截图中没有出现的故障、责任、尺寸、位置、代码或处理结果\n\n8. 如果截图为空、无法识别、不是聊天记录，或没有与售后原因相关的有效内容：\n   - 客户核心诉求：信息不足，无法判断客户售后诉求\n   - 问题现象：未说明\n   - 关键证据：无有效凭证\n   - 客服处理：未说明\n   - 标准化问题关键词：信息不足\n   - 责任线索：无法判断\n   - 信息充分度：不足\n\n9. 如果截图中只有客服发言、催促或询问，客户没有任何有效文字、语音转写或明确回应：\n   - 客户核心诉求：其他无理由（客户无回复）\n   - 问题现象：客户未回复，未提供具体售后原因\n   - 关键证据：聊天记录中无客户有效回复\n   - 客服处理：根据截图中的实际处理内容填写；没有则写“未说明”\n   - 标准化问题关键词：客户无回复\n   - 责任线索：客户自身\n   - 信息充分度：充分\n\n10. 以下问题仅在截图中明确出现时进行识别，并统一归为“工厂品质”：\n   - 产品气味、异味\n   - 产品加热、水温、温度过高或过低\n   - 升温慢、无法加热、温控异常\n   - 保温效果异常\n\n   对上述问题：\n   - 责任线索必须填写：工厂品质\n   - 不得归为客户自身\n\n   只有明确表达“天气变化、天气变冷或变热，导致客户不再需要该产品”时，责任线索才填写“客户自身”。\n\n11. 聊天截图解析阶段只输出客观事实、证据和标准化问题关键词。\n    不要输出完整的二级、三级分类路径，也不要逐项匹配或复述所有分类类目。后续分类由其他字段单独完成。\n\n12. 标准化问题关键词只提取1至3个简短关键词，例如：\n    - 客户无回复\n    - 产品异味\n    - 温度不足\n    - 慢漏气\n    - 尺寸太大\n    - 物流未更新\n\n13. 责任线索只能从以下选项中选择一个：\n    - 采购\n    - 仓储\n    - 工厂品质\n    - 客服服务\n    - 客户自身\n    - 物流\n    - 运营页面或活动\n    - 平台\n    - 主播\n    - 供分销\n    - 产品设计\n    - 特殊售后\n    - 无法判断\n\n14. 信息充分度只能填写：\n    - 充分\n    - 不足\n\n【输出规则】\n\n严格按照以下格式输出，不要增加标题、解释、分析过程、JSON、Markdown代码块或其他内容：\n\n客户核心诉求：用一句话说明客户为什么申请售后\n问题现象：客观描述商品、订单、物流或服务发生了什么；没有则写“未说明”\n关键证据：列出客服确认、实物图片、测量数据、故障代码、检测结果或物流轨迹；没有则写“无有效凭证”\n客服处理：退款、退货、补发、补偿、解释、拒绝等；没有则写“未说明”\n标准化问题关键词：输出1至3个简短关键词\n责任线索：只能填写一个规定选项\n信息充分度：只能填写“充分”或“不足”",
+      "options_json": "[]",
+      "output_column": "截图解析",
+      "is_required": 1,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 0,
+      "execution_type": "ai",
+      "export_enabled": 1,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 1
+    },
+    {
+      "id": "legacy-refund-responsibility",
+      "section_id": "refund",
+      "key": "responsibility",
+      "label": "责任归因",
+      "field_type": "string",
+      "prompt": "根据截图解析结果匹配退货原因知识库，并提取完整原因路径。",
+      "options_json": "[]",
+      "output_column": "责任归因",
+      "is_required": 0,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 1,
+      "execution_type": "ai",
+      "export_enabled": 0,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 0
+    },
+    {
+      "id": "legacy-refund-suggestion",
+      "section_id": "refund",
+      "key": "suggestion",
+      "label": "改进建议",
+      "field_type": "string",
+      "prompt": "根据截图解析结果匹配退货原因知识库，并提取完整原因路径。",
+      "options_json": "[]",
+      "output_column": "改进建议",
+      "is_required": 0,
+      "image_enabled": 1,
+      "depends_on_json": "[]",
+      "sort_order": 2,
+      "execution_type": "ai",
+      "export_enabled": 0,
+      "knowledge_base_id": null,
+      "candidate_limit": 15,
+      "match_field_key": null,
+      "knowledge_column": null,
+      "is_enabled": 0
+    }
+  ],
+  "bases": [
+    {
+      "id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "section_id": "refund",
+      "name": "退货原因汇总",
+      "original_filename": "退货原因汇总.xlsx",
+      "column_schema_json": "[{\"name\":\"一级原因\",\"roles\":[\"result\",\"search\"]},{\"name\":\"二级原因\",\"roles\":[\"result\",\"search\"]},{\"name\":\"三级原因\",\"roles\":[\"result\",\"search\"]}]",
+      "is_enabled": 1
+    }
+  ],
+  "items": [
+    {
+      "id": "00340037-1b42-485b-a589-903cf3b150da",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-不倒翁立不住\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 198
+    },
+    {
+      "id": "014d8456-8a73-43ef-8e8f-d86de0f1dea3",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-仓库丢件\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 23
+    },
+    {
+      "id": "020e2965-c929-4da5-81ad-e5a8f85d06a7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-浴盆吸盘没有吸力\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 159
+    },
+    {
+      "id": "035e3d47-1d60-4138-b5e4-3f8e36cf1d92",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-客服未备注\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 218
+    },
+    {
+      "id": "03c60528-4d10-4739-83d0-2f54893b51f3",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-置物架包装不当导致破损\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 22
+    },
+    {
+      "id": "04106ca7-c6a7-4600-9412-b89137bad885",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-不防滑\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 192
+    },
+    {
+      "id": "043fb487-f18f-4626-83f8-21d5b3901887",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-售后未跟进\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 215
+    },
+    {
+      "id": "04505255-0125-46c0-b8e8-41b997fc5c53",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-压痕-瑕疵\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 95
+    },
+    {
+      "id": "055ab62a-7f13-41b2-bcca-9371d8ae804b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板插头通电无亮灯显示\"}",
+      "is_enabled": 1,
+      "source_row_number": 41
+    },
+    {
+      "id": "05fddc4c-1327-4791-a6e2-e637a5a50d2f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-额外想要赠品\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 229
+    },
+    {
+      "id": "06903713-4b4c-4167-9a82-6b50788f4b5a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-集运仓客户觉得到货运费贵\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 335
+    },
+    {
+      "id": "06d1cb73-7e92-446e-a8af-9ac67bb09ac3",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气放气不方便\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 114
+    },
+    {
+      "id": "08401069-4f18-4217-862f-206553e80ebb",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-拍错订单\",\"三级原因\":\"多拍套餐退部分差价\"}",
+      "is_enabled": 1,
+      "source_row_number": 329
+    },
+    {
+      "id": "08a77e37-eccc-46da-8cd8-660dda3a3933",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-漏发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 10
+    },
+    {
+      "id": "08c3d8a0-8a57-447f-9bca-f4a139fa45d6",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-边缘-内径锋利\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 93
+    },
+    {
+      "id": "09771715-fc86-42b1-a931-e023437da71e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-使用环境太差导致产品问题\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 332
+    },
+    {
+      "id": "097a345b-7ecd-4121-9f83-b70113149415",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气泵无法关电\"}",
+      "is_enabled": 1,
+      "source_row_number": 68
+    },
+    {
+      "id": "09af2fff-658e-4bdf-916b-ded413e466a5",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"非品质-丢件\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 346
+    },
+    {
+      "id": "0ae23095-4ed5-43c8-bc8b-6dd58b9d5089",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-测温卡不显示温度\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 143
+    },
+    {
+      "id": "0b8368fc-8fcc-4029-978d-d3fa4dd8d185",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-支架容易夹手\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 173
+    },
+    {
+      "id": "0bc4e03d-48c7-47e0-8cfc-97b96e1f4863",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气嘴和气泵不匹配\"}",
+      "is_enabled": 1,
+      "source_row_number": 74
+    },
+    {
+      "id": "0bd4c7ef-aa08-4252-bcef-39323be43efb",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"水管与面板不匹配\"}",
+      "is_enabled": 1,
+      "source_row_number": 39
+    },
+    {
+      "id": "0cae8d52-4ee7-48ea-be09-04fabaf63ba2",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-订单取消退款重新发出\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 303
+    },
+    {
+      "id": "0d263859-a8f3-4195-a22b-11cbb64c77de",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户认为床垫太凉\"}",
+      "is_enabled": 1,
+      "source_row_number": 290
+    },
+    {
+      "id": "0f875200-9acb-419b-a596-e7d4c70f3c64",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"加热面板有水\"}",
+      "is_enabled": 1,
+      "source_row_number": 40
+    },
+    {
+      "id": "12643838-16a4-473e-86ec-fe9074f6b2f6",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-把手断裂\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 161
+    },
+    {
+      "id": "1277ccc0-44dc-4689-87a8-37c2f8a770e4",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-拍错订单\",\"三级原因\":\"拍错款式\"}",
+      "is_enabled": 1,
+      "source_row_number": 324
+    },
+    {
+      "id": "127d505b-6209-4de3-94fc-a513334fcb24",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-客户介绍下单-介绍费\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 334
+    },
+    {
+      "id": "12926488-9015-4c17-b3ca-56f88ed56e6a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气泵故障无反应无法充气\"}",
+      "is_enabled": 1,
+      "source_row_number": 64
+    },
+    {
+      "id": "13a0dbe4-0763-4f8f-b1ca-04df466fa25f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户觉得不适合\"}",
+      "is_enabled": 1,
+      "source_row_number": 266
+    },
+    {
+      "id": "14191cd1-1e5b-49b7-a91c-468923fbeac1",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"采购部\",\"二级原因\":\"非品质-缺货导致发货慢\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 5
+    },
+    {
+      "id": "14cbfed1-f509-4973-8603-fd59de0cc03d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-换款式退差价\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 317
+    },
+    {
+      "id": "14e46f01-5de6-48d3-ab69-a75621a04cad",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-尺寸不合适\",\"三级原因\":\"尺寸太小\"}",
+      "is_enabled": 1,
+      "source_row_number": 311
+    },
+    {
+      "id": "15739fca-ddff-49f4-a2b2-e202829e726a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-仓库退换商品-多拆-少拆导致错发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 20
+    },
+    {
+      "id": "15d63462-5065-4a42-9360-e2f4fa0fd8ae",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"划不动皮划艇\"}",
+      "is_enabled": 1,
+      "source_row_number": 274
+    },
+    {
+      "id": "15e3832e-90f9-4026-a225-fb855191506c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-拉链-卡扣做错\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 138
+    },
+    {
+      "id": "160b948f-3826-4d2f-81c2-ac10ce031837",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"快递错分导致补发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 353
+    },
+    {
+      "id": "1612d5e7-91ea-452f-adf1-cb7841dc0839",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-产品与图片-描述不符\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 362
+    },
+    {
+      "id": "166d7170-6a06-47ef-ae66-093082db17a8",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-详情页-主图尺寸不符\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 358
+    },
+    {
+      "id": "1751e8aa-d52f-41da-a599-8b0ccadbf766",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-新品未到货运营提前上架\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 367
+    },
+    {
+      "id": "1754d9d1-c7bb-4d2a-ae14-f57438d37ea5",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"认为有色差\"}",
+      "is_enabled": 1,
+      "source_row_number": 237
+    },
+    {
+      "id": "17c5d3f9-058e-4187-ab74-6f23d69f5277",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做把手\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 191
+    },
+    {
+      "id": "180a5e2b-1161-4d2b-b792-a5f533058744",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-船桨松动-断裂\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 188
+    },
+    {
+      "id": "1902d87b-c53b-441c-8d68-7fb99793cc82",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"认为排水不方便\"}",
+      "is_enabled": 1,
+      "source_row_number": 267
+    },
+    {
+      "id": "1d8d0ed6-b4f2-4e23-90b6-00438959ff5d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-皮划艇船桨扣缺失\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 125
+    },
+    {
+      "id": "1de1ef45-1fb4-41e3-a0ec-830a4428e100",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-客户寄错产品\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 301
+    },
+    {
+      "id": "1e4bbdb1-8dc9-4a03-acd6-4777802be21d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-夹棉不对称-不均匀\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 208
+    },
+    {
+      "id": "1e68ba94-c6b7-4811-94b9-30d439c23ed4",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-图片信息错误\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 355
+    },
+    {
+      "id": "1e781548-4ab9-4678-aa65-8cfbcf33836c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-拳击柱立不住\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 172
+    },
+    {
+      "id": "1f52a281-9079-4df2-91b3-91172253ea1a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-脚凳不稳\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 200
+    },
+    {
+      "id": "21ba321a-e269-4e20-9d56-f92393301bec",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"密封条脱落\"}",
+      "is_enabled": 1,
+      "source_row_number": 58
+    },
+    {
+      "id": "23246d23-75fd-473c-a06f-264a8151167f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-错发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 11
+    },
+    {
+      "id": "2334d92c-f9ae-4eb9-a084-5a62dae06961",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-喇叭按键失灵\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 132
+    },
+    {
+      "id": "241b67f3-6091-444e-879b-5dcb8834f6ac",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"卡扣卡顿\"}",
+      "is_enabled": 1,
+      "source_row_number": 56
+    },
+    {
+      "id": "2608c1e8-bf57-472b-9fe3-b2ce8df84e61",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-卡扣断裂-脱胶\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 146
+    },
+    {
+      "id": "27ea72a6-15cf-447c-a722-e13acf0caccc",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-平台比价差价\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 341
+    },
+    {
+      "id": "2909f248-f92a-4d9a-8c73-51b351ec8f36",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做防漏片\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 155
+    },
+    {
+      "id": "296e5276-50ff-4870-95a0-3d56f3e97881",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做坐兜\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 189
+    },
+    {
+      "id": "29d2341b-b34f-480c-922d-2d11d9f58919",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-运营填错退货地址\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 376
+    },
+    {
+      "id": "2b162ab4-23f3-497f-b3ce-97cd0a5d6aac",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做卡扣\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 181
+    },
+    {
+      "id": "2bd96e68-580d-4eec-9a25-4d25373149eb",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板通电无显示-无反应\"}",
+      "is_enabled": 1,
+      "source_row_number": 31
+    },
+    {
+      "id": "2f320cca-5fbf-4732-aa86-00919382ae3c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"汗蒸时间短\"}",
+      "is_enabled": 1,
+      "source_row_number": 57
+    },
+    {
+      "id": "2f5c6c3e-d5b7-45f9-bf0d-8f76991fac24",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"胸闷头晕\"}",
+      "is_enabled": 1,
+      "source_row_number": 244
+    },
+    {
+      "id": "2f67d5b4-cd40-42a2-927b-de9f02fc2e46",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-回复不当\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 213
+    },
+    {
+      "id": "30027dbe-01d2-4cdc-b3fe-fa695c8c1e13",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"觉得耗电量大\"}",
+      "is_enabled": 1,
+      "source_row_number": 289
+    },
+    {
+      "id": "3002b8b2-98e2-4516-8e1d-5b33faacb1a0",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"没有想要的搭配套餐\"}",
+      "is_enabled": 1,
+      "source_row_number": 284
+    },
+    {
+      "id": "30084871-3a1b-46d1-a2d3-e475b2bc3967",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户家里水压过小不好用\"}",
+      "is_enabled": 1,
+      "source_row_number": 270
+    },
+    {
+      "id": "304d63c6-a0ff-41d7-8239-2c820361631e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-产品爆炸\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 162
+    },
+    {
+      "id": "315e8805-8eb7-4727-b543-538f1ec9b481",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-肩带断裂-脱胶\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 130
+    },
+    {
+      "id": "33574ab5-f716-4264-9042-e93ffb2b79ea",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-拍错订单\",\"三级原因\":\"家人已购买过\"}",
+      "is_enabled": 1,
+      "source_row_number": 328
+    },
+    {
+      "id": "34b525b5-dc39-4088-8160-3f1b43114d57",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏气\",\"三级原因\":\"充气口漏气\"}",
+      "is_enabled": 1,
+      "source_row_number": 109
+    },
+    {
+      "id": "37ac5b0a-51c8-42c4-9dcf-2ae097133f46",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-皮划艇承重不足\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 375
+    },
+    {
+      "id": "38019f26-487a-44d7-9eab-c203c500f785",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"手拉泵充不进气\"}",
+      "is_enabled": 1,
+      "source_row_number": 83
+    },
+    {
+      "id": "381463e6-aa49-4106-875d-eeb53c1899cb",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-编码错误-缺失导致错漏发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 361
+    },
+    {
+      "id": "38707c88-401e-4e7f-942c-d14396eb438e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户说质量问题（无提供凭证）\"}",
+      "is_enabled": 1,
+      "source_row_number": 250
+    },
+    {
+      "id": "395305bf-53af-4c39-8b1d-ba47e7b88386",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-尺寸不合适\",\"三级原因\":\"尺寸不合适（未提供数据）\"}",
+      "is_enabled": 1,
+      "source_row_number": 316
+    },
+    {
+      "id": "398a819e-94fc-4ec8-be11-394dcac4ea6b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-滑雪圈户外低温导致材质收缩\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 207
+    },
+    {
+      "id": "3c34a598-3fb6-4b83-9e77-bcfbc5d40e5b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"拒签快递收费\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 351
+    },
+    {
+      "id": "3cb081a6-4a20-4eb0-9770-587db26a82ff",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"无法转运\"}",
+      "is_enabled": 1,
+      "source_row_number": 291
+    },
+    {
+      "id": "3cffd4bc-169c-4685-a2da-a36c82753ab1",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"实物与预期不符\"}",
+      "is_enabled": 1,
+      "source_row_number": 249
+    },
+    {
+      "id": "3d59575e-aef1-45f3-8b49-48a747044e5d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-卡扣故障无法调节\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 178
+    },
+    {
+      "id": "3d9bf1ca-6735-4079-a573-7e67c0cc157b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"不出蒸汽\"}",
+      "is_enabled": 1,
+      "source_row_number": 51
+    },
+    {
+      "id": "3eef4926-aeb2-41ba-bf39-4ae8798cef79",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"已线下购买\"}",
+      "is_enabled": 1,
+      "source_row_number": 283
+    },
+    {
+      "id": "3f440f1f-77e3-4966-a6aa-ac9d70b78ab3",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"评论区质量问题太多\"}",
+      "is_enabled": 1,
+      "source_row_number": 245
+    },
+    {
+      "id": "3f77c8db-05c5-405b-8401-0e57d948f9ed",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-不倒翁沙袋不均匀-歪斜\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 209
+    },
+    {
+      "id": "405f9636-969b-449a-a4a3-3308ef135ad8",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"嫌用水量大\"}",
+      "is_enabled": 1,
+      "source_row_number": 264
+    },
+    {
+      "id": "421398d2-ccc3-4a4b-ab7c-d3ae98ff229b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板E1故障\"}",
+      "is_enabled": 1,
+      "source_row_number": 44
+    },
+    {
+      "id": "429d51f5-cec2-456f-9600-9a66bd8d6f3f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-额外想要配件\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 231
+    },
+    {
+      "id": "429fcca8-34dd-4da8-82b5-6f4361a61ada",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-肩带过短\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 131
+    },
+    {
+      "id": "42b169a4-bdb7-4da3-9bfc-424488c2e9bc",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板E3故障\"}",
+      "is_enabled": 1,
+      "source_row_number": 36
+    },
+    {
+      "id": "43011ffb-0b1a-4627-8f96-d2ee631ce21c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"跳闸-跳电\"}",
+      "is_enabled": 1,
+      "source_row_number": 38
+    },
+    {
+      "id": "43834116-290d-4e02-84bf-e7de47683c50",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-排水管问题-与排水口不匹配\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 204
+    },
+    {
+      "id": "43c9c024-91df-4fd2-bbed-839febe7c313",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-拍错订单\",\"三级原因\":\"拍错产品功能或套餐\"}",
+      "is_enabled": 1,
+      "source_row_number": 325
+    },
+    {
+      "id": "46b38b8f-f792-452b-9a34-218120c5796f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-产品自燃\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 210
+    },
+    {
+      "id": "471a3675-e99c-49e4-bc9f-b0c493895b20",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-赠品小皮球不给充气就发货\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 21
+    },
+    {
+      "id": "47229a0d-ab06-4710-ba40-a8750b68509b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-支架松动无法固定\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 99
+    },
+    {
+      "id": "47420500-7e38-484e-b06a-c3a98728f3fa",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-按摩滚轮损坏\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 129
+    },
+    {
+      "id": "477cab2d-331b-4eed-a4b4-a2682cd4de48",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-翻身噪音大\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 120
+    },
+    {
+      "id": "47d4fbf8-53a6-4f93-9a81-c65c66090c88",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"故障警报无法使用\"}",
+      "is_enabled": 1,
+      "source_row_number": 55
+    },
+    {
+      "id": "482305d7-4645-4479-b191-1c8909541f1f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-客服建错工单\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 220
+    },
+    {
+      "id": "482c3415-b6b0-4ea1-817c-829b401938c7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"非品质-浴袋问题\",\"三级原因\":\"浴袋尺寸太小\"}",
+      "is_enabled": 1,
+      "source_row_number": 167
+    },
+    {
+      "id": "482e7390-b2f8-492d-aff3-f15e92dd7fbc",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"不是客户想要的快递\"}",
+      "is_enabled": 1,
+      "source_row_number": 280
+    },
+    {
+      "id": "492a7de9-1b80-4344-be32-dcbf2e64c279",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"发货快递当地收不到\"}",
+      "is_enabled": 1,
+      "source_row_number": 233
+    },
+    {
+      "id": "495209fc-e6df-4eae-b5f4-a80107fd7c6a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-喷水枪客户家没有连接水管\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 342
+    },
+    {
+      "id": "49793332-fc74-4fb0-b1a9-84aeb7a1819e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做遮阳棚扣\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 184
+    },
+    {
+      "id": "4981fce5-2e0f-477f-a942-f046864c6d67",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"嫌麻烦-使用操作不方便\"}",
+      "is_enabled": 1,
+      "source_row_number": 243
+    },
+    {
+      "id": "4a7238ac-e425-4823-8d23-e0ca3754adad",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"换快递发货重新下单\"}",
+      "is_enabled": 1,
+      "source_row_number": 269
+    },
+    {
+      "id": "4aa09c83-f4d9-4084-832b-b89fbeef98f5",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-宣传可站实际无法站立\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 365
+    },
+    {
+      "id": "4ac8a738-2e6b-4797-b4ea-04243069a25e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"采购部\",\"二级原因\":\"非品质-注水坐垫太小\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 8
+    },
+    {
+      "id": "4c6cacc1-3c7a-4056-a6ec-e7547e03249d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板破损\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 49
+    },
+    {
+      "id": "4cc52292-2496-4adf-b315-c945903b8278",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏气\",\"三级原因\":\"排气塞位置漏气\"}",
+      "is_enabled": 1,
+      "source_row_number": 110
+    },
+    {
+      "id": "4cd60071-8084-4fc8-8b99-2e65a6f436af",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-运营上错价格-优惠券\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 372
+    },
+    {
+      "id": "4d48285a-05b4-44e2-9196-ddc49f773a67",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-清仓品未下架\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 354
+    },
+    {
+      "id": "4d620e0e-69d8-4400-a71b-b4c77f34c919",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-磨胳膊\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 154
+    },
+    {
+      "id": "4da69297-a777-42ef-858e-45f255b31a8e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-生锈-掉漆\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 103
+    },
+    {
+      "id": "4e852010-5804-4b8b-8793-437c586cfdad",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"发货慢\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 15
+    },
+    {
+      "id": "4f06524e-41e4-4675-b84d-c71584900f1c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-过滤泵故障\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 135
+    },
+    {
+      "id": "4fa87b14-58f3-49e0-a76a-15fe944c9f1e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"偏远地区发货特殊处理件\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 350
+    },
+    {
+      "id": "5020369e-1ce2-4e01-b75b-e798325d58ec",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"非品质-工厂漏发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 117
+    },
+    {
+      "id": "504713e7-9ada-49d6-ae64-2b3d41491f70",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做板材-支撑板\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 183
+    },
+    {
+      "id": "504c52c5-fe7f-4a65-9e23-3f25d546238b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"产品设计部\",\"二级原因\":\"非品质-高铁床二等座尺寸不匹配\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 385
+    },
+    {
+      "id": "50c7618b-abc2-4ea0-b3b1-cbc53fd1d73e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-包装未破内物破损\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 92
+    },
+    {
+      "id": "516b666f-c527-4723-bfbc-6b5c5c5410a9",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"非品质-工厂错发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 118
+    },
+    {
+      "id": "53f9bd96-10b4-451c-b6ec-1e946fe00e52",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-无法折叠\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 141
+    },
+    {
+      "id": "56145b90-dce1-4fbf-a27f-4fcd2e866fb4",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-排水塞自动回弹\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 176
+    },
+    {
+      "id": "56468613-e8d8-4135-9b47-7d59c6a0c5cb",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-好评返现\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 357
+    },
+    {
+      "id": "56f5a39a-c628-49d6-8293-358c1ffdbdf3",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"故障无法充电\"}",
+      "is_enabled": 1,
+      "source_row_number": 76
+    },
+    {
+      "id": "575e8b0c-1a8f-4caa-8253-2f6dc1669ba9",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气泵指示灯异常闪烁\"}",
+      "is_enabled": 1,
+      "source_row_number": 79
+    },
+    {
+      "id": "591e4b4a-a99a-4961-bccf-7c63b6b33173",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"主播承诺未履行\",\"二级原因\":\"\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 382
+    },
+    {
+      "id": "594d280e-0b4a-4171-957e-4203e543a8d3",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"非品质-物流泡水\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 348
+    },
+    {
+      "id": "59ba1c56-1e8c-47ba-8876-562a7fbc0bff",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-喷水枪与水管不匹配\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 193
+    },
+    {
+      "id": "5ac86ec2-ab4c-43d1-ac71-2cf8dfc4306f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-卡扣太紧\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 147
+    },
+    {
+      "id": "5bc8c0bc-e457-44ae-b536-4100e7cd5564",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"充不饱气\"}",
+      "is_enabled": 1,
+      "source_row_number": 71
+    },
+    {
+      "id": "5be9a8ce-9d6d-45ea-b7f5-9e383dba7a7e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-威胁差评补偿\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 297
+    },
+    {
+      "id": "5c55be08-1d6a-4e88-aad7-93ce177bf02e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"采购部\",\"二级原因\":\"非品质-产品无执行标准\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 7
+    },
+    {
+      "id": "5c936af0-3105-4b4b-941f-794ab96ffa94",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-不倒翁底部漏沙或倒灌\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 199
+    },
+    {
+      "id": "5d887522-09e0-485e-9749-b95fcb2ae8a0",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"物流拦截失败\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 352
+    },
+    {
+      "id": "5e7606f8-12db-4663-851e-0af165bb9048",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"非品质-浴盖问题-浴盖容易滑落\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 203
+    },
+    {
+      "id": "5f7b9a8a-0b4e-4de6-ad3a-83635c3c0c30",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"供分销问题\",\"二级原因\":\"供应商订单赠品未添加\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 383
+    },
+    {
+      "id": "5ffb0180-bf32-40d7-8c37-775407c37d6e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-支架不稳定\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 102
+    },
+    {
+      "id": "6048f383-6eea-4c35-aa45-440a48e9dd06",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板冒烟\"}",
+      "is_enabled": 1,
+      "source_row_number": 43
+    },
+    {
+      "id": "608d2eed-208f-4efd-8318-a239a5172e5c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"按键无法回弹-失灵\"}",
+      "is_enabled": 1,
+      "source_row_number": 75
+    },
+    {
+      "id": "60a682fd-52b1-453e-bd15-f10bfb0ac150",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-排气塞-排水塞打不开\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 163
+    },
+    {
+      "id": "6255388f-d0d9-4050-8394-37a8243e398e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-承诺未履行\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 217
+    },
+    {
+      "id": "626c7323-3081-4dd1-a7e5-61cc6929932f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-拳击柱底部漏水\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 175
+    },
+    {
+      "id": "62b3fb0f-50aa-46c2-a594-edb36810d188",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-盖布盖不上\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 48
+    },
+    {
+      "id": "6324783d-0443-4ce6-8a26-0e5c2ac0a472",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-发票原因\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 333
+    },
+    {
+      "id": "63c46fb3-e5c0-4599-90dc-a13ed4a3baa2",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-排水塞漏水\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 105
+    },
+    {
+      "id": "65518287-0f25-409b-ad16-0697c1f66db7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-卡扣做反\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 123
+    },
+    {
+      "id": "65a8baed-3c4b-41a8-b4b5-45cbb6188015",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"买太早了\"}",
+      "is_enabled": 1,
+      "source_row_number": 268
+    },
+    {
+      "id": "66a40023-6c49-4b7e-aa12-d6dc7cbd8869",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板插头变形\"}",
+      "is_enabled": 1,
+      "source_row_number": 34
+    },
+    {
+      "id": "6784e474-7ce6-46f4-9c64-ac560c57b879",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-破损\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 111
+    },
+    {
+      "id": "67a43b8f-8f72-499a-b5d9-20c14b7ab399",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-水画笔不出水\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 186
+    },
+    {
+      "id": "67d15c64-8fc2-45c7-8c08-c54d3d2428af",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"抖抖部上错编码\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 302
+    },
+    {
+      "id": "67f74354-feaf-4dbf-8174-6b322626dc6d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-觉得价格贵\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 300
+    },
+    {
+      "id": "681bbda1-17c4-4cf6-8200-953b40996b59",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-浴缸过滤器故障\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 158
+    },
+    {
+      "id": "682313af-1ebb-4e78-9be4-e2f2b0d46df1",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"快递运输包装破损\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 349
+    },
+    {
+      "id": "69e1f41a-6a13-472b-94f6-00cf628b0da8",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做充气塞\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 166
+    },
+    {
+      "id": "6a5f0f81-b05a-4370-8230-4578c774c8cb",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"认为加热慢\"}",
+      "is_enabled": 1,
+      "source_row_number": 258
+    },
+    {
+      "id": "6a614d7d-dfab-410f-b9b8-946ea613fd0a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-客服备注有误\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 219
+    },
+    {
+      "id": "6b15957d-70ee-4380-a5d8-f65b1ec033cf",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"产品太轻\"}",
+      "is_enabled": 1,
+      "source_row_number": 288
+    },
+    {
+      "id": "6bc54ea4-6e59-4e50-be74-b78033e671ad",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-图片与实物色差过大\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 373
+    },
+    {
+      "id": "6c06514c-5278-4323-abce-e17e3c2b0e93",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-刷单件误发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 363
+    },
+    {
+      "id": "6c122a23-ce2a-4dd7-9b54-fbf855fb1362",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"仅退款取消但快递已退回\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 307
+    },
+    {
+      "id": "6c215dc0-9fa2-4ce0-9bbd-501a988ea7ed",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"平台问题\",\"二级原因\":\"非品质-超期订单无质量问题平台介入退货\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 380
+    },
+    {
+      "id": "6dd8ffa9-f631-4df2-a61f-ba12ae715074",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-底部积水排不净\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 113
+    },
+    {
+      "id": "6dea29f0-be1f-4724-9719-66fe64ac5c4e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-发霉\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 152
+    },
+    {
+      "id": "6e0555da-f00f-4a37-99b6-1e0b24dd54df",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-产品厚度过薄\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 116
+    },
+    {
+      "id": "6e66057a-0da2-4b71-9309-3738931aa98f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-误撕单\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 18
+    },
+    {
+      "id": "70818bfe-3924-4b72-81b7-51152766b478",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-遥控器故障-失灵\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 50
+    },
+    {
+      "id": "70d12771-18f7-4cf5-9a32-fd5864bd8b56",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-脏污\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 96
+    },
+    {
+      "id": "70fd9a16-e086-494d-9651-9df5c6b07943",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"加热面板溢水反流\"}",
+      "is_enabled": 1,
+      "source_row_number": 32
+    },
+    {
+      "id": "732c3a4f-dddc-4062-b5d2-c7c7e84f57ab",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏水\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 104
+    },
+    {
+      "id": "73612333-a193-4cfe-830e-9be3102cc6ef",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-鼓包\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 97
+    },
+    {
+      "id": "7476f90f-dcc5-41f0-9868-7a50c356cc46",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"不喜欢-不想要（慎选）\"}",
+      "is_enabled": 1,
+      "source_row_number": 252
+    },
+    {
+      "id": "74874f40-21d2-43f7-b6ee-723d405bd3fc",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"漏水\"}",
+      "is_enabled": 1,
+      "source_row_number": 53
+    },
+    {
+      "id": "754bdf61-eb20-452a-acea-7fca4c8a7a38",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户使用受伤\"}",
+      "is_enabled": 1,
+      "source_row_number": 285
+    },
+    {
+      "id": "76ab8a3e-088d-434c-a408-81954615adde",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"认为清洗不方便\"}",
+      "is_enabled": 1,
+      "source_row_number": 286
+    },
+    {
+      "id": "77738da2-f008-45eb-815b-c751ab8e1069",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"充气噪音大\"}",
+      "is_enabled": 1,
+      "source_row_number": 66
+    },
+    {
+      "id": "781c293b-6e24-49a8-a0ab-35fae76da38d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气不均匀-不对称\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 149
+    },
+    {
+      "id": "7853827a-2835-4670-9189-ae5d2bfcd5a7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-浮力差\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 196
+    },
+    {
+      "id": "78babb7b-f355-43b0-8312-e011bd09bc14",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-排水管漏水\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 106
+    },
+    {
+      "id": "79639c6d-0615-416f-9a25-dca6f7bba424",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-处理不当\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 224
+    },
+    {
+      "id": "797982a6-d8a6-4ac1-8c07-972f73cbdc15",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-赠品问题\",\"三级原因\":\"水枪不出水\"}",
+      "is_enabled": 1,
+      "source_row_number": 182
+    },
+    {
+      "id": "798c9703-261a-4124-bd64-e773d1117d0e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"觉得温度太高\"}",
+      "is_enabled": 1,
+      "source_row_number": 256
+    },
+    {
+      "id": "79d82ecf-da16-4c11-83e4-5855c05977d5",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"充电慢\"}",
+      "is_enabled": 1,
+      "source_row_number": 78
+    },
+    {
+      "id": "7a4eed5e-e501-47de-a978-9cca2b027aae",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-尺寸不合适\",\"三级原因\":\"尺寸太大\"}",
+      "is_enabled": 1,
+      "source_row_number": 310
+    },
+    {
+      "id": "7a8c2f00-6215-46dd-941d-b4781b19ce67",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-变形\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 94
+    },
+    {
+      "id": "7b3073c5-667a-475d-a1cf-b099ddc7d59b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-气塞合上后自动弹开\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 160
+    },
+    {
+      "id": "7c30ba73-eda0-4a9c-a07f-9ab89fa164e0",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板故障显示缺水\"}",
+      "is_enabled": 1,
+      "source_row_number": 33
+    },
+    {
+      "id": "7c53da76-8cf1-4765-9a45-da5913755a03",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"黑色手拉泵充气卡顿\"}",
+      "is_enabled": 1,
+      "source_row_number": 84
+    },
+    {
+      "id": "7d1d4ade-8d3d-49e6-8e0f-b66ef0c3a9d9",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气泵不显示充电灯\"}",
+      "is_enabled": 1,
+      "source_row_number": 67
+    },
+    {
+      "id": "7d6b56f3-4c9b-46d6-ba02-7e0ed7c7ba5a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"产品太厚\"}",
+      "is_enabled": 1,
+      "source_row_number": 287
+    },
+    {
+      "id": "7eb423cd-2b2c-4205-8067-ac6c158e5a06",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-售中少打款\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 223
+    },
+    {
+      "id": "7f22031b-2ecd-45fa-9621-58fb32e72142",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-配件堵塞\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 142
+    },
+    {
+      "id": "7feb86d1-9729-4609-8f70-980a3f5c8021",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"非品质-贴错面单\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 119
+    },
+    {
+      "id": "80a8fc47-6c83-425e-86dc-b70d19b6c98c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"非品质-产品返潮有水汽\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 174
+    },
+    {
+      "id": "8178b788-581d-44ce-be17-9cf8ecb1dbb4",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-内有异物\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 137
+    },
+    {
+      "id": "81a0508e-6029-4e0d-80b4-7d48c16dc894",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-宣传十年质保\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 360
+    },
+    {
+      "id": "83e22151-3d67-46db-890f-c5ab757ef858",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板E4故障\"}",
+      "is_enabled": 1,
+      "source_row_number": 35
+    },
+    {
+      "id": "873bf9fe-37b0-4af9-b96e-ccbf2394e597",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"投诉撤销补偿\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 306
+    },
+    {
+      "id": "87490af2-64c2-4c41-9e36-45b8f7d90bfc",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户太胖\"}",
+      "is_enabled": 1,
+      "source_row_number": 247
+    },
+    {
+      "id": "884cc88a-a87e-4ad5-bb89-cde8d946d32c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-中差评删图补偿\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 295
+    },
+    {
+      "id": "88624728-b721-4b0e-ad90-dd4017b0f66b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-额外想要补偿\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 228
+    },
+    {
+      "id": "8893394d-b88f-4e9e-8dd0-ebf5c1f6527d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"充气泵漏电\"}",
+      "is_enabled": 1,
+      "source_row_number": 80
+    },
+    {
+      "id": "89525e62-8eaf-45dc-88d0-d7cffba2da1d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"认为注水时间过长\"}",
+      "is_enabled": 1,
+      "source_row_number": 232
+    },
+    {
+      "id": "8a4ab98e-f03e-4c18-a4ad-2276fe4e7fe7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"非品质-物流送错地址\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 347
+    },
+    {
+      "id": "8b28d1dc-9aa1-451e-a3cb-c4b86f1f9b08",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-售前优惠\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 214
+    },
+    {
+      "id": "8db9ffdf-a9fd-40d4-93d1-afc52ad22795",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"采购部\",\"二级原因\":\"非品质-收纳袋尺寸太小\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 9
+    },
+    {
+      "id": "8dce5429-0ef4-413c-a5b8-a7136dddfc09",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户认为快递送货慢\"}",
+      "is_enabled": 1,
+      "source_row_number": 254
+    },
+    {
+      "id": "8f7c8aa7-9236-4e0e-9443-f0444e3bc6f1",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"充气泵爆炸\"}",
+      "is_enabled": 1,
+      "source_row_number": 69
+    },
+    {
+      "id": "8fb9bb64-5267-43b9-a836-41ab10bafe9f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"浴帘卡扣卡不住\"}",
+      "is_enabled": 1,
+      "source_row_number": 28
+    },
+    {
+      "id": "9183f63c-7ab1-4b0f-b451-511bf3779137",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"非品质-物流异常退回\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 343
+    },
+    {
+      "id": "91eab908-bae9-4e93-97a1-86a802d2609d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"按压泵不进气\"}",
+      "is_enabled": 1,
+      "source_row_number": 72
+    },
+    {
+      "id": "92744a50-8901-4f52-8273-bf85a8995b11",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-泳池支撑板断裂\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 133
+    },
+    {
+      "id": "92e48405-c5d2-422b-9843-a4ecc6d3f966",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"采购部\",\"二级原因\":\"非品质-缺货漏发-分开发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 2
+    },
+    {
+      "id": "9377b776-1eb0-42fc-8398-8b7ae506daca",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"不需要套餐\"}",
+      "is_enabled": 1,
+      "source_row_number": 281
+    },
+    {
+      "id": "93fb96fa-2a72-415f-81a4-53eca5314179",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气泵短路\"}",
+      "is_enabled": 1,
+      "source_row_number": 88
+    },
+    {
+      "id": "945cce0f-2c98-42eb-90fa-dcc29ed05828",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-排气塞-排水塞合不上\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 128
+    },
+    {
+      "id": "94650e21-6d60-4460-88a9-ccb7d8429798",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-产品正常替换\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 12
+    },
+    {
+      "id": "94d68ade-129f-4e81-863b-45b3009df8b7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"按键做错\"}",
+      "is_enabled": 1,
+      "source_row_number": 90
+    },
+    {
+      "id": "955e0922-98d8-4d79-8081-85752c11c8f6",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-开线-线头\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 144
+    },
+    {
+      "id": "972d7a21-da68-4ff6-866d-b541df7405d2",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-运营需求\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 371
+    },
+    {
+      "id": "982f894b-b753-4a33-ab35-ca5900b42460",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"觉得保温效果不好\"}",
+      "is_enabled": 1,
+      "source_row_number": 259
+    },
+    {
+      "id": "9a2917ff-e7ef-4f02-aeec-d4366dc81806",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-遮阳棚纤维杆破损-断裂\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 212
+    },
+    {
+      "id": "9c70761b-929f-457b-82ad-d183d385da88",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-补差价换货\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 294
+    },
+    {
+      "id": "9c759153-9bc9-4657-a77a-c5dafad97ab7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-无法调节档位\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 148
+    },
+    {
+      "id": "9da0fbdd-ed7a-4d3e-9f76-dfb51f27676d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"汗蒸连接管不匹配\"}",
+      "is_enabled": 1,
+      "source_row_number": 59
+    },
+    {
+      "id": "9defb78a-5b87-4320-8eb6-7f9845558789",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"采购部\",\"二级原因\":\"非品质-产品批次不同\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 3
+    },
+    {
+      "id": "9e5fee4d-fb5e-40cc-8060-5365bc8373e7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-产品色差\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 211
+    },
+    {
+      "id": "9f66ad81-1b05-4eeb-9529-743182e2e79d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做支架\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 170
+    },
+    {
+      "id": "9fd58b50-df28-442e-bd23-146efac893f0",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"平台问题\",\"二级原因\":\"新旧聚水潭订单合并错误\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 381
+    },
+    {
+      "id": "a03be341-c8a8-4de7-a23f-1c90a21799b6",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-夹层积水\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 112
+    },
+    {
+      "id": "a07a43c1-42e6-4c11-9c74-1047ec66e5d0",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-仓库入库信息有误\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 17
+    },
+    {
+      "id": "a0e3b8bf-736f-4ee4-b00b-3211e887d05d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"小孩不会游泳\"}",
+      "is_enabled": 1,
+      "source_row_number": 255
+    },
+    {
+      "id": "a1985a84-173f-434a-b21b-46787989a4ec",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"乐邦尼浴缸不退货产品\",\"二级原因\":\"仅退款补偿\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 386
+    },
+    {
+      "id": "a1f24a78-71e7-46ba-aa75-76557f1ca8bd",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"泵盒与气泵不匹配\"}",
+      "is_enabled": 1,
+      "source_row_number": 86
+    },
+    {
+      "id": "a3d07287-296f-4158-b5d3-97364884c3e8",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-尺寸不合适\",\"三级原因\":\"尺寸太短\"}",
+      "is_enabled": 1,
+      "source_row_number": 315
+    },
+    {
+      "id": "a48164ff-6c03-467f-8935-2ad939b2d2c7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-床垫泵盒合不上\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 61
+    },
+    {
+      "id": "a4a6a1ab-b220-4757-b82f-e3f589e2972a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户超时未取件\"}",
+      "is_enabled": 1,
+      "source_row_number": 271
+    },
+    {
+      "id": "a4edaad4-96b1-481a-b766-2cf3d7020e10",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"计划有变-不需要了\"}",
+      "is_enabled": 1,
+      "source_row_number": 248
+    },
+    {
+      "id": "a5e42469-9a46-4083-99d2-2aebfea2c26c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-产品无把手不想要\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 337
+    },
+    {
+      "id": "a640f381-4ba4-4fb5-84f8-4a5da151c7f6",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-尺寸不合适\",\"三级原因\":\"尺寸太窄\"}",
+      "is_enabled": 1,
+      "source_row_number": 314
+    },
+    {
+      "id": "a6c8559b-343f-4a85-84d9-46a2b3837709",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-肩带漏做\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 126
+    },
+    {
+      "id": "a7bb0594-98bf-45d2-a519-c62212057820",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-头枕卡扣错位\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 153
+    },
+    {
+      "id": "a7f1a8c3-eb4a-4b9e-bd5e-a72a959fcfac",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-工厂印错尺寸\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 187
+    },
+    {
+      "id": "a861ac12-344d-44a2-9db5-c5c337479ee4",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"非品质-物流未更新\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 345
+    },
+    {
+      "id": "a8df0738-66c5-4337-b82d-9331baaafd9f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-额外购买配件\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 293
+    },
+    {
+      "id": "a9cab8e5-ed18-49b4-b73b-6d10731731ad",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"刷单小卡片-售后\",\"二级原因\":\"\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 389
+    },
+    {
+      "id": "aaee086f-aef5-4a5d-8fab-792e91072bd4",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"加热噪音大\"}",
+      "is_enabled": 1,
+      "source_row_number": 27
+    },
+    {
+      "id": "abce2f64-6410-4409-a97b-97395166ac98",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-刷单件退款\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 368
+    },
+    {
+      "id": "ac273b1a-3aa4-4506-8c93-8b1e8e60b976",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-拍错订单\",\"三级原因\":\"拍错颜色\"}",
+      "is_enabled": 1,
+      "source_row_number": 322
+    },
+    {
+      "id": "ac7e71d0-8845-48c2-b288-9a744f218f32",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-做错气塞\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 127
+    },
+    {
+      "id": "ac86ec75-2d79-4d8e-bc76-5ba7075f6fac",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-觉得产品使用太冷了\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 319
+    },
+    {
+      "id": "ad1b7acf-e871-475d-b62b-2396a92f0f2b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-掉色-染色\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 151
+    },
+    {
+      "id": "adc407d9-6374-4950-9295-fa94f740392a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-拍错订单\",\"三级原因\":\"误点下单\"}",
+      "is_enabled": 1,
+      "source_row_number": 326
+    },
+    {
+      "id": "adddee3d-d21f-4629-8cd0-40408c841469",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-客户反馈错发（无凭证）\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 336
+    },
+    {
+      "id": "aea99884-1884-4fd0-a7c9-449d15d24b70",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做钓鱼座\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 156
+    },
+    {
+      "id": "af445186-4e81-43c9-9b72-7e8310af2978",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"材质太软\"}",
+      "is_enabled": 1,
+      "source_row_number": 240
+    },
+    {
+      "id": "b03044b1-fc4d-4202-b4f6-3e473ab11c3e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-做反-做错遮阳棚扣\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 185
+    },
+    {
+      "id": "b10096f5-f82a-453c-93f3-70cba386933a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"物流问题\",\"二级原因\":\"非品质-物流快递不上门派送\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 344
+    },
+    {
+      "id": "b22f771b-83b4-408a-bf1a-fd5bf761c1fe",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板进水出水功能故障\"}",
+      "is_enabled": 1,
+      "source_row_number": 37
+    },
+    {
+      "id": "b23e4e61-6980-4ac4-a10a-7ae21e02bcd9",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"着急使用来不及到货\"}",
+      "is_enabled": 1,
+      "source_row_number": 272
+    },
+    {
+      "id": "b3a37470-974a-49cf-8fde-0e20a0d7151e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"年龄大不合适\"}",
+      "is_enabled": 1,
+      "source_row_number": 282
+    },
+    {
+      "id": "b532969d-b0a6-4f1d-a48e-844e975efe71",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"弹簧片掉落\"}",
+      "is_enabled": 1,
+      "source_row_number": 24
+    },
+    {
+      "id": "b546e96e-be67-412f-b96c-a6ed50f9b263",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-掉毛\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 201
+    },
+    {
+      "id": "b6f38767-bd34-416a-8486-18051eb84e7e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"到付件-无原因退回\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 296
+    },
+    {
+      "id": "b72a68b1-5159-4bef-9b55-6dcb09625e71",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"疫情-流感-台风无法收货\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 309
+    },
+    {
+      "id": "b937d71a-e1f3-4766-81d8-89a6851a4d11",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-拍错订单\",\"三级原因\":\"拍错尺寸\"}",
+      "is_enabled": 1,
+      "source_row_number": 323
+    },
+    {
+      "id": "ba25af64-de68-4be8-a3c5-c241be9fa202",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-肩带过长\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 164
+    },
+    {
+      "id": "bb52a9df-9ae5-495c-a070-ec36f58c8125",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"充气泵过热\"}",
+      "is_enabled": 1,
+      "source_row_number": 70
+    },
+    {
+      "id": "bb9816ae-5218-4476-9db0-1d0f62cd9fab",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏气\",\"三级原因\":\"破损造成漏气\"}",
+      "is_enabled": 1,
+      "source_row_number": 107
+    },
+    {
+      "id": "bbdde386-1816-4a10-b7ef-c8ecbd96d897",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-皮划艇起颗粒鼓包\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 197
+    },
+    {
+      "id": "bdd328ef-9af9-44c2-9788-184378620d85",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"担心-认为质量差\"}",
+      "is_enabled": 1,
+      "source_row_number": 246
+    },
+    {
+      "id": "bf2d99e8-1834-444b-8389-8a360d822713",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-螺丝松动\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 140
+    },
+    {
+      "id": "bf53a916-4850-49fb-a321-1d7840c4c8e5",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气泵破损\"}",
+      "is_enabled": 1,
+      "source_row_number": 85
+    },
+    {
+      "id": "bf72f247-9d72-47ea-ba5e-623c898708ce",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"小纵队两层售后专用\",\"二级原因\":\"\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 388
+    },
+    {
+      "id": "bfb52399-ecc0-43d0-a857-95bdf4b3913c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"手拉泵破损\"}",
+      "is_enabled": 1,
+      "source_row_number": 87
+    },
+    {
+      "id": "c0c98689-8cb8-4425-bc64-760243147940",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"与其他家对比后取消订单\"}",
+      "is_enabled": 1,
+      "source_row_number": 277
+    },
+    {
+      "id": "c225bc19-6724-4fa0-a2d8-b691f80f8a0c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"使用后生病\"}",
+      "is_enabled": 1,
+      "source_row_number": 279
+    },
+    {
+      "id": "c31135f2-2a6c-4375-973c-c9af9b789714",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏做排水塞\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 150
+    },
+    {
+      "id": "c358e02c-92a6-47a9-8fa1-d1aeb89d12be",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板划痕\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 45
+    },
+    {
+      "id": "c444312b-c275-4680-8319-60ea46ff2d60",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户说没有插电的地方\"}",
+      "is_enabled": 1,
+      "source_row_number": 262
+    },
+    {
+      "id": "c4ef8ac8-c766-4897-85e6-7cea46c134ba",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-支架卡顿\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 101
+    },
+    {
+      "id": "c5855dd7-20e4-4cc6-8ed0-43b3d49bb72b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-海外-港澳台电压无法使用\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 340
+    },
+    {
+      "id": "c60350dd-0cf0-409a-8d0b-6cc4b4315207",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"觉得不实用\"}",
+      "is_enabled": 1,
+      "source_row_number": 260
+    },
+    {
+      "id": "c6b1a177-5c50-4e19-8288-ff827a6d1695",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气电池故障\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 91
+    },
+    {
+      "id": "c7086af2-a3c8-4ea4-b4a9-1141403f2133",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-支架断裂\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 100
+    },
+    {
+      "id": "c72e267c-1d2f-480a-8293-1da1cce45973",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"怕使用场地承重不够\"}",
+      "is_enabled": 1,
+      "source_row_number": 292
+    },
+    {
+      "id": "c7381bc6-5531-4ef4-a12d-bc26fd1ffb78",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"蒸汽外泄\"}",
+      "is_enabled": 1,
+      "source_row_number": 54
+    },
+    {
+      "id": "c7815dd8-636a-4118-b590-a46b5acad4b5",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-拍错订单\",\"三级原因\":\"重复拍多单退款\"}",
+      "is_enabled": 1,
+      "source_row_number": 327
+    },
+    {
+      "id": "c80f27ad-0849-4dca-ae5a-c790f3b2c392",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-满意度修改补偿\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 221
+    },
+    {
+      "id": "c85d8423-db03-40e3-906a-646c618ddc52",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-品牌质疑\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 299
+    },
+    {
+      "id": "c96f2d65-39ec-45ab-af91-ec79e4e9d84e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"无法抽气\"}",
+      "is_enabled": 1,
+      "source_row_number": 77
+    },
+    {
+      "id": "c9ccb270-c1be-4932-b791-1e7333067df5",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"漏电\"}",
+      "is_enabled": 1,
+      "source_row_number": 60
+    },
+    {
+      "id": "caba4ce3-a9ac-4ddb-aee0-23bb6849b298",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"非品质-浴袋问题\",\"三级原因\":\"浴袋容易滑落\"}",
+      "is_enabled": 1,
+      "source_row_number": 168
+    },
+    {
+      "id": "cb1a42e9-fca0-4025-b05e-09c0cfea8721",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-产品侧翻\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 124
+    },
+    {
+      "id": "cc02ce1d-8b2e-475a-b723-97e8eddebdb7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"充气泵蓄电不足\"}",
+      "is_enabled": 1,
+      "source_row_number": 63
+    },
+    {
+      "id": "cc489f75-4dde-49bd-9dd6-aa771798fc80",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"平台问题\",\"二级原因\":\"非品质-平台主动介入\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 377
+    },
+    {
+      "id": "cca46421-e55c-4793-bfe9-00652eec8df4",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板插头指示灯异常闪烁\"}",
+      "is_enabled": 1,
+      "source_row_number": 42
+    },
+    {
+      "id": "ccdcab05-5dc1-4f23-b3e1-ec000957bd65",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-误拦截\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 225
+    },
+    {
+      "id": "cce4f16c-0bae-44fb-b43a-eddc71dd7f99",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气泵插头变形\"}",
+      "is_enabled": 1,
+      "source_row_number": 81
+    },
+    {
+      "id": "cdbe604b-ebc8-49a7-94e4-457568402e7a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"充气慢\"}",
+      "is_enabled": 1,
+      "source_row_number": 65
+    },
+    {
+      "id": "ceb0aada-c267-42ed-b1df-f22d16bbe9a3",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-浴桶-泳池夹层污水反流\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 145
+    },
+    {
+      "id": "cf6b6f89-a1ff-4731-9b41-11d08767d804",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-方向盘脱落\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 165
+    },
+    {
+      "id": "cfc78351-2a50-4add-8cd4-c419157863af",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-噪音大\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 171
+    },
+    {
+      "id": "cfea6153-e4fa-4047-a390-2a0d8ccf2545",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-二次销售瑕疵\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 157
+    },
+    {
+      "id": "d03c6e79-b724-46d1-81f6-18ebc14a1215",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板与卡槽不贴合\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 46
+    },
+    {
+      "id": "d2643172-ee49-4e7b-a3d9-4ad2ad922e8f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-浴桶不稳定易倾斜\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 205
+    },
+    {
+      "id": "d3674e41-53f6-4d17-8d68-35e5f1ca2a8a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气泵漏做抽气接口\"}",
+      "is_enabled": 1,
+      "source_row_number": 89
+    },
+    {
+      "id": "d3727f58-171f-4f16-b03f-f8fc3b003772",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"非品质-浴袋问题\",\"三级原因\":\"浴袋破损-没开口\"}",
+      "is_enabled": 1,
+      "source_row_number": 169
+    },
+    {
+      "id": "d3f805a3-76ec-4fe4-91e2-acce88492c74",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-无理由退货机器人主动挽单补偿（客服勿选）\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 226
+    },
+    {
+      "id": "d407e3aa-3791-4f2d-9eb1-b09053e01855",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"穹顶棚编码添加错误\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 227
+    },
+    {
+      "id": "d4a737df-85ae-411b-bec9-c5957041b267",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"乐邦尼浴缸不退货产品\",\"二级原因\":\"补发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 387
+    },
+    {
+      "id": "d536b241-4c75-4065-ad20-7972cf04dfb1",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-态度差\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 216
+    },
+    {
+      "id": "d58b862b-4e74-448d-bfef-5368322a3711",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气滑梯无法固定\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 195
+    },
+    {
+      "id": "d5f79d3d-5b8c-4bb0-9486-d12f7d174c4e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"产品设计部\",\"二级原因\":\"非品质-肩带无加固作用\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 384
+    },
+    {
+      "id": "d61db3a1-cd0e-42a6-a492-8a04a9b6406c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-使用呛水\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 318
+    },
+    {
+      "id": "d635d4e1-d89a-40a5-9f94-c87087ae3c2e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-不透气\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 177
+    },
+    {
+      "id": "d64912c5-1557-4d7b-95d1-263d09d1c2bf",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-产品降价\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 356
+    },
+    {
+      "id": "d799368a-1f4a-462b-adb6-243eacad9bdb",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户家热水注入不满浴缸\"}",
+      "is_enabled": 1,
+      "source_row_number": 257
+    },
+    {
+      "id": "d84eb027-8e1f-422e-945a-a2feec6e0f15",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"采购部\",\"二级原因\":\"非品质-缺货导致错发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 4
+    },
+    {
+      "id": "d8624435-938f-42c6-a93a-d4331caad956",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-多订单拦截重发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 305
+    },
+    {
+      "id": "d99c7f7a-e1af-45ee-92b7-7eeb63ac2b1d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"地址填错\"}",
+      "is_enabled": 1,
+      "source_row_number": 238
+    },
+    {
+      "id": "d9a624f2-0870-4fd9-a651-9e42f9f2c65c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-店铺设置加价顺丰\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 370
+    },
+    {
+      "id": "d9d4616d-c895-4a9d-a7f6-025989f4c603",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"产品太重\"}",
+      "is_enabled": 1,
+      "source_row_number": 239
+    },
+    {
+      "id": "da1f41d3-f4e7-4792-82c2-97490610b951",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"电压不符\"}",
+      "is_enabled": 1,
+      "source_row_number": 263
+    },
+    {
+      "id": "da6d9933-ceef-40b0-94b6-af59f5027873",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-药包过期\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 13
+    },
+    {
+      "id": "db357bed-06a2-4e7f-b6f4-7407d0c5f3d6",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-雨鞋漏做抽绳-扣子\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 202
+    },
+    {
+      "id": "db620349-c87a-4009-a5db-8356908b49b5",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-运费险报销\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 374
+    },
+    {
+      "id": "dbadea77-2cfb-49af-bf6a-5d2a352ab8f4",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-床垫泵盒打不开\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 62
+    },
+    {
+      "id": "dc18f2be-a698-4de9-8b00-52cb9ec1e26b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"反馈产品爆炸（无凭证）\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 308
+    },
+    {
+      "id": "ddf4ca6a-2191-4f3c-81ff-bd0e9748f970",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-板材断裂\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 139
+    },
+    {
+      "id": "de463db3-5e39-4ee8-a77c-0319bffa66e6",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板故障E2或闪烁\"}",
+      "is_enabled": 1,
+      "source_row_number": 25
+    },
+    {
+      "id": "df75ce43-0c4a-4746-afb1-3c6dcb9cd935",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-玻璃纤维扎手\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 190
+    },
+    {
+      "id": "dfb8227f-e986-4fa2-9773-b17dcabb623b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-夸大宣传\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 369
+    },
+    {
+      "id": "e047fc8b-11a8-4e44-bd2f-87bf71aa8bda",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-产品有异味\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 115
+    },
+    {
+      "id": "e099f871-cf61-426a-a6e6-69d9e25ffc3b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-包装不严谨\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 14
+    },
+    {
+      "id": "e0e0273c-3811-4255-a22b-7c35a31174b7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-需要定制尺寸厚度\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 330
+    },
+    {
+      "id": "e0f5a8de-11c5-4f84-8fc0-446a6657ca9b",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"不会用\"}",
+      "is_enabled": 1,
+      "source_row_number": 275
+    },
+    {
+      "id": "e0fa529b-bc9e-4ae3-91be-7987b35655bb",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"收纳不方便\"}",
+      "is_enabled": 1,
+      "source_row_number": 261
+    },
+    {
+      "id": "e16971e7-62a0-4899-bd51-f0939811752d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-发货脏污\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 19
+    },
+    {
+      "id": "e20b3d38-54a4-4f04-8c8e-534a3dc3c9dc",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"气泵凹陷\"}",
+      "is_enabled": 1,
+      "source_row_number": 73
+    },
+    {
+      "id": "e2c7a3ab-1a69-46f1-acc9-453d05ed62db",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-客户联系方式有误\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 338
+    },
+    {
+      "id": "e30a2b17-d125-4a1d-bce3-97d2199d6527",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-床垫漏做泵盒\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 206
+    },
+    {
+      "id": "e3cc6ff4-cdee-4b0c-ac91-9d99f1d782b3",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-尺寸不合适\",\"三级原因\":\"尺寸太高\"}",
+      "is_enabled": 1,
+      "source_row_number": 312
+    },
+    {
+      "id": "e45c78af-e320-4b36-8b07-69a139f180f2",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"医生说不建议使用\"}",
+      "is_enabled": 1,
+      "source_row_number": 278
+    },
+    {
+      "id": "e65a1a7d-2009-4306-8001-7aeb801c5caf",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户觉得温度不够高\"}",
+      "is_enabled": 1,
+      "source_row_number": 236
+    },
+    {
+      "id": "e82f8cd9-6bcd-4d41-83ba-ad7d050bf9af",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-有头发-毛发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 136
+    },
+    {
+      "id": "e90fe980-a995-4cda-a915-edd706375287",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"使用不舒服-不习惯\"}",
+      "is_enabled": 1,
+      "source_row_number": 265
+    },
+    {
+      "id": "ea1cc46f-49f7-4454-b363-da807e77861c",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-自行操作不当\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 230
+    },
+    {
+      "id": "eb4f8d6f-779e-4067-b1fa-f6a16c5b90e2",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"浴帘卡顿\"}",
+      "is_enabled": 1,
+      "source_row_number": 29
+    },
+    {
+      "id": "eb6afa9b-7ec9-4cf5-8401-979cf0ebc773",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-多发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 16
+    },
+    {
+      "id": "ebfe813a-155a-49b5-b4d0-4b5d73fec30d",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-卡扣太松-太大-合不上\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 122
+    },
+    {
+      "id": "ed32548a-71ef-48a0-89e4-67d0ae3c744f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-洗浴配件缩水\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 180
+    },
+    {
+      "id": "ed57877e-8aa7-424f-8f1b-78555e175e86",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"面板漏电\"}",
+      "is_enabled": 1,
+      "source_row_number": 30
+    },
+    {
+      "id": "ef10f5dc-366c-48b1-93f0-3a9f5095379f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-克莱因海支架不匹配\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 194
+    },
+    {
+      "id": "efe10b5c-6374-4176-8894-9bb912468ae1",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-面板故障\",\"三级原因\":\"无法加热到42度\"}",
+      "is_enabled": 1,
+      "source_row_number": 26
+    },
+    {
+      "id": "f04ab0ab-644c-4bab-b383-18eb8e10ecb8",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-量子灰过滤器故障\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 134
+    },
+    {
+      "id": "f05f61c1-7a47-492d-b0ac-39a99106e410",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-拉链拉不上-不方便\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 47
+    },
+    {
+      "id": "f089efa2-b6b1-4ad2-90d0-66f55b603796",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-过敏\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 304
+    },
+    {
+      "id": "f0b5f63c-e60e-49f5-a869-0603cb3a3665",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-漏气\",\"三级原因\":\"慢漏气\"}",
+      "is_enabled": 1,
+      "source_row_number": 108
+    },
+    {
+      "id": "f1846647-f3f1-44c1-8482-9342e7e63e95",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-温度计故障\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 98
+    },
+    {
+      "id": "f1b5c5d9-8cc6-46b6-89ca-58cbbfb8eb07",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-尺寸不合适\",\"三级原因\":\"尺寸太矮\"}",
+      "is_enabled": 1,
+      "source_row_number": 313
+    },
+    {
+      "id": "f1ddb844-653e-4c82-9369-3e47d323a1ab",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-产品描述不清晰\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 366
+    },
+    {
+      "id": "f27ab8fa-0051-43bb-88dd-b7d81d997728",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-床垫拉带做歪\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 179
+    },
+    {
+      "id": "f37f95f8-f1af-4b74-b5f7-497a58782931",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"平台问题\",\"二级原因\":\"发货物流非京东快递\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 378
+    },
+    {
+      "id": "f41129ef-29bf-4dec-861a-4a2da92c2aba",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客服部\",\"二级原因\":\"非品质-售前改单操作不当\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 222
+    },
+    {
+      "id": "f415f98d-3e4c-4af5-b98e-03144f0aa417",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"少用优惠\"}",
+      "is_enabled": 1,
+      "source_row_number": 242
+    },
+    {
+      "id": "f5cc08a7-cb98-456c-8989-c6526536ff35",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"采购部\",\"二级原因\":\"非品质-说明书与到货实物不匹配\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 6
+    },
+    {
+      "id": "f6bc8a02-8b0f-4074-8875-285a2e837a89",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"外出携带不方便\"}",
+      "is_enabled": 1,
+      "source_row_number": 273
+    },
+    {
+      "id": "f711e318-e81c-493e-bb7e-64d6ae58dc8f",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"平台问题\",\"二级原因\":\"京东赠品到货补发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 379
+    },
+    {
+      "id": "f7c6b895-4d8d-408c-8317-f1d6a0594161",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-天气原因用不上了\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 320
+    },
+    {
+      "id": "f7d1e11c-be4d-4721-835f-173cd86e62c2",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-客户要求超额优惠\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 331
+    },
+    {
+      "id": "f85f53e3-a953-4976-9680-dae170904a27",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-客户要求分开发\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 339
+    },
+    {
+      "id": "f8b1afbf-11f3-4e6b-9dc6-157bdea74c88",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-仓库无漏发客户反馈未到货\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 298
+    },
+    {
+      "id": "f8b591ca-36ec-45ae-9d3f-4518819a5956",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-充气泵故障\",\"三级原因\":\"脚泵充不进气\"}",
+      "is_enabled": 1,
+      "source_row_number": 82
+    },
+    {
+      "id": "f91b1242-facd-4147-a837-b44db8d6b1a1",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-正常单误发刷单\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 364
+    },
+    {
+      "id": "f9ba770d-1717-425a-8086-f26ba9c95c14",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-更换快递发货\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 321
+    },
+    {
+      "id": "f9c1bb6d-5be6-4520-8c8f-06359e5855fb",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"未提供售后原因\"}",
+      "is_enabled": 1,
+      "source_row_number": 235
+    },
+    {
+      "id": "fb86450b-8208-47de-8fc9-55503a435988",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"家人不让用\"}",
+      "is_enabled": 1,
+      "source_row_number": 276
+    },
+    {
+      "id": "fc2c229d-2b60-47fb-96ea-461bd76d9eb7",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"运营部\",\"二级原因\":\"非品质-链接显示退货包运费\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 359
+    },
+    {
+      "id": "fc5d7030-068b-444d-ba18-4c17811035c9",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"材质太硬\"}",
+      "is_enabled": 1,
+      "source_row_number": 241
+    },
+    {
+      "id": "fcbaecd9-f0a0-4e72-8b1f-9f553d62481e",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-桑拿机-汗蒸锅故障\",\"三级原因\":\"故障通电无反应\"}",
+      "is_enabled": 1,
+      "source_row_number": 52
+    },
+    {
+      "id": "fccd1ce3-6b4c-4da5-8da8-a25b25e1d049",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"客户不在无法收货\"}",
+      "is_enabled": 1,
+      "source_row_number": 234
+    },
+    {
+      "id": "fce027d5-ecf9-4bff-a6cf-1b4003a00d0a",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-实物尺寸误差大\",\"三级原因\":\"\"}",
+      "is_enabled": 1,
+      "source_row_number": 121
+    },
+    {
+      "id": "fe91c860-0dec-43c7-8315-db6c9c513b52",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"不好玩-不好用\"}",
+      "is_enabled": 1,
+      "source_row_number": 253
+    },
+    {
+      "id": "ff5e715a-f18d-4a75-8111-f0f3261669d3",
+      "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
+      "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"担心有危险\"}",
+      "is_enabled": 1,
+      "source_row_number": 251
+    }
+  ]
+}
