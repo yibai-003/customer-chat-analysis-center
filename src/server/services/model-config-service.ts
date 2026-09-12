@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db/client";
 import { config } from "../config";
 import { decryptSecret, encryptSecret, maskSecret } from "../security/secrets";
-import { buildChatCompletionsUrl } from "../ai/openai-compatible-client";
+import { buildChatCompletionsUrl, callVisionModel } from "../ai/openai-compatible-client";
 import type { ModelConfig } from "../../shared/types";
 
 const inputSchema = z.object({
@@ -135,4 +135,19 @@ export async function testModelConnection(id: string) {
     throw new Error(body?.error?.message || `连接失败 (${response.status})`);
   }
   return { success: true, latencyMs: Date.now() - started };
+}
+
+export async function testModelCapabilities(id: string) {
+  const row = db.prepare("SELECT * FROM model_configs WHERE id = ? AND is_enabled = 1").get(id) as any;
+  if (!row) throw new Error("模型配置不存在或未启用");
+  const base = { baseUrl: row.base_url, apiKey: decryptSecret(row.api_key_ciphertext, config.encryptionKey), model: row.model, temperature: 0, maxTokens: 100 };
+  const result: Record<string, unknown> = { text: false, json: false, vision: false };
+  const text = await callVisionModel(base, [{ role: "user", content: "Return JSON with exactly one key: ok. The response must be valid JSON." }]);
+  result.text = Boolean(text.content);
+  try { result.json = typeof JSON.parse(text.content) === "object"; } catch { result.json = false; }
+  if (row.supports_vision) {
+    const vision = await callVisionModel(base, [{ role: "user", content: [{ type: "text", text: "Return JSON with exactly one key: ok." }, { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" } }] }]);
+    result.vision = Boolean(vision.content);
+  }
+  return { model: row.model, purpose: row.purpose, capabilities: result };
 }

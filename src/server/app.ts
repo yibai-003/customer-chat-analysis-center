@@ -10,7 +10,7 @@ import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSection
 import { analyzeRecord } from "./services/analysis-service";
 import { analyzeJob, retryFailedJob } from "./services/batch-analysis-service";
 import { exportJob } from "./services/excel-export-service";
-import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, updateModelConfig, deleteModelConfig } from "./services/model-config-service";
+import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
 import { listFields, upsertField, deleteField } from "./services/field-config-service";
 import { analyzeField, retryField } from "./services/field-analysis-service";
@@ -187,6 +187,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.delete("/api/model-configs/:id", (req, res) => { try { deleteModelConfig(req.params.id); return ok(res, true); } catch (error) { return fail(res, error); } });
   app.post("/api/model-configs/:id/default", (req, res) => { try { return ok(res, setDefaultModel(req.params.id, req.body?.purpose)); } catch (error) { return fail(res, error); } });
   app.post("/api/model-configs/:id/test", async (req, res) => { try { return ok(res, await testModelConnection(req.params.id)); } catch (error) { return fail(res, error); } });
+  app.post("/api/model-configs/:id/test-capabilities", async (req, res) => { try { return ok(res, await testModelCapabilities(req.params.id)); } catch (error) { return fail(res, error); } });
   app.use("/api", createKnowledgeRouter(upload));
   app.use(express.static(path.resolve("dist")));
   app.use((
