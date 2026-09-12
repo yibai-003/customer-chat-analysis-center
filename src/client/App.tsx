@@ -10,6 +10,7 @@ import { KnowledgeWorkspace } from "./components/knowledge/KnowledgeWorkspace";
 import { ModelConfigDialog } from "./components/ModelConfigDialog";
 import { RecordPager } from "./components/RecordPager";
 import { SectionConfigDialog } from "./components/SectionConfigDialog";
+import { useModelReadiness } from "./hooks/useModelReadiness";
 
 const api = async <T,>(url: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(url, options);
@@ -542,6 +543,7 @@ export default function App() {
 
   const childSections = sections.filter((section) => section.parentId);
   const currentSection = sections.find((section) => section.id === activeSection) ?? childSections[0];
+  const modelReadiness = useModelReadiness(models, activeFields);
   useEffect(() => {
     if (!currentSection) return;
     api<AnalysisField[]>(`/api/sections/${currentSection.id}/fields`).then(setActiveFields).catch((error) => setNotice(error.message));
@@ -722,10 +724,7 @@ export default function App() {
 
   const requestBatchAnalysis = async () => {
     if (!job || !currentSection) return;
-    const needsVision = activeFields.some((field) => field.isEnabled && field.imageEnabled);
-    const needsText = activeFields.some((field) => field.isEnabled && field.executionType !== "knowledge_extract");
-    if ((needsVision && !models.some((model) => model.purpose === "vision" && model.isPurposeDefault && model.isEnabled))
-      || (needsText && !models.some((model) => model.purpose === "text" && model.isPurposeDefault && model.isEnabled))) {
+    if (!modelReadiness.ready) {
       setNotice("请先在模型配置中设置并启用对应的视觉模型和文本模型");
       setDialog("model");
       return;
