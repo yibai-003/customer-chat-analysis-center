@@ -9,6 +9,9 @@ db.pragma("foreign_keys = ON");
 
 export function initDb(options: { preserveConfiguration?: boolean } = {}) {
   db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version INTEGER PRIMARY KEY, name TEXT NOT NULL, applied_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS model_configs (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, base_url TEXT NOT NULL,
       api_key_ciphertext TEXT NOT NULL, model TEXT NOT NULL,
@@ -142,6 +145,8 @@ export function initDb(options: { preserveConfiguration?: boolean } = {}) {
     );
     CREATE INDEX IF NOT EXISTS idx_hot_topic_questions_item ON hot_topic_record_questions(knowledge_item_id);
   `);
+  const migration = db.prepare("INSERT OR IGNORE INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)");
+  migration.run(1, "initial-schema-and-runtime-migrations", new Date().toISOString());
   const sectionColumns = db.prepare("PRAGMA table_info(analysis_sections)").all() as Array<{ name: string }>;
   if (!sectionColumns.some((column) => column.name === "source_fields_json")) {
     db.exec("ALTER TABLE analysis_sections ADD COLUMN source_fields_json TEXT NOT NULL DEFAULT '[]'");
