@@ -229,13 +229,14 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
       },
     });
     const currentJob = getJob(jobId);
+    const finalProgress = getAnalysisProgressBaseline(jobId, sectionId);
     const finalStatus = currentJob?.status === "cancelled"
       ? "cancelled"
       : currentJob?.status === "paused"
         ? "paused"
-        : progress.failed > 0 ? "failed" : "completed";
-    writeProgress(jobId, progress, finalStatus);
-    return progress;
+        : finalProgress.failed > 0 ? "failed" : "completed";
+    writeProgress(jobId, finalProgress, finalStatus);
+    return finalProgress;
   } finally {
     clearInterval(heartbeat);
     const currentJob = getJob(jobId);
