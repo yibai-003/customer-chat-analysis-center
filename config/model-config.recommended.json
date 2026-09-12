@@ -1,0 +1,34 @@
+{
+  "provider": "阿里云百炼",
+  "baseUrl": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+  "models": {
+    "vision": {
+      "name": "截图提取模型",
+      "model": "qwen3-vl-plus",
+      "supportsVision": true,
+      "purpose": "vision",
+      "temperature": 0.2,
+      "maxTokens": 1500,
+      "isEnabled": true,
+      "isPurposeDefault": true,
+      "apiKey": ""
+    },
+    "text": {
+      "name": "字段分析模型",
+      "model": "qwen-plus",
+      "supportsVision": false,
+      "purpose": "text",
+      "temperature": 0.2,
+      "maxTokens": 1500,
+      "isEnabled": true,
+      "isPurposeDefault": true,
+      "apiKey": ""
+    }
+  },
+  "notes": [
+    "请在页面的模型配置中分别新建或编辑两个模型。",
+    "将同一个百炼 API Key 分别填入两个配置，保存后设置为对应用途的主模型。",
+    "API Key 不会写入此文件，也不要提交到 GitHub。",
+    "如果使用工作空间专属地址，请以百炼控制台显示的 compatible-mode/v1 地址替换 baseUrl。"
+  ]
+}

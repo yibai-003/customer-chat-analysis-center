@@ -83,6 +83,8 @@ npm run dev
 
 首次使用时，在页面的“模型配置”中填写：
 
+推荐配置模板见 `config/model-config.recommended.json`。
+
 - Base URL，例如 `https://your-endpoint.example/v1`
 - API Key
 - 模型名称
