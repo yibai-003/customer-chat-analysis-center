@@ -8,7 +8,8 @@
     "knowledge:export": "tsx src/server/knowledge-cli.ts export",
     "knowledge:push": "tsx src/server/knowledge-cli.ts push",
     "knowledge:restore": "tsx src/server/knowledge-cli.ts restore",
-    "backup": "tsx src/server/backup-cli.ts"
+    "backup": "tsx src/server/backup-cli.ts",
+    "db:check": "tsx src/server/db-check-cli.ts"
   },
   "type": "module",
   "dependencies": {
