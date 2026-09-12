@@ -1,12 +1,14 @@
 {
   "scripts": {
     "dev": "tsx src/server/index.ts",
+    "start": "tsx src/server/index.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "knowledge:export": "tsx src/server/knowledge-cli.ts export",
     "knowledge:push": "tsx src/server/knowledge-cli.ts push",
-    "knowledge:restore": "tsx src/server/knowledge-cli.ts restore"
+    "knowledge:restore": "tsx src/server/knowledge-cli.ts restore",
+    "backup": "tsx src/server/backup-cli.ts"
   },
   "type": "module",
   "dependencies": {

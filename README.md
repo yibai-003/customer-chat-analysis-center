@@ -13,6 +13,24 @@ npm run dev
 
 打开 `http://localhost:8787`。
 
+也可以使用统一启动脚本：
+
+```powershell
+.\scripts\start-local.ps1
+```
+
+开发时若单独启动 Vite，`5173` 已配置 `/api` 代理到 `8787`；个人使用推荐先执行
+`npm run build`，再使用 `npm run start`，由 Express 同时提供页面和接口。
+
+手动备份本地数据库和知识库快照：
+
+```powershell
+npm run backup
+```
+
+数据库备份保存在 `data/backups/`。恢复知识库配置使用 `npm run knowledge:restore`；
+该命令不会恢复聊天任务和模型 API Key。
+
 ## 知识库随 GitHub 同步
 
 页面导入、编辑或删除知识库，以及保存板块和字段配置后，服务会自动更新
