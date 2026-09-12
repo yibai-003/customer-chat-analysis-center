@@ -15,4 +15,16 @@ describe("usePollingTimer", () => {
     expect(callback).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
   });
+  it("does not overlap asynchronous polls", async () => {
+    vi.useFakeTimers();
+    let release!: () => void;
+    const callback = vi.fn(() => new Promise<void>((resolve) => { release = resolve; }));
+    renderHook(() => usePollingTimer(true, callback, 1000));
+    act(() => vi.advanceTimersByTime(3000));
+    expect(callback).toHaveBeenCalledTimes(1);
+    await act(async () => { release(); await Promise.resolve(); });
+    act(() => vi.advanceTimersByTime(1000));
+    expect(callback).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
+  });
 });
