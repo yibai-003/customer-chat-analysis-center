@@ -31,6 +31,7 @@ npm run backup
 数据库备份保存在 `data/backups/`，默认保留最近 7 份，可通过 `BACKUP_RETENTION` 调整。
 检查数据库完整性和知识库统计使用 `npm run db:check`。恢复知识库配置使用 `npm run knowledge:restore`；
 查看数据库迁移版本使用 `npm run db:migrations`。
+清理过期临时文件和日志使用 `npm run maintenance`，默认保留 14 天，可通过 `CLEANUP_RETENTION_DAYS` 调整。
 该命令不会恢复聊天任务和模型 API Key。
 
 ## 知识库随 GitHub 同步
