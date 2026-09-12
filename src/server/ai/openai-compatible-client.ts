@@ -68,6 +68,13 @@ export function buildChatCompletionsUrl(baseUrl: string) {
 }
 
 export async function callVisionModel(config: DecryptedModelConfig, messages: unknown[]) {
+  const jsonMessages = messages.map((message: any) => {
+    if (!message || typeof message !== "object") return message;
+    if (typeof message.content === "string" && !/\bjson\b/i.test(message.content)) {
+      return { ...message, content: `${message.content}\n请严格返回 JSON。` };
+    }
+    return message;
+  });
   const request = async (withResponseFormat: boolean) => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 90000);
@@ -80,7 +87,7 @@ export async function callVisionModel(config: DecryptedModelConfig, messages: un
         temperature: config.temperature,
         max_tokens: config.maxTokens,
         ...(withResponseFormat ? { response_format: { type: "json_object" } } : {}),
-        messages,
+        messages: withResponseFormat ? jsonMessages : messages,
       }),
       signal: controller.signal,
     });
