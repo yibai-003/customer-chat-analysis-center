@@ -10,7 +10,7 @@ import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSection
 import { analyzeRecord } from "./services/analysis-service";
 import { analyzeJob, retryFailedJob } from "./services/batch-analysis-service";
 import { exportJob } from "./services/excel-export-service";
-import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig } from "./services/model-config-service";
+import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig, getModelsForPurpose } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
 import { listFields, upsertField, deleteField } from "./services/field-config-service";
 import { analyzeField, retryField } from "./services/field-analysis-service";
@@ -73,6 +73,16 @@ export function createApp(dependencies: AppDependencies = {}) {
   const fail = (res: express.Response, error: unknown, status = 400) => res.status(status).json({ success: false, data: null, error: error instanceof Error ? error.message : "请求失败" });
   app.get("/api/health", (_req, res) => {
     res.json({ success: true, data: { status: "ok" }, error: null });
+  });
+  app.get("/api/ready", (_req, res) => {
+    try {
+      const disk = fs.statfsSync(config.dataDir);
+      const freeDiskMb = Math.floor(Number(disk.bavail) * Number(disk.bsize) / 1024 / 1024);
+      const vision = getModelsForPurpose("vision").length > 0;
+      const text = getModelsForPurpose("text").length > 0;
+      const ready = freeDiskMb >= config.minFreeDiskMb && vision && text;
+      return res.status(ready ? 200 : 503).json({ success: ready, data: { ready, database: true, freeDiskMb, minFreeDiskMb: config.minFreeDiskMb, models: { vision, text } }, error: ready ? null : "模型或磁盘空间未就绪" });
+    } catch (error) { return fail(res, error, 503); }
   });
   app.get("/api/system/analysis-capacity", (_req, res) => {
     try {
