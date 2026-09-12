@@ -27,6 +27,12 @@ function isXlsxFile(filePath: string): boolean {
       && (signature[2] === 0x03 || signature[2] === 0x05 || signature[2] === 0x07);
   } catch { return false; }
 }
+function hasFreeDiskSpace(): boolean {
+  try {
+    const stats = fs.statfsSync(config.dataDir);
+    return Number(stats.bavail) * Number(stats.bsize) >= config.minFreeDiskMb * 1024 * 1024;
+  } catch { return true; }
+}
 
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
@@ -92,7 +98,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   });
   app.get("/api/records/:id", (req, res) => { const record = getRecord(req.params.id); return record ? ok(res, record) : fail(res, "记录不存在", 404); });
   app.post("/api/jobs/import", upload.single("file"), async (req, res) => {
-    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path)) {
+    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path) || !hasFreeDiskSpace()) {
       if (req.file) fs.rmSync(req.file.path, { force: true });
       return fail(res, "请上传 .xlsx 文件");
     }
@@ -122,7 +128,7 @@ export function createApp(dependencies: AppDependencies = {}) {
     return job ? ok(res, job) : fail(res, "导入任务不存在", 404);
   });
   app.post("/api/jobs/import-preview", upload.single("file"), async (req, res) => {
-    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path)) {
+    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path) || !hasFreeDiskSpace()) {
       if (req.file) fs.rmSync(req.file.path, { force: true });
       return fail(res, "请上传 .xlsx 文件");
     }

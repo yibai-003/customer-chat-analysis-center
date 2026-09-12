@@ -143,6 +143,7 @@ npm run dev
 - `MAX_UPLOAD_MB`: 单文件大小上限，默认 `2048`（单位 MB）；大文件还需要保证 `DATA_DIR` 所在磁盘有足够空间
 - `ANALYSIS_CONCURRENCY`: 批量解析默认 AI 并发数，默认 `2`
 - `ANALYSIS_BATCH_SIZE`: 批量解析默认每批记录数，默认 `20`，允许 `5-100`
+- `MIN_FREE_DISK_MB`: 上传后继续处理所需的最小剩余磁盘空间，默认 `512` MB，不能低于 `64` MB
 
 ## 验证
 

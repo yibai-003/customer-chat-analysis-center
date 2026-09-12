@@ -8,6 +8,7 @@ export const config = {
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 2048),
   analysisConcurrency: Number(process.env.ANALYSIS_CONCURRENCY ?? 2),
   analysisBatchSize: Number(process.env.ANALYSIS_BATCH_SIZE ?? 20),
+  minFreeDiskMb: Number(process.env.MIN_FREE_DISK_MB ?? 512),
 };
 
 export function validateRuntimeConfig() {
@@ -22,6 +23,9 @@ export function validateRuntimeConfig() {
   }
   if (!Number.isInteger(config.analysisBatchSize) || config.analysisBatchSize < 5 || config.analysisBatchSize > 100) {
     throw new Error("ANALYSIS_BATCH_SIZE 必须是 5-100 之间的整数");
+  }
+  if (!Number.isFinite(config.minFreeDiskMb) || config.minFreeDiskMb < 64) {
+    throw new Error("MIN_FREE_DISK_MB 必须是不小于 64 的数值");
   }
   if (process.env.NODE_ENV === "production") {
     if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY === "replace-with-32-byte-base64-key") {

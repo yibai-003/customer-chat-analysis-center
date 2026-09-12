@@ -49,6 +49,12 @@ function isXlsxFile(filePath: string | undefined): boolean {
       && (signature[2] === 0x03 || signature[2] === 0x05 || signature[2] === 0x07);
   } catch { return false; }
 }
+function hasFreeDiskSpace(): boolean {
+  try {
+    const stats = fs.statfsSync(config.dataDir);
+    return Number(stats.bavail) * Number(stats.bsize) >= Number(process.env.MIN_FREE_DISK_MB ?? 512) * 1024 * 1024;
+  } catch { return true; }
+}
 
 function parseColumns(value: unknown): KnowledgeColumn[] | undefined {
   if (value === undefined || value === null || value === "") return undefined;
@@ -142,7 +148,7 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
     upload.single("file"),
     async (req, res) => {
       const uploadedPath = req.file?.path;
-      if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path)) {
+      if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path) || !hasFreeDiskSpace()) {
         removeFile(uploadedPath);
         return fail(res, "请上传 .xlsx 文件");
       }
