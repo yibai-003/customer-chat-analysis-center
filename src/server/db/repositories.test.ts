@@ -90,6 +90,7 @@ describe("job repository", () => {
     expect(acquireJobRun(processingJob.id)).toBe(true);
     expect(acquireJobRun(pausedJob.id)).toBe(true);
     requestJobPause(pausedJob.id);
+    db.prepare("UPDATE jobs SET updated_at = datetime('now', '-20 minutes') WHERE id IN (?, ?)").run(processingJob.id, pausedJob.id);
     expect(countActiveJobRuns()).toBe(2);
 
     recoverStaleJobRuns();

@@ -112,7 +112,11 @@ export function recoverStaleJobRuns(): number {
     SET run_token = NULL,
         status = CASE WHEN status = 'processing' THEN 'failed' ELSE status END,
         updated_at = ?
-    WHERE run_token IS NOT NULL`).run(now()).changes;
+    WHERE run_token IS NOT NULL
+      AND updated_at < datetime('now', '-15 minutes')`).run(now()).changes;
+}
+export function touchJobRun(jobId: string) {
+  db.prepare("UPDATE jobs SET updated_at = ? WHERE id = ? AND run_token IS NOT NULL").run(now(), jobId);
 }
 export function updateJobSection(jobId: string, section: { id: string; name: string }) {
   db.prepare("UPDATE jobs SET section_id = ?, section_name = ?, updated_at = ? WHERE id = ?").run(section.id, section.name, now(), jobId);

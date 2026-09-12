@@ -9,6 +9,7 @@ import {
   resetFailedRecords,
   restoreFailedRecords,
   updateJobProgress,
+  touchJobRun,
   updateRecord,
 } from "../db/repositories";
 import { analyzeRecordFields } from "./field-analysis-service";
@@ -186,6 +187,7 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
     progress,
     enabledFieldIds,
   } = prepared;
+  const heartbeat = setInterval(() => touchJobRun(jobId), 10_000);
   try {
     const explicitRecordIds = runOptions.recordIds ? [...runOptions.recordIds] : undefined;
     let explicitIndex = 0;
@@ -235,6 +237,7 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
     writeProgress(jobId, progress, finalStatus);
     return progress;
   } finally {
+    clearInterval(heartbeat);
     const currentJob = getJob(jobId);
     if (currentJob) releaseJobRun(jobId, currentJob.status === "processing" ? "failed" : currentJob.status);
   }
