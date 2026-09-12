@@ -229,7 +229,16 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
       },
     });
     const currentJob = getJob(jobId);
-    const finalProgress = getAnalysisProgressBaseline(jobId, sectionId);
+    const persistedProgress = getAnalysisProgressBaseline(jobId, sectionId);
+    // Record status is authoritative for task counts; field counters are kept from
+    // the executor because test/injected runners may not persist field rows.
+    const finalProgress = {
+      ...progress,
+      total: persistedProgress.total,
+      completed: persistedProgress.completed,
+      failed: persistedProgress.failed,
+      needsReview: persistedProgress.needsReview,
+    };
     const finalStatus = currentJob?.status === "cancelled"
       ? "cancelled"
       : currentJob?.status === "paused"
