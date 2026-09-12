@@ -722,6 +722,14 @@ export default function App() {
 
   const requestBatchAnalysis = async () => {
     if (!job || !currentSection) return;
+    const needsVision = activeFields.some((field) => field.isEnabled && field.imageEnabled);
+    const needsText = activeFields.some((field) => field.isEnabled && field.executionType !== "knowledge_extract");
+    if ((needsVision && !models.some((model) => model.purpose === "vision" && model.isPurposeDefault && model.isEnabled))
+      || (needsText && !models.some((model) => model.purpose === "text" && model.isPurposeDefault && model.isEnabled))) {
+      setNotice("请先在模型配置中设置并启用对应的视觉模型和文本模型");
+      setDialog("model");
+      return;
+    }
     const operation = captureJobOperation();
     startBusyOperation(operation); setNotice("");
     try {
