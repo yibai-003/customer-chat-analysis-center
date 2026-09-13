@@ -1,28 +1,13 @@
-import fs from "node:fs";
-import path from "node:path";
 import { config } from "./config";
-import { db, initDb } from "./db/client";
+import { projectRoot } from "./environment";
+import { maintainFiles } from "./services/maintenance-service";
 
-initDb({ preserveConfiguration: true });
-const days = Math.max(1, Number(process.env.CLEANUP_RETENTION_DAYS ?? 14));
-const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-const roots = [
-  path.join(config.dataDir, "knowledge-previews"),
-  path.join(config.dataDir, "uploads"),
-  path.join(config.dataDir, "logs"),
-];
-let removed = 0;
-for (const root of roots) {
-  if (!fs.existsSync(root)) continue;
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    const target = path.join(root, entry.name);
-    const stat = fs.statSync(target);
-    if (stat.mtimeMs < cutoff) {
-      fs.rmSync(target, { recursive: entry.isDirectory(), force: true });
-      removed += 1;
-    }
-  }
+try {
+  const args = process.argv.slice(2);
+  if (args.length > 1 || (args.length === 1 && !["--apply", "--dry-run"].includes(args[0]))) throw new Error("用法：npm run maintenance -- [--dry-run|--apply]");
+  console.log(JSON.stringify(await maintainFiles({ databasePath: config.databasePath, dataDir: config.dataDir, projectRoot,
+    days: process.env.CLEANUP_RETENTION_DAYS === undefined ? undefined : Number(process.env.CLEANUP_RETENTION_DAYS), apply: args[0] === "--apply" }), null, 2));
+} catch (error) {
+  console.error(error instanceof Error ? error.message : "清理失败");
+  process.exitCode = 1;
 }
-const integrity = db.pragma("integrity_check", { simple: true });
-if (integrity !== "ok") throw new Error(`数据库完整性检查失败：${integrity}`);
-console.log(JSON.stringify({ retentionDays: days, removed, integrity }, null, 2));

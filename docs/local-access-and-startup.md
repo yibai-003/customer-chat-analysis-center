@@ -27,7 +27,7 @@ cd "E:\客服解析中心\customer-chat-analysis-center"
 
 脚本依据自身位置进入项目，检查 Node 版本，缺依赖时执行 npm ci，每次构建后再启动；任一步失败立即停止。系统脚本策略不允许时，可在项目目录用 `npm.cmd run build`、`npm.cmd run start`，无需修改全局执行策略。
 
-`startup-launcher.vbs` 使用相对自身路径启动守护脚本。守护脚本通过 PATH 定位 Node，正常退出不重启，连续 5 次快速失败停止重试，避免配置错误或已有实例时无限循环。不会自动安装开机启动项，也未在此次修改中启用守护实例。日志轮换仍为后续任务。
+`startup-launcher.vbs` 使用相对自身路径启动守护脚本。守护脚本通过 PATH 定位 Node，正常退出不重启，连续 5 次快速失败停止重试，避免配置错误或已有实例时无限循环。不会自动安装开机启动项，也未启用守护实例。后续安全维护单元已把 npm 与守护脚本统一接入日志启动器，支持 `LOG_MAX_MB` / `LOG_RETENTION`，见 [安全清理与日志指南](safe-maintenance-and-logs.md)。
 
 ## 开发代理
 
