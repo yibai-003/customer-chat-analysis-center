@@ -1,3 +1,4 @@
+import { BotanicalArt, ArtworkCredits } from "./components/BotanicalArt";
 import { useEffect, useRef, useState } from "react";
 import type { AnalysisCapacity, AnalysisField, AnalysisJobOptions, AnalysisSection, ImportJob, Job, ModelConfig, RecordDetail, RecordPage, WorkbookPreview } from "../shared/types";
 import { AnalysisProgress } from "./components/AnalysisProgress";
@@ -885,12 +886,13 @@ export default function App() {
           {!jobs.length ? <div className="side-empty">导入 Excel 文件<br />建立解析任务</div> : <JobList jobs={jobs} sections={sections} selectedId={job?.id} onSelect={(id) => void navigateToJob(id).catch((error) => setNotice(error instanceof Error ? error.message : "切换任务失败"))} onDeleted={handleJobsDeleted} />}
           <div className="sidebar-title section-title"><span>解析板块</span><button onClick={() => setDialog("section")}>管理</button></div>
           <nav>{sections.filter((s) => !s.parentId).map((parent) => <div className="section-group" key={parent.id}><div className="parent">╰ {parent.name}</div>{sections.filter((s) => s.parentId === parent.id).map((child) => <div className={`section-entry ${activeSection === child.id ? "active" : ""}`} key={child.id}><button className="section-select" disabled={Boolean(job?.sectionId && job.sectionId !== child.id)} title={job?.sectionId && job.sectionId !== child.id ? "当前任务已绑定其他解析板块" : undefined} onClick={() => setActiveSection(child.id)}><span />{child.name}<i /></button><button className="section-knowledge" aria-label={`打开${child.name}知识库`} title="知识库" onClick={() => setKnowledgeSection(child)}>知</button></div>)}</div>)}</nav>
+          <div className="sidebar-botanical"><BotanicalArt variant="specimen" /><ArtworkCredits /></div>
           <div className="server-state"><i />服务端已连接 <b>LOCAL</b></div>
         </aside>
 
         <section className="content">
           <div className="content-header">
-            <div><small>ANALYSIS QUEUE</small><h1>{job?.originalFilename ?? "等待导入解析文件"}</h1><p>{job ? `共 ${job.totalRecords} 条记录，当前板块：${currentSection?.name}` : "导入包含聊天截图的 Excel，开始客服分析"}</p>{job && <AnalysisProgress job={job} />}</div>
+            <div className="task-heading"><BotanicalArt variant="leaves" /><small>ANALYSIS QUEUE</small><h1>{job?.originalFilename ?? "等待导入解析文件"}</h1><p>{job ? `共 ${job.totalRecords} 条记录，当前板块：${currentSection?.name}` : "导入包含聊天截图的 Excel，开始客服分析"}</p>{job && <AnalysisProgress job={job} />}</div>
             {job && <div className="content-actions"><select aria-label="按记录状态筛选" value={filter} onChange={(e) => void changeFilter(e.target.value)}><option value="all">全部状态</option><option value="pending">待解析</option><option value="completed">已完成</option><option value="needs_review">需复核</option><option value="failed">失败</option></select>{job.status === "processing" && <><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("pause")}>暂停</button><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("cancel")}>取消</button></>}{job.status === "failed" && <button className="button light" disabled={taskActionBusy} onClick={() => taskAction("retry-failed")}>重试失败</button>}<button className="button dark" disabled={busy || taskActionBusy || job.status === "processing" || job.status === "cancelled"} onClick={() => void requestBatchAnalysis()}>{busy ? "解析中..." : job.status === "paused" ? "继续解析 →" : "批量解析 →"}</button></div>}
           </div>
           {notice && <div className="notice">{notice}</div>}
@@ -916,7 +918,7 @@ export default function App() {
         </section>
 
         <aside className="detail">
-          {selected ? <Detail record={selected} section={currentSection} fields={activeFields} busy={busy || job?.status === "processing"} setRecord={editSelectedRecord} onAnalyze={() => void analyzeRecord(selected.id)} onRetry={retryField} onSave={saveReview} onPreviewImage={(src, alt) => setPreviewImage({ src, alt })} /> : <div className="detail-empty"><b>01</b><h2>选择一条记录</h2><p>查看原图、辅助字段和 AI 解析结果</p></div>}
+          {selected ? <Detail record={selected} section={currentSection} fields={activeFields} busy={busy || job?.status === "processing"} setRecord={editSelectedRecord} onAnalyze={() => void analyzeRecord(selected.id)} onRetry={retryField} onSave={saveReview} onPreviewImage={(src, alt) => setPreviewImage({ src, alt })} /> : <div className="detail-empty"><BotanicalArt /><h2>选择一条记录</h2><p>查看原图、辅助字段和 AI 解析结果</p></div>}
         </aside>
       </main>
 

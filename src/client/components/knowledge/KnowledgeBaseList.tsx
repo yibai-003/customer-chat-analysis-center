@@ -1,3 +1,4 @@
+import { BotanicalArt, ArtworkCredits } from "../BotanicalArt";
 import { useEffect, useRef, useState } from "react";
 import type { KnowledgeBase } from "../../../shared/types";
 import type { KnowledgeApiClient } from "../../api/knowledge-api";
@@ -87,6 +88,7 @@ export function KnowledgeBaseList({
 
   return <div className="knowledge-base-view">
     <div className="knowledge-band-head">
+      <BotanicalArt variant="specimen" />
       <div><small>CONTENT MANAGEMENT</small><h2>知识库文件</h2></div>
       <button className="button primary" disabled={Boolean(busyAction)} onClick={onImport}>＋ 导入知识库</button>
     </div>
@@ -120,6 +122,7 @@ export function KnowledgeBaseList({
         </div>)}
       </div>
     </div>}
+    <ArtworkCredits />
     {error && <div className="form-error">{error}</div>}
     {pendingDelete && <ConfirmDialog
       title="删除知识库"
