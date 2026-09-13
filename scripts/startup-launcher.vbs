@@ -1,2 +1,4 @@
 Set shell = CreateObject("WScript.Shell")
-shell.Run "powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File ""E:\客服解析中心\scripts\keep-server-alive.ps1""", 0, False
+Set fso = CreateObject("Scripting.FileSystemObject")
+scriptPath = fso.BuildPath(fso.GetParentFolderName(WScript.ScriptFullName), "keep-server-alive.ps1")
+shell.Run "powershell.exe -NoProfile -WindowStyle Hidden -File """ & scriptPath & """", 0, False

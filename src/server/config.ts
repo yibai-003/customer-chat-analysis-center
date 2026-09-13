@@ -1,10 +1,11 @@
 import path from "node:path";
+import { projectRoot } from "./environment";
 
 export const config = {
   port: Number(process.env.PORT ?? 8787),
-  dataDir: path.resolve(process.env.DATA_DIR ?? "./data"),
-  databasePath: path.resolve(process.env.DATABASE_PATH ?? "./data/app.db"),
-  encryptionKey: process.env.ENCRYPTION_KEY ?? "01234567890123456789012345678901",
+  dataDir: path.resolve(projectRoot, process.env.DATA_DIR ?? "./data"),
+  databasePath: path.resolve(projectRoot, process.env.DATABASE_PATH ?? "./data/app.db"),
+  encryptionKey: process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY !== "replace-with-32-byte-base64-key" ? process.env.ENCRYPTION_KEY : "01234567890123456789012345678901",
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 2048),
   analysisConcurrency: Number(process.env.ANALYSIS_CONCURRENCY ?? 2),
   analysisBatchSize: Number(process.env.ANALYSIS_BATCH_SIZE ?? 20),

@@ -1,8 +1,10 @@
 import { validateRuntimeConfig } from "./config";
 import { config } from "./config";
 import { acquireInstanceLock } from "./instance-lock";
+import { projectRoot } from "./environment";
 
 validateRuntimeConfig();
+process.chdir(projectRoot);
 const lock = await acquireInstanceLock(config.databasePath);
 try {
   // Only open/migrate/recover the database after obtaining exclusive process ownership.

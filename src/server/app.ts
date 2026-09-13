@@ -1,4 +1,6 @@
 import { createSafeUpload, validateXlsx, requireDiskSpace, UploadError } from "./security/upload-safety";
+import { localAccess } from "./security/local-access";
+import { projectRoot } from "./environment";
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -34,6 +36,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   if (!knowledgeSync) initDb();
   setHotTopicKnowledgeSync(knowledgeSync);
   const app = express();
+  app.use(localAccess);
   app.use(express.json({ limit: "2mb" }));
   app.use((req, res, next) => {
     const configurationChange = ["POST", "PATCH", "DELETE"].includes(req.method)
@@ -207,7 +210,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.post("/api/model-configs/:id/test", async (req, res) => { try { return ok(res, await testModelConnection(req.params.id)); } catch (error) { return fail(res, error); } });
   app.post("/api/model-configs/:id/test-capabilities", async (req, res) => { try { return ok(res, await testModelCapabilities(req.params.id)); } catch (error) { return fail(res, error); } });
   app.use("/api", createKnowledgeRouter(upload));
-  app.use(express.static(path.resolve("dist")));
+  app.use(express.static(path.join(projectRoot, "dist")));
   app.use((
     error: unknown,
     _req: express.Request,

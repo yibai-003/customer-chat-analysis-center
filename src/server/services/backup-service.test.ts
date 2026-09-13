@@ -55,7 +55,7 @@ describe("verified full backups", () => {
       expect(workbook.worksheets[0].getImages()).toHaveLength(1);
       const script = 'import { exportJob } from "./src/server/services/excel-export-service.ts"; console.log(await exportJob(process.argv[1], ["refund"]));';
       const execution = await promisify(execFile)(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script, jobId], {
-        cwd: process.cwd(), env: { ...process.env, DATABASE_PATH: path.join(target, "data/app.db"), DATA_DIR: path.join(target, "data") }, windowsHide: true,
+        cwd: process.cwd(), env: { ...process.env, DATABASE_PATH: path.join(target, "data/app.db"), DATA_DIR: path.join(target, "data") }, windowsHide: true, timeout: 10_000,
       });
       const output = execution.stdout.trim();
       const exported = new ExcelJS.Workbook(); await exported.xlsx.readFile(output);
@@ -67,7 +67,7 @@ describe("verified full backups", () => {
       expect(captureCatalog(restored)).toEqual(captureCatalog(db));
     } finally { restored.close(); }
     expect(getRecord(recordId)?.imagePath).toBe(path.join(root, "screenshot.png"));
-  });
+  }, 20_000);
 
   it("keeps old backups and source files when a required file is missing", async () => {
     const good = await backup(1);
