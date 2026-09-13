@@ -1,3 +1,4 @@
+import { assertRunOwnership, assertRecordOwnership, currentRunToken } from "../services/run-ownership";
 import crypto from "node:crypto";
 import { db } from "./client";
 import type { AnalysisSection, ImportJob, Job, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ModelConfig, ImportJobStatus, RecordStatus } from "../../shared/types";
@@ -116,30 +117,41 @@ export function listJobs() { return (db.prepare("SELECT * FROM jobs ORDER BY cre
 export function countActiveJobRuns(): number {
   return (db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE run_token IS NOT NULL").get() as { count: number }).count;
 }
+/** Only call after acquiring exclusive application ownership at process startup. */
 export function recoverStaleJobRuns(): number {
-  return db.prepare(`UPDATE jobs
-    SET run_token = NULL,
-        status = CASE WHEN status = 'processing' THEN 'failed' ELSE status END,
-        updated_at = ?
-    WHERE run_token IS NOT NULL
-      AND updated_at < datetime('now', '-15 minutes')`).run(now()).changes;
+  return db.transaction(() => {
+    const affected = db.prepare("SELECT id,section_id FROM jobs WHERE run_token IS NOT NULL OR status='processing' OR id IN (SELECT job_id FROM records WHERE status='processing')").all() as { id: string; section_id: string | null }[];
+    db.prepare("UPDATE records SET status='failed', review_status='needs_review',updated_at=? WHERE status='processing'").run(now());
+    for (const job of affected) {
+      const progress = getAnalysisProgressBaseline(job.id, job.section_id ?? "");
+      db.prepare(`UPDATE jobs SET run_token=NULL,run_finished_at=?,
+        status=CASE WHEN status='processing' THEN 'failed' ELSE status END,
+        completed_records=?,failed_records=?,completed_fields=?,failed_fields=?,skipped_fields=?,updated_at=? WHERE id=?`)
+        .run(Date.now(), progress.completed, progress.failed, progress.completedFields, progress.failedFields, progress.skippedFields, now(), job.id);
+    }
+    return affected.length;
+  })();
 }
-export function touchJobRun(jobId: string) {
-  db.prepare("UPDATE jobs SET updated_at = ? WHERE id = ? AND run_token IS NOT NULL").run(now(), jobId);
+export function getJobRunToken(jobId: string): string | undefined {
+  return db.prepare("SELECT run_token FROM jobs WHERE id=?").get(jobId)?.run_token ?? undefined;
+}
+export function touchJobRun(jobId: string, token: string) {
+  return db.prepare("UPDATE jobs SET heartbeat_at = ? WHERE id = ? AND run_token = ?").run(Date.now(), jobId, token).changes === 1;
 }
 export function updateJobSection(jobId: string, section: { id: string; name: string }) {
+  assertRunOwnership(jobId);
   db.prepare("UPDATE jobs SET section_id = ?, section_name = ?, updated_at = ? WHERE id = ?").run(section.id, section.name, now(), jobId);
 }
 export function updateJobSourcePath(jobId: string, sourcePath: string) {
   db.prepare("UPDATE jobs SET source_path = ?, updated_at = ? WHERE id = ?").run(sourcePath, now(), jobId);
 }
 export function acquireJobRun(jobId: string): boolean {
-  const result = db.prepare(`UPDATE jobs SET run_token = ?, cancel_requested = 0, status = 'processing', updated_at = ?
-    WHERE id = ? AND run_token IS NULL AND status IN ('ready', 'failed', 'paused', 'cancelled', 'completed')`).run(crypto.randomUUID(), now(), jobId);
+  const result = db.prepare(`UPDATE jobs SET run_token = ?, cancel_requested = 0, status = 'processing', updated_at = ?,run_started_at=?,heartbeat_at=?,run_finished_at=NULL
+    WHERE id = ? AND run_token IS NULL AND status IN ('ready', 'failed', 'paused', 'cancelled', 'completed')`).run(crypto.randomUUID(), now(), Date.now(), Date.now(), jobId);
   return result.changes === 1;
 }
-export function releaseJobRun(jobId: string, status: Job["status"]) {
-  db.prepare("UPDATE jobs SET run_token = NULL, status = ?, updated_at = ? WHERE id = ?").run(status, now(), jobId);
+export function releaseJobRun(jobId: string, status: Job["status"], token = currentRunToken(jobId) ?? getJobRunToken(jobId)) {
+  if (token) db.prepare("UPDATE jobs SET run_token = NULL, status = ?, updated_at = ?,run_finished_at=? WHERE id = ? AND run_token=?").run(status, now(), Date.now(), jobId, token);
   return getJob(jobId);
 }
 export function requestJobPause(jobId: string) {
@@ -179,6 +191,7 @@ export function assertJobSection(jobId: string, sectionId: string) {
   }
 }
 export function updateJobProgress(jobId: string, input: { status: Job["status"]; completedRecords: number; failedRecords: number; totalFields?: number; completedFields?: number; failedFields?: number; skippedFields?: number }) {
+  assertRunOwnership(jobId);
   db.prepare(`UPDATE jobs SET status = ?, completed_records = ?, failed_records = ?,
     total_fields = COALESCE(?, total_fields), completed_fields = COALESCE(?, completed_fields),
     failed_fields = COALESCE(?, failed_fields), skipped_fields = COALESCE(?, skipped_fields), updated_at = ? WHERE id = ?`)
@@ -323,6 +336,7 @@ export function getRecord(id: string): RecordDetail | undefined {
 }
 export function updateRecord(id: string, input: { sectionId?: string; humanResult?: Record<string, unknown>; reviewStatus?: string; reviewNote?: string; status?: string }) {
   return db.transaction(() => {
+  assertRecordOwnership(id);
   const row = getRecord(id);
   if (!row) throw new Error("记录不存在");
   if (input.sectionId && input.reviewStatus === "confirmed") {
@@ -357,6 +371,7 @@ export function updateRecord(id: string, input: { sectionId?: string; humanResul
   })();
 }
 export function createRun(input: { recordId: string; sectionId: string; modelSnapshot: unknown; prompt: string; schema: unknown; result: unknown; rawResponse?: string; errorMessage?: string; durationMs?: number; status: string; usage?: any }): AnalysisRun {
+  assertRecordOwnership(input.recordId);
   const id = crypto.randomUUID(), timestamp = now();
   db.prepare(`INSERT INTO analysis_runs (id,record_id,section_id,model_config_snapshot_json,prompt_snapshot,output_schema_snapshot_json,model_result_json,raw_response,error_message,duration_ms,input_tokens,output_tokens,status,created_at)
     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, input.recordId, input.sectionId, json(input.modelSnapshot), input.prompt, json(input.schema), json(input.result), input.rawResponse ?? null, input.errorMessage ?? null, input.durationMs ?? null, input.usage?.prompt_tokens ?? null, input.usage?.completion_tokens ?? null, input.status, timestamp);
