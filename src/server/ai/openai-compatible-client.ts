@@ -1,4 +1,5 @@
 import { requestModel, type TransportOptions } from "./model-transport";
+import { currentModelBudget, withModelBudget } from "./model-budget";
 export interface DecryptedModelConfig {
   baseUrl: string; apiKey: string; model: string; temperature: number; maxTokens: number;
 }
@@ -69,8 +70,13 @@ export function buildChatCompletionsUrl(baseUrl: string) {
 }
 
 export async function callVisionModel(config: DecryptedModelConfig, messages: unknown[], options: TransportOptions = {}) {
-  const deadline = AbortSignal.timeout(300_000);
-  const signal = options.signal ? AbortSignal.any([deadline, options.signal]) : deadline;
+  return withModelBudget(() => callWithinBudget(config, messages, options), { signal: options.signal });
+}
+
+async function callWithinBudget(config: DecryptedModelConfig, messages: unknown[], options: TransportOptions) {
+  const budget = currentModelBudget()!;
+  budget.check();
+  const signal = options.signal ? AbortSignal.any([budget.signal, options.signal]) : budget.signal;
   let attemptsLeft = Math.min(3, Math.max(1, options.attempts ?? 3));
   const jsonMessages = messages.map((message: any) => {
     if (!message || typeof message !== "object") return message;
@@ -85,7 +91,7 @@ export async function callVisionModel(config: DecryptedModelConfig, messages: un
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
       body: JSON.stringify({ model: config.model, temperature: config.temperature, max_tokens: config.maxTokens,
         ...(withResponseFormat ? { response_format: { type: "json_object" } } : {}), messages: jsonMessages }),
-    }, { ...options, signal, attempts: attemptsLeft });
+    }, { ...options, signal, attempts: attemptsLeft, consumeRequest: budget.consume });
     attemptsLeft -= result.attemptsUsed;
     return result;
   };

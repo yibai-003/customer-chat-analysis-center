@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { db } from "../db/client";
+import { assertAnalysisActive } from "./analysis-cancellation";
 
 export const runOwnership = new AsyncLocalStorage<{ jobId: string; token: string }>();
 export function currentRunToken(jobId: string): string | undefined {
@@ -14,6 +15,7 @@ export function assertRunOwnership(jobId?: string) {
   if (row?.run_token !== owner.token) throw new Error("任务运行已失效，拒绝旧运行写入");
 }
 export function assertRecordOwnership(recordId: string) {
+  assertAnalysisActive();
   if (!runOwnership.getStore()) return;
   const row = db.prepare("SELECT job_id FROM records WHERE id=?").get(recordId) as { job_id: string } | undefined;
   if (!row) throw new Error("记录已删除，拒绝旧运行写入");

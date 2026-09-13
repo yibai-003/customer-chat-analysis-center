@@ -1,4 +1,7 @@
 import fs from "node:fs/promises";
+import { assertAnalysisActive } from "./analysis-cancellation";
+import { checkModelBudget, withModelBudget } from "../ai/model-budget";
+import { withSingleAnalysisRun } from "./single-analysis-run";
 import { getModelsForPurpose } from "./model-config-service";
 import { assertJobSection, getRecord, getSection, updateJobSection, updateRecord } from "../db/repositories";
 import { listFields, topologicalFields } from "./field-config-service";
@@ -39,6 +42,7 @@ export async function executeFieldGraph(
   const states: Record<string, FieldExecutionState> = {};
   const context: Record<string, unknown> = {};
   for (const field of ordered) {
+    assertAnalysisActive();
     const dependencyFailed = field.dependsOn.some((key) => states[key]?.status === "failed" || states[key]?.status === "skipped");
     if (dependencyFailed) {
       states[field.key] = { status: "skipped", result: {}, errorMessage: "依赖字段解析失败或已跳过" };
@@ -52,6 +56,7 @@ export async function executeFieldGraph(
       states[field.key] = { status, result, errorMessage: envelope ? output.errorMessage : undefined };
       Object.assign(context, result);
     } catch (error) {
+      assertAnalysisActive();
       states[field.key] = { status: "failed", result: {}, errorMessage: error instanceof Error ? error.message : "字段解析失败" };
     }
   }
@@ -103,6 +108,7 @@ async function runAiField(
     let response: Awaited<ReturnType<typeof callVisionModel>> | undefined;
     let lastError: unknown;
     for (const candidate of models) {
+      assertAnalysisActive(); checkModelBudget();
       try {
         if (field.imageEnabled && !candidate.supportsVision) throw new Error("当前模型不支持图片解析");
         response = await callVisionModel(candidate, messages);
@@ -126,6 +132,7 @@ async function runAiField(
     });
     return { result: checked.result, status, errorMessage: checked.error ?? undefined, run };
   } catch (error) {
+    assertAnalysisActive();
     const message = classifyModelError(error).message;
     const run = createFieldRun({
       recordId, fieldId: field.id, status: "failed", result: {},
@@ -173,6 +180,7 @@ async function runKnowledgeMatch(
       run,
     };
   } catch (error) {
+    assertAnalysisActive();
     const message = error instanceof Error ? error.message : "知识匹配失败";
     const run = createFieldRun({
       recordId,
@@ -247,6 +255,18 @@ async function runField(
   context: Record<string, unknown>,
   image: Buffer | null,
 ) {
+  assertAnalysisActive();
+  return withModelBudget(() => runFieldWithinBudget(recordId, sectionName, record, field, context, image));
+}
+
+async function runFieldWithinBudget(
+  recordId: string,
+  sectionName: string,
+  record: NonNullable<ReturnType<typeof getRecord>>,
+  field: AnalysisField,
+  context: Record<string, unknown>,
+  image: Buffer | null,
+) {
   if (isHotTopicField(field) && field.knowledgeSyncEnabled) {
     const run = await captureHotTopicQuestions({ recordId, field, dependencies: dependencyValues(field, record.sourceFields, context) });
     return { result: run.result, status: run.status === "completed" ? "completed" as const : "needs_review" as const, errorMessage: run.errorMessage, run };
@@ -262,6 +282,10 @@ async function runField(
 }
 
 export async function analyzeRecordFields(recordId: string, sectionId: string): Promise<FieldBatchProgress> {
+  return withSingleAnalysisRun(recordId, sectionId, () => analyzeRecordFieldsWithinRun(recordId, sectionId));
+}
+
+async function analyzeRecordFieldsWithinRun(recordId: string, sectionId: string): Promise<FieldBatchProgress> {
   const record = getRecord(recordId);
   const section = getSection(sectionId);
   if (!record || !section) throw new Error("记录或解析板块不存在");
@@ -300,6 +324,10 @@ export async function analyzeRecordFields(recordId: string, sectionId: string): 
 }
 
 export async function analyzeField(recordId: string, sectionId: string, fieldKey: string): Promise<AnalysisFieldRun> {
+  return withSingleAnalysisRun(recordId, sectionId, () => analyzeFieldWithinRun(recordId, sectionId, fieldKey));
+}
+
+async function analyzeFieldWithinRun(recordId: string, sectionId: string, fieldKey: string): Promise<AnalysisFieldRun> {
   const record = getRecord(recordId);
   const section = getSection(sectionId);
   const field = listFields(sectionId).find((item) => item.key === fieldKey && item.isEnabled);

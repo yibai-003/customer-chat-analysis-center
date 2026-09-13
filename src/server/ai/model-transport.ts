@@ -7,7 +7,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-export interface TransportOptions { signal?: AbortSignal; timeoutMs?: number; attempts?: number }
+export interface TransportOptions { signal?: AbortSignal; timeoutMs?: number; attempts?: number; consumeRequest?: () => void }
 function transient(error: unknown): boolean {
   const e = error as { name?: string; message?: string; code?: string; cause?: unknown };
   if (/CERT|TLS|SSL/i.test(e?.code ?? "")) return false;
@@ -20,6 +20,7 @@ export async function requestModel(url: string, init: RequestInit, options: Tran
   const attempts = Math.min(3, Math.max(1, options.attempts ?? 3));
   for (let attempt = 0; attempt < attempts; attempt++) {
     options.signal?.throwIfAborted();
+    options.consumeRequest?.();
     const controller = new AbortController();
     const signal = options.signal ? AbortSignal.any([controller.signal, options.signal]) : controller.signal;
     const timer = setTimeout(() => controller.abort(new DOMException("Model request timed out", "TimeoutError")), options.timeoutMs ?? 90_000);
@@ -27,6 +28,7 @@ export async function requestModel(url: string, init: RequestInit, options: Tran
     try {
       const response = await fetch(url, { ...init, signal });
       const rawText = await response.text();
+      signal.throwIfAborted();
       const retryable = response.status === 408 || response.status === 429 || response.status >= 500;
       if (!retryable || attempt === attempts - 1) return { response, rawText, attemptsUsed: attempt + 1 };
       const retryAfter = response.headers.get("retry-after");

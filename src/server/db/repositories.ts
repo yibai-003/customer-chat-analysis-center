@@ -1,4 +1,5 @@
 import { assertRunOwnership, assertRecordOwnership, currentRunToken } from "../services/run-ownership";
+import { cancelAnalysis } from "../services/analysis-cancellation";
 import crypto from "node:crypto";
 import { db } from "./client";
 import type { AnalysisSection, ImportJob, Job, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ModelConfig, ImportJobStatus, RecordStatus } from "../../shared/types";
@@ -160,7 +161,15 @@ export function requestJobPause(jobId: string) {
 }
 export function requestJobCancel(jobId: string) {
   db.prepare("UPDATE jobs SET status = 'cancelled', cancel_requested = 1, updated_at = ? WHERE id = ? AND status IN ('ready', 'processing', 'paused')").run(now(), jobId);
-  return getJob(jobId);
+  const job = getJob(jobId);
+  if (job?.cancelRequested) cancelAnalysis(jobId, getJobRunToken(jobId));
+  return job;
+}
+export function settleCancelledRecord(recordId: string, jobId: string, token: string) {
+  db.prepare(`UPDATE records SET status='pending',review_status='pending',updated_at=?
+    WHERE id=? AND job_id=? AND status='processing'
+    AND EXISTS(SELECT 1 FROM jobs WHERE id=? AND run_token=? AND cancel_requested=1)`)
+    .run(now(), recordId, jobId, jobId, token);
 }
 export function resetFailedRecords(jobId: string) {
   const ids = (db.prepare("SELECT id FROM records WHERE job_id = ? AND status = 'failed'").all(jobId) as Array<{ id: string }>).map((row) => row.id);

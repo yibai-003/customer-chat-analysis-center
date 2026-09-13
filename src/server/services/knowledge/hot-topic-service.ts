@@ -1,4 +1,7 @@
 import crypto from "node:crypto";
+import { assertAnalysisActive, analysisSignal } from "../analysis-cancellation";
+import { assertRecordOwnership } from "../run-ownership";
+import { withModelBudget, checkModelBudget, currentModelBudget } from "../../ai/model-budget";
 import { db } from "../../db/client";
 import { callVisionModel } from "../../ai/openai-compatible-client";
 import { getModelsForPurpose } from "../model-config-service";
@@ -16,9 +19,17 @@ export function setHotTopicKnowledgeSync(sync: KnowledgeSync | undefined) { know
 // Serialize matching and capture in this single-user server, including concurrent jobs and retries.
 let captureQueue: Promise<unknown> = Promise.resolve();
 function serialized<T>(work: () => Promise<T>): Promise<T> {
-  const next = captureQueue.then(work, work);
+  const signal = currentModelBudget()?.signal ?? analysisSignal();
+  const start = () => { signal?.throwIfAborted(); return work(); };
+  const next = captureQueue.then(start, start);
   captureQueue = next.catch(() => undefined);
-  return next;
+  if (!signal) return next;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    if (signal.aborted) { reject(signal.reason); return; }
+    signal.addEventListener("abort", abort, { once: true });
+    next.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
 }
 
 interface Question { question: string; evidence: string }
@@ -96,7 +107,12 @@ function candidatesFor(question: string, bases: KnowledgeBase[], limit: number):
 export function captureHotTopicQuestions(input: {
   recordId: string; field: AnalysisField; dependencies: Record<string, unknown>;
 }): Promise<AnalysisFieldRun> {
+  return withModelBudget(() => captureHotTopicWithinBudget(input));
+}
+
+function captureHotTopicWithinBudget(input: Parameters<typeof captureHotTopicQuestions>[0]): Promise<AnalysisFieldRun> {
   return serialized(async () => {
+    assertAnalysisActive(); checkModelBudget();
     const { field, recordId, dependencies } = input;
     const started = Date.now();
     const transcript: unknown[] = [];
@@ -115,6 +131,7 @@ export function captureHotTopicQuestions(input: {
       if (!models.length) throw new Error("请先配置并启用字段分析模型");
       let lastError: unknown;
       for (const model of models) {
+        assertAnalysisActive(); checkModelBudget();
         try {
           const response = await callVisionModel(model, [
             { role: "system", content: system },
@@ -178,6 +195,8 @@ export function captureHotTopicQuestions(input: {
         throw new Error("分析期间知识库或字段配置已变更，请重试，未写入知识库");
       }
       const run = db.transaction(() => {
+        assertRecordOwnership(recordId);
+        currentModelBudget()?.signal.throwIfAborted();
         if (selections.some((selection) => selection.origin === "created")) {
           const base = getKnowledgeBase(HOT_TOPIC_BASE_ID);
           if (base && (!base.isEnabled || base.sectionId !== field.sectionId || resultColumn(base) !== HOT_TOPIC_QUESTION_COLUMN)) {
@@ -215,6 +234,7 @@ export function captureHotTopicQuestions(input: {
       }
       return run;
     } catch (error) {
+      assertAnalysisActive();
       return createRun("needs_review", { [field.key]: "" }, error instanceof Error ? error.message : "高频问题沉淀失败，未写入知识库");
     }
   });

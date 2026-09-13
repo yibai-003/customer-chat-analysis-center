@@ -1,4 +1,5 @@
 import { runOwnership, assertRunOwnership } from "./run-ownership";
+import { withAnalysisCancellation, analysisSignal } from "./analysis-cancellation";
 import {
   acquireJobRun,
   assertJobSection,
@@ -13,6 +14,7 @@ import {
   updateJobProgress,
   touchJobRun,
   updateRecord,
+  settleCancelledRecord,
 } from "../db/repositories";
 import { analyzeRecordFields } from "./field-analysis-service";
 import { config } from "../config";
@@ -191,7 +193,7 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
   } = prepared;
   const token = getJobRunToken(jobId);
   if (!token) throw new Error("Task run lock missing");
-  return runOwnership.run({ jobId, token }, async () => {
+  return withAnalysisCancellation(jobId, token, () => runOwnership.run({ jobId, token }, async () => {
   const heartbeat = setInterval(() => touchJobRun(jobId, token), 10_000);
   try {
     const explicitRecordIds = runOptions.recordIds ? [...runOptions.recordIds] : undefined;
@@ -225,6 +227,7 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
           progress.failedFields += result.failed;
           progress.skippedFields += result.skipped;
         } catch {
+          if (analysisSignal()?.aborted) { settleCancelledRecord(record.id, jobId, token); return; }
           progress.failed++;
           if (getRecord(record.id)) updateRecord(record.id, { status: "failed", reviewStatus: "needs_review" });
         }
@@ -248,7 +251,7 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
     const currentJob = getJob(jobId);
     if (currentJob) releaseJobRun(jobId, currentJob.status === "processing" ? "failed" : currentJob.status, token);
   }
-  });
+  }));
 }
 
 export function analyzeJob(

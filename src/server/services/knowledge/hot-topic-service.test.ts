@@ -6,6 +6,7 @@ import { captureHotTopicQuestions, parseHotTopicQuestions, setHotTopicKnowledgeS
 import { getKnowledgeBase, listKnowledgeItems, upsertKnowledgeBase, upsertKnowledgeItem } from "./knowledge-repository";
 import { callVisionModel } from "../../ai/openai-compatible-client";
 import { HOT_TOPIC_BASE_ID, HOT_TOPIC_PROMPT } from "../../../shared/hot-topic";
+import { withAnalysisCancellation, cancelAnalysis } from "../analysis-cancellation";
 import type { AnalysisField } from "../../../shared/types";
 
 vi.mock("../model-config-service", () => ({ getModelsForPurpose: vi.fn(() => [{ id: "test-text", name: "Text", model: "test-model" }]) }));
@@ -45,6 +46,23 @@ beforeEach(() => {
 });
 
 describe("hot-topic capture", () => {
+  it("cancels queued capture immediately and prevents late extraction from creating knowledge", async () => {
+    let deliver!: (value: ReturnType<typeof extract>) => void;
+    let started!: () => void;
+    const entered = new Promise<void>(resolve => { started = resolve; });
+    vi.mocked(callVisionModel).mockImplementationOnce(() => { started(); return new Promise(resolve => { deliver = resolve; }); });
+    const first = withAnalysisCancellation("first-job", "one", () => capture());
+    const firstCheck = expect(first).rejects.toThrow("取消");
+    await entered;
+    const queued = withAnalysisCancellation("queued-job", "two", () => capture("record-two"));
+    const queuedCheck = expect(queued).rejects.toThrow("取消");
+    cancelAnalysis("queued-job", "two"); await queuedCheck;
+    cancelAnalysis("first-job", "one"); deliver(extract()); await firstCheck;
+    await new Promise(resolve => setImmediate(resolve));
+    expect(callVisionModel).toHaveBeenCalledTimes(1);
+    expect(db.prepare("SELECT COUNT(*) n FROM analysis_field_runs").get().n).toBe(0);
+    expect(getKnowledgeBase(HOT_TOPIC_BASE_ID)).toBeUndefined();
+  });
   it("captures two independent questions and preserves evidence in run snapshots", async () => {
     vi.mocked(callVisionModel).mockResolvedValueOnce(response({ questions: [
       { question: "订单何时发货？", evidence }, { question: "可以开发票吗？", evidence },

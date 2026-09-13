@@ -1,4 +1,6 @@
 import { assertRecordOwnership } from "../run-ownership";
+import { checkModelBudget, withModelBudget } from "../../ai/model-budget";
+import { assertAnalysisActive } from "../analysis-cancellation";
 import crypto from "node:crypto";
 import { db } from "../../db/client";
 import type {
@@ -74,6 +76,11 @@ export async function matchKnowledgeItem(input: {
   sectionName: string;
   dependencies: Record<string, unknown>;
 }): Promise<KnowledgeMatchResult> {
+  return withModelBudget(() => matchKnowledgeWithinBudget(input));
+}
+
+async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledgeItem>[0]): Promise<KnowledgeMatchResult> {
+  assertAnalysisActive(); checkModelBudget();
   if (!input.field.knowledgeBaseId) {
     return reviewResult(input.field.key, "知识匹配字段未配置知识库");
   }
@@ -125,6 +132,7 @@ export async function matchKnowledgeItem(input: {
     if (!models.length) return reviewResult(input.field.key, "请先配置并启用默认模型");
     let lastError: unknown;
     for (const model of models) {
+      assertAnalysisActive(); checkModelBudget();
       try {
         response = await callVisionModel(model, messages);
         if (response) break;
@@ -133,6 +141,7 @@ export async function matchKnowledgeItem(input: {
       }
     }
     if (!response) throw lastError ?? new Error("模型请求失败");
+    assertAnalysisActive();
     const knowledgeItemId = parseKnowledgeItemId(response.content);
     if (knowledgeItemId === "") return reviewResult(input.field.key);
     if (knowledgeItemId === undefined) return reviewResult(input.field.key, "模型返回不是合法的知识候选 JSON");
