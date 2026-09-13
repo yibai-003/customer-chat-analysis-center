@@ -15,6 +15,7 @@ beforeEach(async () => {
   fs.mkdirSync(config.dataDir, { recursive: true });
   file = path.join(directory, "test.xlsx");
   const w = new ExcelJS.Workbook(); const s = w.addWorksheet("Sheet1"); s.addRow(["Header"]); s.addRow(["value"]);
+  s.addImage(w.addImage({ buffer: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64") as any, extension: "png" }), "B2:B2");
   await w.xlsx.writeFile(file);
 });
 afterEach(() => { vi.restoreAllMocks(); fs.rmSync(directory, { recursive: true, force: true }); });
@@ -34,6 +35,10 @@ describe("upload safety", () => {
   it("rejects excessive entry count and inflated size", async () => {
     await expect(validateXlsx(file, "test.xlsx", { ...defaultXlsxLimits, entries: 1 })).rejects.toMatchObject({ status: 413 });
     await expect(validateXlsx(file, "test.xlsx", { ...defaultXlsxLimits, totalBytes: 10 })).rejects.toMatchObject({ status: 413 });
+  });
+  it("enforces image pixel and byte budgets before Excel parsing", async () => {
+    await expect(validateXlsx(file, "test.xlsx", { ...defaultXlsxLimits, maxImagePixels: 0 })).rejects.toMatchObject({ status: 413 });
+    await expect(validateXlsx(file, "test.xlsx", { ...defaultXlsxLimits, imageBytes: 1 })).rejects.toMatchObject({ status: 413 });
   });
   it.each(["traversal", "encrypted", "missing", "duplicate", "lying-size"])("rejects %s archive entries", async scenario => {
     const archive = await unzipper.Open.file(file);

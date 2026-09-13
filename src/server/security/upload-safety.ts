@@ -20,7 +20,49 @@ export function requireDiskSpace(extraBytes = 0) {
     throw new UploadError("磁盘空间不足，请清理空间或更换数据目录", 507);
   }
 }
-export const defaultXlsxLimits = { entries: 20000, entryBytes: 64 * 1048576, totalBytes: 1024 * 1048576, metadataBytes: 2 * 1048576, timeoutMs: 120000 };
+export const defaultXlsxLimits = { entries: 20000, entryBytes: 64 * 1048576, totalBytes: 1024 * 1048576, metadataBytes: 2 * 1048576, imageBytes: 32 * 1048576, totalImageBytes: 256 * 1048576, maxImagePixels: 100_000_000, timeoutMs: 120000 };
+
+function imageDimensions(buffer: Buffer, name: string) {
+  if (name.endsWith(".png")) {
+    if (buffer.length < 24 || !buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return;
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  }
+  if (name.endsWith(".gif")) {
+    if (buffer.length < 10 || !/^(GIF8[79]a)/.test(buffer.toString("ascii", 0, 6))) return;
+    return { width: buffer.readUInt16LE(6), height: buffer.readUInt16LE(8) };
+  }
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) {
+    if (buffer.length < 4 || buffer.readUInt16BE(0) !== 0xffd8) return;
+    let offset = 2;
+    while (offset + 9 < buffer.length) {
+      if (buffer[offset] !== 0xff) { offset++; continue; }
+      const marker = buffer[offset + 1]; const length = buffer.readUInt16BE(offset + 2);
+      if (marker >= 0xc0 && marker <= 0xc3 && length >= 7) return { width: buffer.readUInt16BE(offset + 5), height: buffer.readUInt16BE(offset + 7) };
+      if (length < 2) break; offset += 2 + length;
+    }
+  }
+}
+
+function crc32Update(crc: number, buffer: Buffer) {
+  for (const byte of buffer) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  }
+  return crc >>> 0;
+}
+
+function relationshipTargets(xml: string, source: string) {
+  const targets: string[] = [];
+  const base = source.startsWith("_rels/") ? "" : source.replace(/(^|\/)\_rels\//, "/").replace(/\.rels$/i, "");
+  for (const match of xml.matchAll(/<Relationship\b[^>]*Target="([^"]+)"[^>]*>/gi)) {
+    const target = match[1];
+    if (/^(?:https?:|file:|data:|\\\\)/i.test(target)) throw new UploadError("Excel 关系文件包含外部资源", 415);
+    const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(base), target));
+    if (resolved.startsWith("../") || resolved === ".." || resolved.startsWith("/") || resolved.includes("\\")) throw new UploadError("Excel 关系文件路径越界", 415);
+    targets.push(resolved);
+  }
+  return targets;
+}
 
 /** Scan a local immutable upload in bounded streams before handing it to a parser. */
 export async function validateXlsx(filePath: string, filename: string, limits = defaultXlsxLimits) {
@@ -46,6 +88,8 @@ export async function validateXlsx(filePath: string, filename: string, limits = 
     if (directory.files.length > limits.entries) throw new UploadError("Excel 内部文件数量超过限制", 413);
     const required = new Set(["[Content_Types].xml", "_rels/.rels", "xl/workbook.xml", "xl/_rels/workbook.xml.rels"]);
     const names = new Set<string>();
+    const relationshipEntries: Array<{ name: string; xml: string }> = [];
+    let imageBytes = 0;
     let declared = 0;
     for (const entry of directory.files) {
       const name = entry.path;
@@ -66,20 +110,32 @@ export async function validateXlsx(filePath: string, filename: string, limits = 
       const stream = entry.stream();
       const timer = setTimeout(() => stream.destroy(new UploadError("Excel 安全检查超时", 413)), Math.max(1, expires - Date.now()));
       let bytes = 0;
+      let checksum = 0xffffffff;
       const chunks: Buffer[] = [];
       try {
         for await (const chunk of stream) {
           bytes += chunk.length; total += chunk.length;
+          checksum = crc32Update(checksum, Buffer.from(chunk));
           if (bytes > limits.entryBytes || total > limits.totalBytes || (required.has(entry.path) && bytes > limits.metadataBytes)) throw new UploadError("Excel 实际解压数据超过限制", 413);
-          if (required.has(entry.path)) chunks.push(Buffer.from(chunk));
+          if (required.has(entry.path) || /\.rels$/i.test(entry.path) || /^xl\/media\//i.test(entry.path)) chunks.push(Buffer.from(chunk));
         }
         if (bytes !== entry.uncompressedSize) throw new UploadError("Excel 内部文件长度不一致", 415);
+        if (entry.crc32 !== undefined && ((checksum ^ 0xffffffff) >>> 0) !== Number(entry.crc32 >>> 0)) throw new UploadError("Excel 内部文件校验失败", 415);
         if (required.has(entry.path)) {
           const xml = Buffer.concat(chunks).toString("utf8");
           if (/<!DOCTYPE|<!ENTITY/i.test(xml) || XMLValidator.validate(xml) !== true) throw new UploadError("Excel 核心 XML 结构无效", 415);
         }
+        if (/^xl\/media\//i.test(entry.path)) {
+          imageBytes += bytes;
+          if (bytes > limits.imageBytes || imageBytes > limits.totalImageBytes) throw new UploadError("Excel 图片资源超过限制", 413);
+          const dimensions = imageDimensions(Buffer.concat(chunks), entry.path.toLowerCase());
+          if (!dimensions || dimensions.width < 1 || dimensions.height < 1 || dimensions.width * dimensions.height > limits.maxImagePixels) throw new UploadError("Excel 图片尺寸无效或像素过大", 413);
+        }
+        if (/\.rels$/i.test(entry.path)) relationshipEntries.push({ name: entry.path, xml: Buffer.concat(chunks).toString("utf8") });
       } finally { clearTimeout(timer); stream.destroy(); }
     }
+    const allNames = names;
+    for (const relation of relationshipEntries) for (const target of relationshipTargets(relation.xml, relation.name)) if (!allNames.has(target)) throw new UploadError("Excel 关系文件引用了不存在的资源", 415);
     return { entries: directory.files.length, expandedBytes: total };
   } catch (error) {
     if (error instanceof UploadError) throw error;
