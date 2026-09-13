@@ -1,3 +1,4 @@
+import { assertRecordOwnership } from "../run-ownership";
 import crypto from "node:crypto";
 import { db } from "../../db/client";
 import type {
@@ -141,6 +142,7 @@ export async function matchKnowledgeItem(input: {
   }
 
   const snapshotId = crypto.randomUUID();
+  assertRecordOwnership(input.recordId);
   db.prepare(`
     INSERT INTO knowledge_match_snapshots (
       id, record_id, field_id, knowledge_base_id, knowledge_item_id,

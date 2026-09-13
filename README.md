@@ -35,6 +35,7 @@ npm run backup
 完整命令、密钥保管和切换步骤见 [备份与恢复指南](docs/backup-and-recovery.md)。
 检查数据库完整性和知识库统计使用 `npm run db:check`。恢复知识库配置使用 `npm run knowledge:restore`；
 查看数据库迁移版本使用 `npm run db:migrations`。
+迁移已按版本执行，升级前生成保护备份；官方启动入口禁止同一数据库双实例，崩溃重启会恢复遗留运行状态。详见 [数据库迁移与恢复](docs/database-migrations-and-recovery.md)。
 清理过期临时文件和日志使用 `npm run maintenance`，默认保留 14 天，可通过 `CLEANUP_RETENTION_DAYS` 调整。
 该命令不会恢复聊天任务和模型 API Key。
 

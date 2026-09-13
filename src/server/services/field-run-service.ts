@@ -1,3 +1,4 @@
+import { assertRecordOwnership } from "./run-ownership";
 import crypto from "node:crypto";
 import { db } from "../db/client";
 import { listFields } from "./field-config-service";
@@ -44,6 +45,7 @@ export function createFieldRun(input: {
   durationMs?: number;
   usage?: { prompt_tokens?: number; completion_tokens?: number };
 }): AnalysisFieldRun {
+  assertRecordOwnership(input.recordId);
   const field = db.prepare(`SELECT f.*, s.id AS section_id FROM analysis_fields f
     JOIN analysis_sections s ON s.id = f.section_id WHERE f.id = ?`).get(input.fieldId) as any;
   if (!field) throw new Error("解析字段不存在");

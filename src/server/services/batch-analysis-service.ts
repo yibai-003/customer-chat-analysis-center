@@ -1,8 +1,10 @@
+import { runOwnership, assertRunOwnership } from "./run-ownership";
 import {
   acquireJobRun,
   assertJobSection,
   getAnalysisProgressBaseline,
   getJob,
+  getJobRunToken,
   getRecord,
   listBatchRecordIds,
   releaseJobRun,
@@ -187,7 +189,10 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
     progress,
     enabledFieldIds,
   } = prepared;
-  const heartbeat = setInterval(() => touchJobRun(jobId), 10_000);
+  const token = getJobRunToken(jobId);
+  if (!token) throw new Error("Task run lock missing");
+  return runOwnership.run({ jobId, token }, async () => {
+  const heartbeat = setInterval(() => touchJobRun(jobId, token), 10_000);
   try {
     const explicitRecordIds = runOptions.recordIds ? [...runOptions.recordIds] : undefined;
     let explicitIndex = 0;
@@ -207,6 +212,7 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
         return batch;
       },
       runItem: async (recordId) => {
+        assertRunOwnership(jobId);
         const record = getRecord(recordId);
         if (!record) return;
         removePreviousContribution(progress, record, sectionId, enabledFieldIds);
@@ -240,8 +246,9 @@ async function runPreparedAnalysisJob(prepared: PreparedAnalysisJob): Promise<Ba
   } finally {
     clearInterval(heartbeat);
     const currentJob = getJob(jobId);
-    if (currentJob) releaseJobRun(jobId, currentJob.status === "processing" ? "failed" : currentJob.status);
+    if (currentJob) releaseJobRun(jobId, currentJob.status === "processing" ? "failed" : currentJob.status, token);
   }
+  });
 }
 
 export function analyzeJob(

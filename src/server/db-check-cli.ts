@@ -1,10 +1,13 @@
-import { db, initDb } from "./db/client";
-import { captureCatalog } from "./services/knowledge/knowledge-sync-service";
-
-initDb({ preserveConfiguration: true });
-const integrity = db.pragma("integrity_check", { simple: true });
-if (integrity !== "ok") throw new Error(`数据库完整性检查失败：${integrity}`);
-const foreignKeys = db.pragma("foreign_key_check");
-if (foreignKeys.length) throw new Error(`外键检查失败：${JSON.stringify(foreignKeys)}`);
-const catalog = captureCatalog();
-console.log(JSON.stringify({ integrity, foreignKeys: 0, sections: catalog.sections.length, fields: catalog.fields.length, bases: catalog.bases.length, items: catalog.items.length }, null, 2));
+import Database from "better-sqlite3";
+import { config } from "./config";
+import { appliedMigrations, currentSchemaVersion } from "./db/migrations";
+const db = new Database(config.databasePath, { readonly: true, fileMustExist: true });
+try {
+  const integrity = db.pragma("integrity_check", { simple: true });
+  if (integrity !== "ok") throw new Error("Database integrity check failed");
+  const foreignKeys = db.pragma("foreign_key_check");
+  if (foreignKeys.length) throw new Error("Database foreign key check failed");
+  const version = appliedMigrations(db).at(-1)?.version ?? 0;
+  const counts = Object.fromEntries(["analysis_sections", "analysis_fields", "knowledge_bases", "knowledge_items"].map(table => [table, db.prepare(`SELECT COUNT(*) n FROM ${table}`).get().n]));
+  console.log(JSON.stringify({ integrity, foreignKeys: 0, version, supportedVersion: currentSchemaVersion, ...counts }, null, 2));
+} finally { db.close(); }
