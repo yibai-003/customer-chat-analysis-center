@@ -969,9 +969,36 @@ export function Detail({ record, section, fields, setRecord, onAnalyze, onRetry,
       ? { ...record.sectionReviews, [section.id]: { humanResult: currentReview?.humanResult ?? result, reviewStatus: currentReview?.reviewStatus ?? "pending", reviewNote: value } }
       : record.sectionReviews,
   });
-  return <div className="detail-scroll"><div className="detail-head"><div><small>RECORD {String(record.rowNumber).padStart(2, "0")}</small><h2>{section?.name ?? "解析详情"}</h2></div><span className={`status ${record.status}`}><i />{labels[record.status]}</span></div><button type="button" className="detail-image-button" aria-label="打开聊天截图预览" title="打开大图" onClick={() => onPreviewImage(record.imageUrl, `记录 ${String(record.rowNumber).padStart(2, "0")} 聊天截图`)}><figure><img src={record.imageUrl} alt={`记录 ${String(record.rowNumber).padStart(2, "0")} 聊天截图`} loading="eager" decoding="async" /><figcaption>ORIGINAL CHAT SCREENSHOT · 点击查看大图</figcaption></figure></button><div className="detail-block"><h3>辅助字段</h3>{Object.entries(record.sourceFields).map(([key, value]) => <div className="source-field" key={key}><span>{key}</span><strong>{value || "未填写"}</strong></div>)}</div><div className="detail-block"><h3>字段解析结果 <span>{fieldRuns.length ? `· ${fieldRuns.length} 次字段运行` : run ? `· ${run.createdAt.slice(11, 16)}` : ""}</span></h3>{displayFields.map((field) => {
-    const fieldRun = fieldRuns.find((item) => item.fieldKey === field.key);
-    const retryable = fieldRun && ["failed", "needs_review", "skipped"].includes(fieldRun.status);
-    return <label className="result-field" key={field.key}><span>{field.label} <em className={`field-status ${fieldRun?.status ?? "pending"}`}>{labels[fieldRun?.status ?? "pending"] ?? "待解析"}</em>{retryable && <button type="button" className="field-retry" disabled={busy} onClick={() => onRetry(field.key)}>重试</button>}</span><textarea rows={field.type === "string" || field.type === "object" ? 4 : 1} value={formatFieldResult(result[field.key])} onChange={(e) => change(field.key, e.target.value)} />{fieldRun?.evidence && <small className="field-evidence">依据：{fieldRun.evidence}</small>}{fieldRun?.errorMessage && <small className="form-error" role="alert">{fieldRun.errorMessage}</small>}</label>;
-  })}</div><label className="result-field"><span>复核备注</span><textarea rows={2} value={currentReview?.reviewNote ?? record.reviewNote} onChange={(e) => changeNote(e.target.value)} /></label><div className="detail-actions"><button className="button dark" disabled={busy} onClick={onAnalyze}>{fieldRuns.length ? "重新解析 →" : "开始解析 →"}</button><button className="button light" onClick={onSave}>保存复核</button></div></div>;
+  return <div className="detail-scroll">
+    <div className="detail-head">
+      <div><small>RECORD {String(record.rowNumber).padStart(2, "0")}</small><h2>{section?.name ?? "解析详情"}</h2></div>
+      <span className={`status ${record.status}`}><i />{labels[record.status]}</span>
+    </div>
+    <div className="detail-context">
+      <button type="button" className="detail-image-button" aria-label="打开聊天截图预览" title="打开大图" onClick={() => onPreviewImage(record.imageUrl, `记录 ${String(record.rowNumber).padStart(2, "0")} 聊天截图`)}>
+        <figure><img src={record.imageUrl} alt={`记录 ${String(record.rowNumber).padStart(2, "0")} 聊天截图`} loading="eager" decoding="async" /><figcaption>点击查看原图 ↗</figcaption></figure>
+      </button>
+      <details className="detail-sources" key={record.id}>
+        <summary>辅助字段 <span>{Object.keys(record.sourceFields).length} 项 · 展开查看</span></summary>
+        <div className="source-fields-grid">{Object.entries(record.sourceFields).map(([key, value]) => <div className="source-field" key={key}><span>{key}</span><strong>{value || "未填写"}</strong></div>)}</div>
+      </details>
+    </div>
+    <div className="detail-block detail-results">
+      <h3>字段解析结果 <span>{fieldRuns.length ? `· ${fieldRuns.length} 次字段运行` : run ? `· ${run.createdAt.slice(11, 16)}` : ""}</span></h3>
+      <div className="result-fields-grid">{displayFields.map((field) => {
+        const fieldRun = fieldRuns.find((item) => item.fieldKey === field.key);
+        const retryable = fieldRun && ["failed", "needs_review", "skipped"].includes(fieldRun.status);
+        const value = formatFieldResult(result[field.key]);
+        const wide = field.type === "object" || value.length > 160 || field.imageEnabled;
+        return <label className={`result-field${wide ? " result-field--wide" : ""}`} key={field.key}>
+          <span>{field.label} <em className={`field-status ${fieldRun?.status ?? "pending"}`}>{labels[fieldRun?.status ?? "pending"] ?? "待解析"}</em>{retryable && <button type="button" className="field-retry" disabled={busy} onClick={() => onRetry(field.key)}>重试</button>}</span>
+          <textarea rows={wide ? 6 : field.type === "string" ? 2 : 1} value={value} onChange={(e) => change(field.key, e.target.value)} />
+          {fieldRun?.evidence && <small className="field-evidence">依据：{fieldRun.evidence}</small>}
+          {fieldRun?.errorMessage && <small className="form-error" role="alert">{fieldRun.errorMessage}</small>}
+        </label>;
+      })}</div>
+    </div>
+    <label className="result-field"><span>复核备注</span><textarea rows={2} value={currentReview?.reviewNote ?? record.reviewNote} onChange={(e) => changeNote(e.target.value)} /></label>
+    <div className="detail-actions"><button className="button dark" disabled={busy} onClick={onAnalyze}>{fieldRuns.length ? "重新解析 →" : "开始解析 →"}</button><button className="button light" onClick={onSave}>保存复核</button></div>
+  </div>;
 }
