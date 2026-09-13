@@ -1,22 +1,18 @@
-import fs from "node:fs";
 import path from "node:path";
+import fs from "node:fs";
+import Database from "better-sqlite3";
 import { config } from "./config";
-import { db, initDb } from "./db/client";
-import { KnowledgeSync } from "./services/knowledge/knowledge-sync-service";
+import { createFullBackup, positiveInteger } from "./services/backup-service";
 
-initDb({ preserveConfiguration: true });
-const backupRoot = path.join(config.dataDir, "backups");
-fs.mkdirSync(backupRoot, { recursive: true });
-const target = path.join(backupRoot, `manual-${new Date().toISOString().replace(/[:.]/g, "-")}.db`);
-db.prepare("VACUUM INTO ?").run(target);
-const sync = new KnowledgeSync();
-sync.export();
-const keep = Math.max(1, Number(process.env.BACKUP_RETENTION ?? 7));
-const backups = fs.readdirSync(backupRoot)
-  .filter((name) => name.toLowerCase().endsWith(".db"))
-  .map((name) => ({ name, path: path.join(backupRoot, name), time: fs.statSync(path.join(backupRoot, name)).mtimeMs }))
-  .sort((a, b) => b.time - a.time);
-for (const item of backups.slice(keep)) fs.rmSync(item.path, { force: true });
-const integrity = db.pragma("integrity_check", { simple: true });
-if (integrity !== "ok") throw new Error(`数据库完整性检查失败：${integrity}`);
-console.log(JSON.stringify({ database: target, catalog: sync.file, retainedBackups: Math.min(keep, backups.length), integrity }, null, 2));
+try {
+  const retention = positiveInteger(process.env.BACKUP_RETENTION, "BACKUP_RETENTION", 7);
+  if (!fs.existsSync(config.databasePath)) throw new Error("Database does not exist");
+  const database = new Database(config.databasePath, { readonly: true, fileMustExist: true });
+  try {
+    const { captureCatalog } = await import("./services/knowledge/knowledge-sync-service");
+    console.log(JSON.stringify(await createFullBackup({ database, backupRoot: path.join(config.dataDir, "backups"), retention, catalog: captureCatalog }), null, 2));
+  } finally { database.close(); }
+} catch (error) {
+  console.error(error instanceof Error ? error.message : "Backup failed");
+  process.exitCode = 1;
+}

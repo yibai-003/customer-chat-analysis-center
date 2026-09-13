@@ -30,7 +30,9 @@ npm run dev
 npm run backup
 ```
 
-数据库备份保存在 `data/backups/`，默认保留最近 7 份，可通过 `BACKUP_RETENTION` 调整。
+完整恢复包保存在 `data/backups/full-*`，包含数据库、知识配置和引用的 Excel/截图，验证成功后默认保留最近 7 份。手动与定时备份使用同一机制，旧版数据库备份不会自动清理。
+可通过 `BACKUP_RETENTION` 调整保留数量，使用 `npm run restore -- <备份目录> --to <新的恢复目录>` 恢复。
+完整命令、密钥保管和切换步骤见 [备份与恢复指南](docs/backup-and-recovery.md)。
 检查数据库完整性和知识库统计使用 `npm run db:check`。恢复知识库配置使用 `npm run knowledge:restore`；
 查看数据库迁移版本使用 `npm run db:migrations`。
 清理过期临时文件和日志使用 `npm run maintenance`，默认保留 14 天，可通过 `CLEANUP_RETENTION_DAYS` 调整。

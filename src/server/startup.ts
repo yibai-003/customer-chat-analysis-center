@@ -2,12 +2,14 @@ import { createApp } from "./app";
 import { config } from "./config";
 import { recoverStaleJobRuns } from "./db/repositories";
 import { recoverImportJobs } from "./services/import-worker";
-import fs from "node:fs";
 import path from "node:path";
 import { db } from "./db/client";
-import { KnowledgeSync } from "./services/knowledge/knowledge-sync-service";
+import { captureCatalog } from "./services/knowledge/knowledge-sync-service";
+import { createFullBackup, positiveInteger } from "./services/backup-service";
+import { scheduleBackups } from "./services/backup-scheduler";
 
 interface StartupServer {
+  once?: (event: "close", callback: () => void) => unknown;
   requestTimeout: number;
   headersTimeout: number;
   timeout: number;
@@ -36,30 +38,25 @@ const defaultDependencies: StartupDependencies = {
 export function startServer(
   dependencies: StartupDependencies = defaultDependencies,
 ): StartupServer {
+  const retention = positiveInteger(process.env.BACKUP_RETENTION, "BACKUP_RETENTION", 7);
+  const hours = positiveInteger(process.env.BACKUP_INTERVAL_HOURS, "BACKUP_INTERVAL_HOURS", 24, 8760);
   const server = dependencies.createApplication().listen(dependencies.port, () => {
     dependencies.recoverStaleJobRuns();
     dependencies.recoverImportJobs();
     dependencies.log(`客服解析中心 running at http://localhost:${dependencies.port}`);
-    if (process.env.NODE_ENV !== "test") scheduleMaintenance(dependencies.log);
+    if (process.env.NODE_ENV !== "test") {
+      const root = path.join(config.dataDir, "backups");
+      const stop = scheduleBackups({ root, hours, log: dependencies.log,
+        busy: () => Boolean(db.prepare("SELECT id FROM jobs WHERE run_token IS NOT NULL LIMIT 1").get()
+          || db.prepare("SELECT id FROM records WHERE status='processing' LIMIT 1").get()
+          || db.prepare("SELECT id FROM import_jobs WHERE status IN ('queued','processing') LIMIT 1").get()),
+        create: () => createFullBackup({ database: db, backupRoot: root, retention, catalog: captureCatalog }),
+      });
+      server.once?.("close", stop);
+    }
   });
   server.requestTimeout = 2 * 60 * 60 * 1000;
   server.headersTimeout = server.requestTimeout + 60_000;
   server.timeout = 0;
   return server;
-}
-
-function scheduleMaintenance(log: (message: string) => void) {
-  const intervalMs = Math.max(1, Number(process.env.BACKUP_INTERVAL_HOURS ?? 24)) * 60 * 60 * 1000;
-  const run = () => {
-    try {
-      const backupDir = path.join(config.dataDir, "backups");
-      fs.mkdirSync(backupDir, { recursive: true });
-      const target = path.join(backupDir, `scheduled-${new Date().toISOString().replace(/[:.]/g, "-")}.db`);
-      db.prepare("VACUUM INTO ?").run(target);
-      new KnowledgeSync().export();
-      log(`scheduled backup created: ${target}`);
-    } catch (error) { log(`scheduled backup failed: ${error instanceof Error ? error.message : String(error)}`); }
-  };
-  const timer = setInterval(run, intervalMs);
-  timer.unref();
 }

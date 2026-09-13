@@ -89,11 +89,11 @@ export function validateCatalog(input: unknown): Catalog {
   return catalog;
 }
 
-export function captureCatalog(): Catalog {
+export function captureCatalog(database = db): Catalog {
   const result: Record<string, unknown> = { version: 1 };
   for (const group of groups) {
     const columns = Object.keys(schemas[group].shape);
-    result[group] = db.prepare(`SELECT ${columns.join(",")} FROM ${tables[group]} ORDER BY id`).all();
+    result[group] = database.prepare(`SELECT ${columns.join(",")} FROM ${tables[group]} ORDER BY id`).all();
     if (group === "fields") for (const row of result[group] as Record<string, unknown>[]) {
       // Keep the digest of pre-feature catalogs stable so an upgrade is not a sync conflict.
       if (row.knowledge_sync_enabled === 0) delete row.knowledge_sync_enabled;
