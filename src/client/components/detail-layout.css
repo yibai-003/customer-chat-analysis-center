@@ -2,7 +2,7 @@
 .workspace > .detail { position: static; height: auto; max-height: none; }
 .detail-scroll { max-height: none; overflow: visible; scrollbar-gutter: auto; }
 @media (min-width: 1201px) {
-  .workspace { grid-template-columns: 220px minmax(360px, 1fr) clamp(400px, 33vw, 640px); align-items: start; }
+  .workspace { grid-template-columns: 220px minmax(360px, 1fr) 20%; align-items: start; }
   .workspace > .sidebar { min-height: calc(100dvh - 76px); align-self: stretch; }
   .workspace > .content { padding: 32px 24px 48px; }
   .detail-scroll { padding: 24px; }
@@ -42,4 +42,11 @@
 @media (max-width: 700px) {
   .detail-context { grid-template-columns: 100px minmax(0, 1fr); gap: 12px; }
   .source-fields-grid, .result-fields-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (min-width: 1201px) {
+  .detail-scroll { padding: 20px 14px; }
+  .detail-context, .source-fields-grid, .result-fields-grid { grid-template-columns: minmax(0, 1fr); }
+  .detail-context .detail-image-button { max-width: 160px; }
+  .detail-head, .detail-actions { flex-wrap: wrap; }
+  .detail-actions .button { flex: 1 1 120px; }
 }
