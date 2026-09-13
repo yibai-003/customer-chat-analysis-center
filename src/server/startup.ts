@@ -16,7 +16,7 @@ interface StartupServer {
 }
 
 interface StartupApplication {
-  listen(port: number, callback: () => void): StartupServer;
+  listen(port: number, host: string, callback: () => void): StartupServer;
 }
 
 export interface StartupDependencies {
@@ -40,7 +40,7 @@ export function startServer(
 ): StartupServer {
   const retention = positiveInteger(process.env.BACKUP_RETENTION, "BACKUP_RETENTION", 7);
   const hours = positiveInteger(process.env.BACKUP_INTERVAL_HOURS, "BACKUP_INTERVAL_HOURS", 24, 8760);
-  const server = dependencies.createApplication().listen(dependencies.port, () => {
+  const server = dependencies.createApplication().listen(dependencies.port, "127.0.0.1", () => {
     dependencies.recoverStaleJobRuns();
     dependencies.recoverImportJobs();
     dependencies.log(`客服解析中心 running at http://localhost:${dependencies.port}`);

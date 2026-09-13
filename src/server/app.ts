@@ -78,8 +78,11 @@ export function createApp(dependencies: AppDependencies = {}) {
     try {
       const disk = fs.statfsSync(config.dataDir);
       const freeDiskMb = Math.floor(Number(disk.bavail) * Number(disk.bsize) / 1024 / 1024);
-      const vision = getModelsForPurpose("vision").length > 0;
-      const text = getModelsForPurpose("text").length > 0;
+      const fresh = (model: any) => model.capabilityStatus?.text === true && model.capabilityStatus?.json === true
+        && (!model.supportsVision || model.capabilityStatus?.vision === true)
+        && Boolean(model.capabilityCheckedAt) && Date.now() - Date.parse(model.capabilityCheckedAt) < 24 * 60 * 60 * 1000;
+      const vision = getModelsForPurpose("vision").some(fresh);
+      const text = getModelsForPurpose("text").some(fresh);
       const ready = freeDiskMb >= config.minFreeDiskMb && vision && text;
       return res.status(ready ? 200 : 503).json({ success: ready, data: { ready, database: true, freeDiskMb, minFreeDiskMb: config.minFreeDiskMb, models: { vision, text } }, error: ready ? null : "模型或磁盘空间未就绪" });
     } catch (error) { return fail(res, error, 503); }

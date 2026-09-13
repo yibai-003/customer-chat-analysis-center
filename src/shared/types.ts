@@ -264,6 +264,8 @@ export interface ModelConfig {
   purpose: "vision" | "text";
   isPurposeDefault: boolean;
   isEnabled: boolean;
+  capabilityStatus?: { text: boolean; json: boolean; vision: boolean };
+  capabilityCheckedAt?: string;
 }
 
 export interface AnalysisRun {

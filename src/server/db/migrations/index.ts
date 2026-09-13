@@ -4,13 +4,15 @@ import crypto from "node:crypto";
 import Database from "better-sqlite3";
 import { applyLegacyBaseline } from "./002-legacy-baseline";
 import { applyRunLifecycle } from "./003-run-lifecycle";
+import { applyModelCapabilities } from "./004-model-capabilities";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
   { version: 2, name: "legacy-baseline", up: applyLegacyBaseline },
   { version: 3, name: "run-lifecycle", up: applyRunLifecycle },
+  { version: 4, name: "model-capabilities", up: applyModelCapabilities },
 ];
-export const currentSchemaVersion = 3;
+export const currentSchemaVersion = 4;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();

@@ -28,6 +28,8 @@ function mapRow(row: any): ModelConfig {
     purpose: row.purpose === "text" ? "text" : "vision",
     isPurposeDefault: Boolean(row.is_purpose_default ?? row.is_default),
     isEnabled: Boolean(row.is_enabled),
+    capabilityStatus: row.capability_json ? JSON.parse(row.capability_json) : undefined,
+    capabilityCheckedAt: row.capability_checked_at ? new Date(row.capability_checked_at).toISOString() : undefined,
   };
 }
 
@@ -151,5 +153,8 @@ export async function testModelCapabilities(id: string) {
     const vision = await callVisionModel(base, [{ role: "user", content: [{ type: "text", text: "Return JSON with exactly one key: ok." }, { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" } }] }]);
     result.vision = Boolean(vision.content);
   }
-  return { model: row.model, purpose: row.purpose, capabilities: result };
+  const checkedAt = Date.now();
+  db.prepare("UPDATE model_configs SET capability_json=?, capability_checked_at=?, updated_at=? WHERE id=?")
+    .run(JSON.stringify(result), checkedAt, new Date(checkedAt).toISOString(), id);
+  return { model: row.model, purpose: row.purpose, capabilities: result, checkedAt: new Date(checkedAt).toISOString() };
 }

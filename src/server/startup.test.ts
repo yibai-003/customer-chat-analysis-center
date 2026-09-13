@@ -19,7 +19,8 @@ function createHarness() {
   const result = startServer({
     port: 4321,
     createApplication: () => ({
-      listen: (port, callback) => {
+      listen: (port, host, callback) => {
+        expect(host).toBe("127.0.0.1");
         events.push(`listen:${port}`);
         listeningCallback = callback;
         return server;
