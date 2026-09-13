@@ -5,8 +5,8 @@
   .sidebar-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
   .sidebar > .server-state { flex: 0 0 auto; }
   .sidebar-scroll .section-title { margin-top: 20px; }
-  .sidebar-scroll .sidebar-botanical { padding-top: 12px; }
-  .sidebar-scroll .sidebar-botanical .botanical-art { height: 96px; }
+  .sidebar > .sidebar-botanical { flex: 0 0 auto; margin: 0 0 4px; padding-top: 12px; }
+  .sidebar > .sidebar-botanical .botanical-art { height: 96px; }
 }
 .import-section-form { margin-top: 18px; }
 .import-section-form select { display: block; width: 100%; min-height: 42px; margin-top: 8px; padding: 8px; border: 2px solid var(--pixel-line); background: #fff; color: var(--pixel-ink); }

@@ -946,8 +946,8 @@ export default function App() {
           {!jobs.length ? <div className="side-empty">导入 Excel 文件<br />建立解析任务</div> : <JobList jobs={jobs} sections={sections} selectedId={job?.id} onSelect={(id) => void navigateToJob(id).catch((error) => setNotice(error instanceof Error ? error.message : "切换任务失败"))} onDeleted={handleJobsDeleted} />}
           <div className="sidebar-title section-title"><span>解析板块</span><button onClick={() => setDialog("section")}>管理</button></div>
           <nav>{sections.filter((s) => !s.parentId).map((parent) => <div className="section-group" key={parent.id}><div className="parent">╰ {parent.name}</div>{sections.filter((s) => s.parentId === parent.id).map((child) => <div className={`section-entry ${activeSection === child.id ? "active" : ""}`} key={child.id}><button className="section-select" disabled={Boolean(job?.sectionId && job.sectionId !== child.id)} title={job?.sectionId && job.sectionId !== child.id ? "当前任务已绑定其他解析板块" : undefined} onClick={() => setActiveSection(child.id)}><span />{child.name}<i /></button><button className="section-knowledge" aria-label={`打开${child.name}知识库`} title="知识库" onClick={() => setKnowledgeSection(child)}>知</button></div>)}</div>)}</nav>
-          <div className="sidebar-botanical"><BotanicalArt variant="specimen" /><ArtworkCredits /></div>
           </div>
+          <div className="sidebar-botanical"><BotanicalArt variant="specimen" /><ArtworkCredits /></div>
           <div className="server-state"><i />服务端已连接 <b>LOCAL</b></div>
         </aside>
 
