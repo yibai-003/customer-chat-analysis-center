@@ -125,6 +125,14 @@ export function topologicalFields(fields: AnalysisFieldLike[], sourceFields: str
 }
 
 export function upsertField(input: AnalysisFieldInput): AnalysisField {
+  if (!input || typeof input.sectionId !== "string" || !input.sectionId.trim()) throw new Error("板块 ID 无效");
+  if (typeof input.key !== "string" || !/^\p{L}[\p{L}\p{N}_-]{0,63}$/u.test(input.key)) throw new Error("字段 Key 必须以字母开头且只包含字母、数字、下划线或短横线（最多 64 位）");
+  if (typeof input.label !== "string" || input.label.trim().length < 1 || input.label.length > 120) throw new Error("字段名称长度必须为 1-120 个字符");
+  if (input.prompt !== undefined && (typeof input.prompt !== "string" || input.prompt.length > 20_000)) throw new Error("字段提示词过长或格式无效");
+  if (input.options !== undefined && (!Array.isArray(input.options) || input.options.length > 200 || input.options.some(value => typeof value !== "string" || value.length > 200))) throw new Error("字段选项格式无效或数量过多");
+  if (input.dependsOn !== undefined && (!Array.isArray(input.dependsOn) || input.dependsOn.length > 50 || input.dependsOn.some(value => typeof value !== "string" || value.length > 64))) throw new Error("字段依赖格式无效或数量过多");
+  if (input.sortOrder !== undefined && (!Number.isSafeInteger(input.sortOrder) || input.sortOrder < 0 || input.sortOrder > 100_000)) throw new Error("字段排序值无效");
+  if (input.candidateLimit !== undefined && (!Number.isSafeInteger(input.candidateLimit) || input.candidateLimit < 1 || input.candidateLimit > 100)) throw new Error("知识候选数量必须为 1-100");
   const section = db.prepare("SELECT prompt, image_enabled, source_fields_json FROM analysis_sections WHERE id = ?").get(input.sectionId) as any;
   if (!section) throw new Error("板块不存在");
   const existing = input.id ? getField(input.id) : undefined;

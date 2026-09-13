@@ -8,10 +8,10 @@ import { buildChatCompletionsUrl, extractResponseContent } from "../ai/openai-co
 import type { ModelConfig } from "../../shared/types";
 
 const inputSchema = z.object({
-  name: z.string().min(1),
+  name: z.string().trim().min(1).max(120),
   baseUrl: z.string().url(),
   apiKey: z.string().optional(),
-  model: z.string().min(1),
+  model: z.string().trim().min(1).max(200),
   supportsVision: z.boolean().default(true),
   temperature: z.number().min(0).max(2).default(0.2),
   maxTokens: z.number().int().min(100).max(100000).default(1500),

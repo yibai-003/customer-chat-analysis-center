@@ -44,7 +44,13 @@ export function mergeSectionSourceFields(sectionId: string, headers: string[]) {
   db.prepare("UPDATE analysis_sections SET source_fields_json = ?, updated_at = ? WHERE id = ?")
     .run(JSON.stringify(merged), now(), sectionId);
 }
-export function upsertSection(input: Partial<AnalysisSection> & { name: string; prompt: string }) {
+  export function upsertSection(input: Partial<AnalysisSection> & { name: string; prompt: string }) {
+    if (!input || typeof input.name !== "string" || input.name.trim().length < 1 || input.name.length > 120) throw new Error("板块名称长度必须为 1-120 个字符");
+    if (typeof input.prompt !== "string" || input.prompt.length > 20_000) throw new Error("板块提示词过长或格式无效");
+    if (input.parentId !== undefined && input.parentId !== null && typeof input.parentId !== "string") throw new Error("父板块 ID 无效");
+    if (input.sourceFields !== undefined && (!Array.isArray(input.sourceFields) || input.sourceFields.length > 100 || input.sourceFields.some(value => typeof value !== "string" || value.length > 120))) throw new Error("来源字段格式无效或数量过多");
+    if (input.outputSchema !== undefined && (!Array.isArray(input.outputSchema) || input.outputSchema.length > 200)) throw new Error("输出字段数量超过限制");
+    if (input.sortOrder !== undefined && (!Number.isSafeInteger(input.sortOrder) || input.sortOrder < 0 || input.sortOrder > 100_000)) throw new Error("板块排序值无效");
   const id = input.id ?? crypto.randomUUID(), timestamp = now();
   db.prepare(`INSERT INTO analysis_sections (id,parent_id,name,prompt,output_schema_json,source_fields_json,sort_order,is_enabled,image_enabled,created_at,updated_at)
     VALUES (?,?,?,?,?,?,?,1,?,?,?) ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,name=excluded.name,prompt=excluded.prompt,

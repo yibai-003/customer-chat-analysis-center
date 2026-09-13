@@ -44,10 +44,13 @@ function removeFile(filePath: string | undefined): void {
 
 function parseColumns(value: unknown): KnowledgeColumn[] | undefined {
   if (value === undefined || value === null || value === "") return undefined;
-  if (Array.isArray(value)) return value as KnowledgeColumn[];
+  if (Array.isArray(value)) {
+    if (value.length > 200) throw new Error("列映射数量超过限制");
+    return value as KnowledgeColumn[];
+  }
   if (typeof value !== "string") throw new Error("列映射格式无效");
   const parsed = JSON.parse(value) as unknown;
-  if (!Array.isArray(parsed)) throw new Error("列映射格式无效");
+  if (!Array.isArray(parsed) || parsed.length > 200) throw new Error("列映射格式无效或数量过多");
   return parsed as KnowledgeColumn[];
 }
 
@@ -88,7 +91,7 @@ function resolveKnowledgeBaseId(
 function parsePositiveInteger(value: unknown): number | undefined {
   if (value === undefined) return undefined;
   const parsed = Number(value);
-  return Number.isFinite(parsed) ? Math.floor(parsed) : undefined;
+  return Number.isFinite(parsed) && parsed >= 1 && parsed <= 1000 ? Math.floor(parsed) : undefined;
 }
 
 function parseEnabled(value: unknown): boolean | undefined {

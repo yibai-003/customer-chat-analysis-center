@@ -21,6 +21,8 @@ npm run dev
 
 分析取消、暂停和模型请求总预算见 [取消链路与模型预算](docs/cancellation-and-model-budget.md)。
 
+服务端输入边界见 [服务端输入约束](docs/server-input-validation.md)。
+
 新环境自动生成独立本地加密密钥。旧默认密钥环境需先备份、停止服务，再运行 `npm run keys:migrate -- --apply`；检查用 `npm run keys:migrate -- --status`。模型凭据恢复需单独保管密钥文件，详见 [密钥管理与迁移](docs/encryption-key-management.md)。
 
 Excel 上传会检查压缩包结构、实际解压量和磁盘余量；资源上限、错误提示及当前边界见 [上传安全说明](docs/upload-safety.md)。
