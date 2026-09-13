@@ -1,3 +1,4 @@
+import { requestModel, type TransportOptions } from "./model-transport";
 export interface DecryptedModelConfig {
   baseUrl: string; apiKey: string; model: string; temperature: number; maxTokens: number;
 }
@@ -67,7 +68,10 @@ export function buildChatCompletionsUrl(baseUrl: string) {
   return `${normalized}/v1/chat/completions`;
 }
 
-export async function callVisionModel(config: DecryptedModelConfig, messages: unknown[]) {
+export async function callVisionModel(config: DecryptedModelConfig, messages: unknown[], options: TransportOptions = {}) {
+  const deadline = AbortSignal.timeout(300_000);
+  const signal = options.signal ? AbortSignal.any([deadline, options.signal]) : deadline;
+  let attemptsLeft = Math.min(3, Math.max(1, options.attempts ?? 3));
   const jsonMessages = messages.map((message: any) => {
     if (!message || typeof message !== "object") return message;
     if (typeof message.content === "string" && !/\bjson\b/i.test(message.content)) {
@@ -76,34 +80,19 @@ export async function callVisionModel(config: DecryptedModelConfig, messages: un
     return message;
   });
   const request = async (withResponseFormat: boolean) => {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 90000);
-    try {
-      return await fetch(buildChatCompletionsUrl(config.baseUrl), {
+    const result = await requestModel(buildChatCompletionsUrl(config.baseUrl), {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
-      body: JSON.stringify({
-        model: config.model,
-        temperature: config.temperature,
-        max_tokens: config.maxTokens,
-        ...(withResponseFormat ? { response_format: { type: "json_object" } } : {}),
-        messages: withResponseFormat ? jsonMessages : messages,
-      }),
-      signal: controller.signal,
-    });
-    } finally { clearTimeout(timer); }
+      body: JSON.stringify({ model: config.model, temperature: config.temperature, max_tokens: config.maxTokens,
+        ...(withResponseFormat ? { response_format: { type: "json_object" } } : {}), messages: jsonMessages }),
+    }, { ...options, signal, attempts: attemptsLeft });
+    attemptsLeft -= result.attemptsUsed;
+    return result;
   };
-  let response: Response | undefined;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    response = await request(true);
-    if (![408, 429, 500, 502, 503, 504].includes(response.status)) break;
-    await new Promise((resolve) => setTimeout(resolve, 300 * (attempt + 1)));
-  }
-  let rawText = await response!.text();
+  let { response, rawText } = await request(true);
   let body = parseResponseText(rawText);
-  if (!response!.ok && response!.status === 400 && /response.format|response_format|json_object/i.test(body?.error?.message ?? "")) {
-    response = await request(false);
-    rawText = await response.text();
+  if (attemptsLeft > 0 && !response.ok && response.status === 400 && /response.format|response_format|json_object/i.test(body?.error?.message ?? "")) {
+    ({ response, rawText } = await request(false));
     body = parseResponseText(rawText);
   }
   if (!response!.ok) {

@@ -128,6 +128,15 @@ describe("job repository", () => {
     });
     expect(getRecord(record.id)?.humanResult).toBeNull();
   });
+  it("rejects review confirmation while a batch still owns the task", () => {
+    const job = createJob("busy-review.xlsx", "busy-review.xlsx", { id: "refund", name: "refund" });
+    addRecords(job.id, [{ sheetName: "s", rowNumber: 1, anchor: {}, sourceFields: {}, imagePath: "test.png" }]);
+    const record = listRecords(job.id)[0];
+    acquireJobRun(job.id);
+    expect(() => updateRecord(record.id, { sectionId: "refund", status: "completed", reviewStatus: "confirmed" })).toThrow("正在解析");
+    expect(getRecord(record.id)?.sectionReviews).toEqual({});
+    releaseJobRun(job.id, "paused");
+  });
 
   it("updates bound record status and task counts on review without changing other section reviews", () => {
     const job = createJob("review-status.xlsx", "review-status.xlsx", { id: "refund", name: "退款分析" });

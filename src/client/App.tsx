@@ -7,6 +7,7 @@ import { JobList } from "./components/JobList";
 import { ImagePreviewDialog } from "./components/ImagePreviewDialog";
 import { ImportPreviewDialog } from "./components/ImportPreviewDialog";
 import { ImportSectionDialog } from "./components/ImportSectionDialog";
+import { analysisStatusMessage } from "./analysis-status";
 import { ImportProgressDialog } from "./components/ImportProgressDialog";
 import { KnowledgeWorkspace } from "./components/knowledge/KnowledgeWorkspace";
 import { ModelConfigDialog } from "./components/ModelConfigDialog";
@@ -85,6 +86,10 @@ function analysisProgressKey(job: Job) {
     job.completedFields,
     job.failedFields,
     job.skippedFields,
+    job.needsReviewFields,
+    job.needsReviewRecords,
+    job.pendingRecords,
+    job.processingRecords,
   ].join(":");
 }
 
@@ -693,7 +698,7 @@ export default function App() {
       controller.previousProgress = nextProgress;
       if (terminal) {
         cancelAnalysisPoll(controller.jobId);
-        if (mountedRef.current) setNotice("解析完成，请检查需复核记录");
+        if (mountedRef.current) setNotice(analysisStatusMessage(current.status, current.needsReviewRecords));
         return;
       }
       scheduleAnalysisPoll(controller);
@@ -730,14 +735,14 @@ export default function App() {
     const operationJobId = job.id;
     startBusyOperation(operation); setNotice("");
     try {
-      await api(`/api/records/${recordId}/analyze`, {
+      const outcome = await api<{ status?: import("../shared/types").RecordStatus }>(`/api/records/${recordId}/analyze`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sectionId: currentSection.id }),
       });
       if (!isJobOperationCurrent(operation)) return;
       const refreshed = await refresh(operationJobId);
       if (refreshed && isJobOperationCurrent(operation)) {
-        setNotice("解析完成，请检查需复核记录");
+        setNotice(analysisStatusMessage(outcome.status));
       }
     } catch (error) {
       if (isJobOperationCurrent(operation)) {

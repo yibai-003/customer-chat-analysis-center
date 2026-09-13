@@ -458,7 +458,7 @@ describe("App record pagination", () => {
 
     await confirmBatchAnalysis();
 
-    await waitFor(() => expect(host.textContent).toContain("解析完成，请检查需复核记录"));
+    await waitFor(() => expect(host.querySelector(".notice")?.textContent).toBe("解析完成"));
     expect(pollDelays).toEqual([2000, 2000, 2000]);
     expect(requests.filter((url) => url.startsWith(
       "/api/jobs/job-1/records?",

@@ -47,6 +47,10 @@ export interface RecordPage {
 }
 
 export interface Job {
+  pendingRecords?: number;
+  processingRecords?: number;
+  needsReviewRecords?: number;
+  needsReviewFields?: number;
   id: string;
   originalFilename: string;
   sectionId: string | null;

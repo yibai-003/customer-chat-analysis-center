@@ -39,14 +39,17 @@ function ProgressMetric({
 export function AnalysisProgress({ job }: { job: Job }) {
   const processedRecords = Math.min(
     job.totalRecords,
-    Math.max(0, job.completedRecords + job.failedRecords),
+    Math.max(0, job.completedRecords + job.failedRecords + (job.needsReviewRecords ?? 0)),
   );
 
   return (
     <section className="analysis-progress" aria-label="当前任务解析进度">
       <ProgressMetric label="记录进度" value={processedRecords} total={job.totalRecords} />
-      <ProgressMetric label="字段进度" value={job.completedFields} total={job.totalFields} />
+      <ProgressMetric label="字段进度" value={Math.min(job.totalFields, job.completedFields + job.failedFields + job.skippedFields + (job.needsReviewFields ?? 0))} total={job.totalFields} />
       <div className="analysis-progress-stats">
+        <span>成功 <strong>{job.completedRecords}</strong></span>
+        <span>待复核 <strong>{job.needsReviewRecords ?? 0}</strong></span>
+        <span>字段待复核 <strong>{job.needsReviewFields ?? 0}</strong></span>
         <span>失败 <strong>{job.failedRecords}</strong></span>
         <span>字段失败 <strong>{job.failedFields}</strong></span>
         <span>跳过 <strong>{job.skippedFields}</strong></span>

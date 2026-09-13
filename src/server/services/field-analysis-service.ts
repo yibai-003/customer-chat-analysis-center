@@ -314,7 +314,11 @@ export async function analyzeField(recordId: string, sectionId: string, fieldKey
   const missing = field.dependsOn.filter((key) => dependencyValues[key] === undefined);
   if (missing.length) throw new Error(`依赖字段未完成：${missing.join(", ")}`);
   const run = await runField(recordId, section.name, record, field, dependencyValues, image);
-  updateRecord(recordId, { status: run.status === "failed" ? "failed" : run.status === "needs_review" ? "needs_review" : "completed", reviewStatus: run.status === "completed" ? "pending" : "needs_review" });
+  const latest = getRecord(recordId)!;
+  const states = listFields(sectionId).filter(f => f.isEnabled).map(f => latest.fieldRuns.find(r => r.fieldId === f.id)?.status ?? "pending");
+  const status = states.includes("failed") ? "failed" : states.includes("needs_review") || states.includes("skipped") ? "needs_review"
+    : states.includes("pending") ? "pending" : "completed";
+  updateRecord(recordId, { status, reviewStatus: status === "failed" || status === "needs_review" ? "needs_review" : "pending" });
   return run.run;
 }
 

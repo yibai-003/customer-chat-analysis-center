@@ -95,15 +95,24 @@ export function listImportJobs(status?: ImportJobStatus) {
   const rows = db.prepare(`SELECT * FROM import_jobs ${status ? "WHERE status = ?" : ""} ORDER BY created_at DESC`).all(...(status ? [status] : [])) as any[];
   return rows.map(mapImportJob);
 }
+function liveJobCounts(jobId: string, sectionId: string | null) {
+  const p = getAnalysisProgressBaseline(jobId, sectionId ?? "");
+  const fieldCount = db.prepare("SELECT COUNT(*) n FROM analysis_fields WHERE section_id=? AND is_enabled=1").get(sectionId ?? "").n as number;
+  return { totalRecords: p.total, completedRecords: p.completed, failedRecords: p.failed,
+    totalFields: p.total * fieldCount,
+    pendingRecords: p.pending, processingRecords: p.processing, needsReviewRecords: p.needsReview,
+    completedFields: p.completedFields, failedFields: p.failedFields, skippedFields: p.skippedFields,
+    needsReviewFields: p.needsReviewFields };
+}
 export function getJob(id: string): Job | undefined {
   const row = db.prepare("SELECT * FROM jobs WHERE id = ?").get(id) as any;
-  return row && { id: row.id, originalFilename: row.original_filename, sectionId: row.section_id ?? null, sectionName: row.section_name ?? null, status: row.status, totalRecords: row.total_records, completedRecords: row.completed_records, failedRecords: row.failed_records, totalFields: row.total_fields ?? 0, completedFields: row.completed_fields ?? 0, failedFields: row.failed_fields ?? 0, skippedFields: row.skipped_fields ?? 0, createdAt: row.created_at, cancelRequested: Boolean(row.cancel_requested) };
+  return row && { id: row.id, originalFilename: row.original_filename, sectionId: row.section_id ?? null, sectionName: row.section_name ?? null, status: row.status, createdAt: row.created_at, cancelRequested: Boolean(row.cancel_requested), ...liveJobCounts(row.id, row.section_id) };
 }
 export function deleteJob(id: string) {
   const result = db.prepare("DELETE FROM jobs WHERE id = ?").run(id);
   if (!result.changes) throw new Error("任务不存在");
 }
-export function listJobs() { return (db.prepare("SELECT * FROM jobs ORDER BY created_at DESC").all() as any[]).map((row) => ({ id: row.id, originalFilename: row.original_filename, sectionId: row.section_id ?? null, sectionName: row.section_name ?? null, status: row.status, totalRecords: row.total_records, completedRecords: row.completed_records, failedRecords: row.failed_records, totalFields: row.total_fields ?? 0, completedFields: row.completed_fields ?? 0, failedFields: row.failed_fields ?? 0, skippedFields: row.skipped_fields ?? 0, createdAt: row.created_at, cancelRequested: Boolean(row.cancel_requested) })); }
+export function listJobs() { return (db.prepare("SELECT * FROM jobs ORDER BY created_at DESC").all() as any[]).map((row) => ({ id: row.id, originalFilename: row.original_filename, sectionId: row.section_id ?? null, sectionName: row.section_name ?? null, status: row.status, createdAt: row.created_at, cancelRequested: Boolean(row.cancel_requested), ...liveJobCounts(row.id, row.section_id) })); }
 export function countActiveJobRuns(): number {
   return (db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE run_token IS NOT NULL").get() as { count: number }).count;
 }
@@ -219,12 +228,16 @@ export function listBatchRecordIds(
 export function getAnalysisProgressBaseline(jobId: string, sectionId: string) {
   const recordCounts = db.prepare(`SELECT
       COUNT(*) AS total,
+      COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending,
+      COALESCE(SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END), 0) AS processing,
       COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
       COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
       COALESCE(SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END), 0) AS needs_review
     FROM records
     WHERE job_id = ?`).get(jobId) as {
       total: number;
+      pending: number;
+      processing: number;
       completed: number;
       failed: number;
       needs_review: number;
@@ -243,15 +256,20 @@ export function getAnalysisProgressBaseline(jobId: string, sectionId: string) {
     SELECT
       COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
       COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
-      COALESCE(SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped
+      COALESCE(SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped,
+      COALESCE(SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END), 0) AS needs_review
     FROM latest_runs
     WHERE rank = 1`).get(jobId, sectionId) as {
       completed: number;
       failed: number;
       skipped: number;
+      needs_review: number;
     };
   return {
     total: recordCounts.total,
+    pending: recordCounts.pending,
+    processing: recordCounts.processing,
+    needsReviewFields: fieldCounts.needs_review,
     completed: recordCounts.completed,
     failed: recordCounts.failed,
     needsReview: recordCounts.needs_review,
@@ -307,6 +325,10 @@ export function updateRecord(id: string, input: { sectionId?: string; humanResul
   return db.transaction(() => {
   const row = getRecord(id);
   if (!row) throw new Error("记录不存在");
+  if (input.sectionId && input.reviewStatus === "confirmed") {
+    const running = db.prepare("SELECT run_token FROM jobs WHERE id = ?").get(row.jobId) as { run_token: string | null };
+    if (running?.run_token || row.status === "processing") throw new Error("记录正在解析，请等待解析结束后保存复核");
+  }
   if (input.sectionId) {
     db.prepare(`INSERT INTO record_section_reviews (record_id, section_id, human_result_json, review_status, review_note, updated_at)
       VALUES (?, ?, ?, ?, ?, ?)

@@ -1,3 +1,4 @@
+import { requestModel } from "../ai/model-transport";
 import crypto from "node:crypto";
 import { z } from "zod";
 import { db } from "../db/client";
@@ -120,7 +121,7 @@ export async function testModelConnection(id: string) {
   const row = db.prepare("SELECT * FROM model_configs WHERE id = ?").get(id) as any;
   if (!row) throw new Error("模型配置不存在");
   const started = Date.now();
-  const response = await fetch(buildChatCompletionsUrl(row.base_url), {
+  const { response, rawText } = await requestModel(buildChatCompletionsUrl(row.base_url), {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${decryptSecret(row.api_key_ciphertext, config.encryptionKey)}` },
     body: JSON.stringify({
@@ -131,7 +132,8 @@ export async function testModelConnection(id: string) {
     }),
   });
   if (!response.ok) {
-    const body = await response.json().catch(() => ({}));
+    let body: any = {};
+    try { body = JSON.parse(rawText); } catch { /* non-JSON provider error */ }
     throw new Error(body?.error?.message || `连接失败 (${response.status})`);
   }
   return { success: true, latencyMs: Date.now() - started };

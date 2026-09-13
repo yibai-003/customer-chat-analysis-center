@@ -71,6 +71,20 @@ describe("batch analysis concurrency", () => {
 });
 
 describe("batch analysis scheduling", () => {
+  it("does not declare the whole job complete after retrying a subset", async () => {
+    const job = createJob("partial.xlsx", "partial.xlsx", { id: "refund", name: "refund" });
+    addRecords(job.id, [1,2].map(rowNumber => ({ sheetName: "Sheet1", rowNumber, anchor: {}, sourceFields: {}, imagePath: "test.png" })));
+    const records = listRecords(job.id);
+    updateRecord(records[0].id, { status: "failed" });
+    vi.mocked(analyzeRecordFields).mockImplementation(async id => {
+      for (const field of listFields("refund").filter(f => f.isEnabled)) createFieldRun({ recordId: id, fieldId: field.id, status: "completed" });
+      updateRecord(id, { status: "completed" });
+      return { total: 5, completed: 5, failed: 0, needsReview: 0, skipped: 0 };
+    });
+    const retry = await retryFailedJob(job.id);
+    await retry!.completion;
+    expect(getJob(job.id)).toMatchObject({ status: "paused", completedRecords: 1, pendingRecords: 1, failedRecords: 0, completedFields: 5 });
+  });
   it("loads records one batch at a time until the candidate query is empty", async () => {
     const loaded: number[] = [];
     const processed: number[] = [];
@@ -199,11 +213,12 @@ describe("batch analysis scheduling", () => {
       createFieldRun({ recordId: records[0].id, fieldId: field.id, status: "completed" });
     }
     expect(getJob(job.id)).toMatchObject({
-      completedRecords: 0,
-      completedFields: 0,
+      completedRecords: 1,
+      completedFields: 5,
       failedFields: 0,
     });
     vi.mocked(analyzeRecordFields).mockImplementation(async (recordId) => {
+      for (const field of fields.slice(0, 3)) createFieldRun({ recordId, fieldId: field.id, status: "completed" });
       updateRecord(recordId, { status: "completed", reviewStatus: "pending" });
       return {
         total: 3,
@@ -253,6 +268,7 @@ describe("batch analysis scheduling", () => {
     db.prepare("UPDATE analysis_field_runs SET created_at = ? WHERE record_id = ?")
       .run("2026-09-10T00:00:00.000Z", record.id);
     vi.mocked(analyzeRecordFields).mockImplementation(async (recordId) => {
+      for (const field of fields.slice(0, 3)) createFieldRun({ recordId, fieldId: field.id, status: "completed" });
       updateRecord(recordId, { status: "completed", reviewStatus: "pending" });
       return {
         total: 3,
@@ -269,7 +285,7 @@ describe("batch analysis scheduling", () => {
       status: "completed",
       completedRecords: 1,
       failedRecords: 0,
-      completedFields: 3,
+      completedFields: 5,
       failedFields: 0,
     });
   });
@@ -347,6 +363,7 @@ describe("batch analysis scheduling", () => {
     vi.mocked(analyzeRecordFields).mockImplementation((recordId) => new Promise((resolve) => {
       started.push(recordId);
       releases.push(() => {
+        for (const field of listFields("refund").filter(f => f.isEnabled).slice(0, 3)) createFieldRun({ recordId, fieldId: field.id, status: "completed" });
         updateRecord(recordId, { status: "completed", reviewStatus: "pending" });
         resolve({
           total: 3,
