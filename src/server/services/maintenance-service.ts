@@ -48,6 +48,7 @@ export async function maintainFiles(options: { databasePath: string; dataDir: st
         if (!inside(dataDir, directory)) throw new Error("清理路径越界");
         if (!fs.existsSync(directory)) return;
         for (const entry of fs.readdirSync(directory)) {
+          if (entry.toLowerCase() === ".secrets") continue;
           if (++visited > 100_000) throw new Error("临时文件超过扫描上限；未执行清理");
           const file = path.join(directory, entry);
           const stat = fs.lstatSync(file);

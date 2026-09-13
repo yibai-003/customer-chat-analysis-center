@@ -12,7 +12,8 @@
     "restore": "tsx src/server/restore-cli.ts",
     "db:check": "tsx src/server/db-check-cli.ts",
     "db:migrations": "tsx src/server/db-migration-cli.ts",
-    "maintenance": "tsx src/server/maintenance-cli.ts"
+    "maintenance": "tsx src/server/maintenance-cli.ts",
+    "keys:migrate": "tsx src/server/key-cli.ts"
   },
   "type": "module",
   "dependencies": {

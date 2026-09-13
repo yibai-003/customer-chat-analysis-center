@@ -105,7 +105,9 @@ describe("offline reference-aware maintenance", () => {
     database = new Database(options.databasePath);
     fs.utimesSync(target, new Date(0), new Date(0));
     const sidecar = file("uploads/nested.db-shm");
+    const keyFile = file("uploads/.secrets/nested.db.key.json");
     expect((await maintainFiles({ ...options, databasePath: target, apply: true })).removed).toBe(0);
     expect(fs.existsSync(target)).toBe(true); expect(fs.existsSync(sidecar)).toBe(true);
+    expect(fs.existsSync(keyFile)).toBe(true);
   });
 });

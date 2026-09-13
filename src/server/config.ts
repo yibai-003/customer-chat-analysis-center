@@ -1,11 +1,17 @@
 import path from "node:path";
 import { projectRoot } from "./environment";
+import fs from "node:fs";
+import { externalEncryptionKey, legacyEncryptionKey, managedKeyPath, runtimeEncryptionKey } from "./security/key-store";
 
 export const config = {
   port: Number(process.env.PORT ?? 8787),
   dataDir: path.resolve(projectRoot, process.env.DATA_DIR ?? "./data"),
   databasePath: path.resolve(projectRoot, process.env.DATABASE_PATH ?? "./data/app.db"),
-  encryptionKey: process.env.ENCRYPTION_KEY && process.env.ENCRYPTION_KEY !== "replace-with-32-byte-base64-key" ? process.env.ENCRYPTION_KEY : "01234567890123456789012345678901",
+  get encryptionKey(): string {
+    const file = managedKeyPath(config.databasePath);
+    if (process.env.NODE_ENV === "test" && !fs.existsSync(file) && !process.env.ENCRYPTION_KEY) return legacyEncryptionKey;
+    return runtimeEncryptionKey(file, process.env.ENCRYPTION_KEY);
+  },
   maxUploadMb: Number(process.env.MAX_UPLOAD_MB ?? 2048),
   analysisConcurrency: Number(process.env.ANALYSIS_CONCURRENCY ?? 2),
   analysisBatchSize: Number(process.env.ANALYSIS_BATCH_SIZE ?? 20),
@@ -28,12 +34,5 @@ export function validateRuntimeConfig() {
   if (!Number.isFinite(config.minFreeDiskMb) || config.minFreeDiskMb < 64) {
     throw new Error("MIN_FREE_DISK_MB 必须是不小于 64 的数值");
   }
-  if (process.env.NODE_ENV === "production") {
-    if (!process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_KEY === "replace-with-32-byte-base64-key") {
-      throw new Error("生产环境必须设置独立的 ENCRYPTION_KEY");
-    }
-    if (config.encryptionKey.length < 32) {
-      throw new Error("ENCRYPTION_KEY 长度至少为 32 个字符");
-    }
-  }
+  externalEncryptionKey(process.env.ENCRYPTION_KEY);
 }

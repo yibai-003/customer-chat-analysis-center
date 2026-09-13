@@ -200,7 +200,7 @@ export async function restoreFullBackup(source: string, target: string) {
     const catalogText = await fsp.readFile(path.join(target, "knowledge/catalog.json"), "utf8");
     const hash = crypto.createHash("sha256").update(catalogText).digest("hex");
     await fsp.writeFile(path.join(target, "data/knowledge-sync-state.json"), JSON.stringify({ hash }));
-    await fsp.writeFile(path.join(target, "RESTORED.json"), JSON.stringify({ restoredAt: new Date().toISOString(), source: path.resolve(source), originalCreatedAt: manifest.createdAt, encryptionKey: "Use the original ENCRYPTION_KEY; it is NOT included in this package." }, null, 2));
+    await fsp.writeFile(path.join(target, "RESTORED.json"), JSON.stringify({ restoredAt: new Date().toISOString(), source: path.resolve(source), originalCreatedAt: manifest.createdAt, encryptionKey: "Restore the matching .secrets/<database-name>.key.json beside the database, or use the original ENCRYPTION_KEY. Keys are NOT included in this package." }, null, 2));
     return { directory: target, database: path.join(target, "data/app.db"), files: manifest.references.length, verified: true };
   } catch (error) {
     // Preserve failed recovery evidence; no change to the source backup/current application.

@@ -15,6 +15,8 @@ npm run dev
 
 本机访问防护、`.env` 配置优先级及可迁移启动脚本说明见 [本地启动指南](docs/local-access-and-startup.md)。Node.js 要求 22.12 或更新版本。
 
+新环境自动生成独立本地加密密钥。旧默认密钥环境需先备份、停止服务，再运行 `npm run keys:migrate -- --apply`；检查用 `npm run keys:migrate -- --status`。模型凭据恢复需单独保管密钥文件，详见 [密钥管理与迁移](docs/encryption-key-management.md)。
+
 Excel 上传会检查压缩包结构、实际解压量和磁盘余量；资源上限、错误提示及当前边界见 [上传安全说明](docs/upload-safety.md)。
 
 服务存活检查为 `/api/health`；业务就绪检查为 `/api/ready`，后者会同时检查数据库、磁盘空间以及视觉/文本默认模型。
