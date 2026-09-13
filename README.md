@@ -5,7 +5,7 @@
 ## 启动
 
 ```powershell
-npm install
+npm ci
 Copy-Item .env.example .env
 npm run build
 npm run dev
@@ -14,6 +14,8 @@ npm run dev
 打开 `http://localhost:8787`。
 
 本机访问防护、`.env` 配置优先级及可迁移启动脚本说明见 [本地启动指南](docs/local-access-and-startup.md)。Node.js 要求 22.12 或更新版本。
+
+依赖使用官方 npm 源并启用证书校验；新环境请使用 `npm ci` 按锁文件安装。安装步骤、证书和原生依赖排查见 [可复现安装指南](docs/reproducible-installation.md)。
 
 新环境自动生成独立本地加密密钥。旧默认密钥环境需先备份、停止服务，再运行 `npm run keys:migrate -- --apply`；检查用 `npm run keys:migrate -- --status`。模型凭据恢复需单独保管密钥文件，详见 [密钥管理与迁移](docs/encryption-key-management.md)。
 
@@ -26,6 +28,8 @@ Excel 上传会检查压缩包结构、实际解压量和磁盘余量；资源�
 ```powershell
 .\scripts\start-local.ps1
 ```
+
+PowerShell 策略禁止脚本时可运行 `.\scripts\start-local.cmd`，不必改变系统执行策略。
 
 开发时若单独启动 Vite，`5173` 已配置 `/api` 代理到 `8787`；个人使用推荐先执行
 `npm run build`，再使用 `npm run start`，由 Express 同时提供页面和接口。
@@ -71,7 +75,7 @@ npm run knowledge:push
 ```powershell
 git clone https://github.com/yibai-003/customer-chat-analysis-center.git
 cd customer-chat-analysis-center
-npm install
+npm ci
 npm run build
 npm run dev
 ```

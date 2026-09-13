@@ -25,7 +25,7 @@ cd "E:\客服解析中心\customer-chat-analysis-center"
 .\scripts\start-local.ps1
 ```
 
-脚本依据自身位置进入项目，检查 Node 版本，缺依赖时执行 npm ci，每次构建后再启动；任一步失败立即停止。系统脚本策略不允许时，可在项目目录用 `npm.cmd run build`、`npm.cmd run start`，无需修改全局执行策略。
+脚本依据自身位置进入项目，检查 Node 版本，缺依赖时执行 npm ci，通过安装检查后构建并启动；任一步失败立即停止。系统脚本策略不允许时，可运行等效的 `scripts/start-local.cmd`，无需修改全局执行策略。
 
 `startup-launcher.vbs` 使用相对自身路径启动守护脚本。守护脚本通过 PATH 定位 Node，正常退出不重启，连续 5 次快速失败停止重试，避免配置错误或已有实例时无限循环。不会自动安装开机启动项，也未启用守护实例。后续安全维护单元已把 npm 与守护脚本统一接入日志启动器，支持 `LOG_MAX_MB` / `LOG_RETENTION`，见 [安全清理与日志指南](safe-maintenance-and-logs.md)。
 
@@ -33,7 +33,7 @@ cd "E:\客服解析中心\customer-chat-analysis-center"
 
 Vite 只监听 127.0.0.1:5173，启用 strictPort 避免自动换端口。代理根据同一 PORT 配置访问后端，重写 Host，保留浏览器 Origin 供来源校验。
 
-本阶段不修改 npm registry 或 SSL 配置。全新依赖安装仍受锁文件已有下载源可用性影响，安装失败会明确停止，需要后续专项处理。
+后续依赖安装单元已将锁文件下载地址统一到官方 npm 源，项目和本机用户配置恢复严格证书校验，并声明 Node 版本要求。安装失败会明确停止，排查见 [可复现安装指南](reproducible-installation.md)。
 
 ## 本阶段验收（2026-09-13）
 

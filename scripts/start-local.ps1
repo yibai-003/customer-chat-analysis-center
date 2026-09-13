@@ -9,6 +9,8 @@ if (-not (Test-Path "node_modules\.bin\tsx.cmd")) {
   & $npmCommand.Source ci
   if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
 }
+& $npmCommand.Source run check:installation
+if ($LASTEXITCODE -ne 0) { throw "Installation check failed; server was not started." }
 & $npmCommand.Source run build
 if ($LASTEXITCODE -ne 0) { throw "Build failed; server was not started." }
 & $npmCommand.Source run start
