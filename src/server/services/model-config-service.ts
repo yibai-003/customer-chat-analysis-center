@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "../db/client";
 import { config } from "../config";
 import { decryptSecret, encryptSecret, maskSecret } from "../security/secrets";
-import { buildChatCompletionsUrl, callVisionModel } from "../ai/openai-compatible-client";
+import { buildChatCompletionsUrl, extractResponseContent } from "../ai/openai-compatible-client";
 import type { ModelConfig } from "../../shared/types";
 
 const inputSchema = z.object({
@@ -78,7 +78,7 @@ export function updateModelConfig(id: string, raw: unknown) {
   const apiKey = input.apiKey || decryptSecret(current.api_key_ciphertext, config.encryptionKey);
   const now = new Date().toISOString();
   db.prepare(`UPDATE model_configs SET name=?,base_url=?,api_key_ciphertext=?,model=?,purpose=?,supports_vision=?,
-    temperature=?,max_tokens=?,is_enabled=?,updated_at=? WHERE id=?`).run(
+    temperature=?,max_tokens=?,is_enabled=?,updated_at=?,capability_json=NULL,capability_checked_at=NULL WHERE id=?`).run(
     input.name, input.baseUrl, encryptSecret(apiKey, config.encryptionKey), input.model,
     input.purpose, input.supportsVision ? 1 : 0, input.temperature, input.maxTokens, input.isEnabled ? 1 : 0, now, id,
   );
@@ -141,20 +141,57 @@ export async function testModelConnection(id: string) {
   return { success: true, latencyMs: Date.now() - started };
 }
 
-export async function testModelCapabilities(id: string) {
+const runningChecks = new Map<string, Promise<Awaited<ReturnType<typeof runCapabilityCheck>>>>();
+export function testModelCapabilities(id: string) {
+  const active = runningChecks.get(id);
+  if (active) return active;
+  const check = runCapabilityCheck(id).finally(() => runningChecks.delete(id));
+  runningChecks.set(id, check);
+  return check;
+}
+
+const redTestImage = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC";
+async function runCapabilityCheck(id: string) {
   const row = db.prepare("SELECT * FROM model_configs WHERE id = ? AND is_enabled = 1").get(id) as any;
   if (!row) throw new Error("模型配置不存在或未启用");
-  const base = { baseUrl: row.base_url, apiKey: decryptSecret(row.api_key_ciphertext, config.encryptionKey), model: row.model, temperature: 0, maxTokens: 100 };
-  const result: Record<string, unknown> = { text: false, json: false, vision: false };
-  const text = await callVisionModel(base, [{ role: "user", content: "Return JSON with exactly one key: ok. The response must be valid JSON." }]);
-  result.text = Boolean(text.content);
-  try { result.json = typeof JSON.parse(text.content) === "object"; } catch { result.json = false; }
-  if (row.supports_vision) {
-    const vision = await callVisionModel(base, [{ role: "user", content: [{ type: "text", text: "Return JSON with exactly one key: ok." }, { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=" } }] }]);
-    result.vision = Boolean(vision.content);
+  const result: NonNullable<ModelConfig["capabilityStatus"]> = { text: false, json: false, vision: false, errors: {} };
+  const probe = async (kind: "text" | "json" | "vision", content: unknown, structured = false) => {
+    try {
+      const { response, rawText } = await requestModel(buildChatCompletionsUrl(row.base_url), {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${decryptSecret(row.api_key_ciphertext, config.encryptionKey)}` },
+        body: JSON.stringify({ model: row.model, temperature: 0, max_tokens: 100,
+          messages: [{ role: "user", content }], ...(structured ? { response_format: { type: "json_object" } } : {}) }),
+      }, { attempts: 1, timeoutMs: 30000 });
+      if (!response.ok) { result.errors![kind] = `HTTP_${response.status}`; return; }
+      const answer = extractResponseContent(JSON.parse(rawText)).trim();
+      if (kind === "json") {
+        const obj = JSON.parse(answer);
+        result.json = obj !== null && !Array.isArray(obj) && typeof obj === "object" && obj.ok === true;
+      } else if (kind === "vision") result.vision = /^(red|红色|红)[.!。！]?$/i.test(answer);
+      else result.text = /^OK[.!]?$/i.test(answer);
+      if (!result[kind]) result.errors![kind] = "INVALID_OUTPUT";
+    } catch (error) {
+      result.errors![kind] = error instanceof SyntaxError ? "INVALID_JSON" : "REQUEST_FAILED";
+    }
+  };
+  await probe("text", "Reply with exactly OK.");
+  await probe("json", 'Return valid json with exactly {"ok":true}.', true);
+  if (row.supports_vision || row.purpose === "vision") {
+    await probe("vision", [{ type: "text", text: "What is the dominant color in this image? Reply with one color word only." }, { type: "image_url", image_url: { url: `data:image/png;base64,${redTestImage}` } }]);
   }
   const checkedAt = Date.now();
-  db.prepare("UPDATE model_configs SET capability_json=?, capability_checked_at=?, updated_at=? WHERE id=?")
-    .run(JSON.stringify(result), checkedAt, new Date(checkedAt).toISOString(), id);
+  const updated = db.prepare(`UPDATE model_configs SET capability_json=?, capability_checked_at=?
+    WHERE id=? AND api_key_ciphertext=? AND base_url=? AND model=? AND purpose=? AND supports_vision=? AND is_enabled=1`)
+    .run(JSON.stringify(result), checkedAt, id, row.api_key_ciphertext, row.base_url, row.model, row.purpose, row.supports_vision);
+  if (!updated.changes) throw new Error("检测期间配置已变更，请重新检测");
   return { model: row.model, purpose: row.purpose, capabilities: result, checkedAt: new Date(checkedAt).toISOString() };
+}
+
+export function modelVerification(model: ModelConfig | undefined, now = Date.now()) {
+  if (!model) return { configured: false, verified: false, state: "unconfigured" };
+  const time = Date.parse(model.capabilityCheckedAt ?? "");
+  const fresh = Number.isFinite(time) && now >= time && now - time < 86400000;
+  const passed = model.capabilityStatus?.text === true && model.capabilityStatus?.json === true
+    && (model.purpose !== "vision" || (model.supportsVision && model.capabilityStatus.vision === true));
+  return { configured: true, verified: fresh && passed, state: !Number.isFinite(time) ? "untested" : !fresh ? "expired" : passed ? "passed" : "failed", checkedAt: model.capabilityCheckedAt, modelId: model.id };
 }

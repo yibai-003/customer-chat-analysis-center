@@ -29,7 +29,7 @@ describe("versioned migrations", () => {
   });
   it("rolls back all pending schema changes and version stamps on failure", () => {
     db.exec("CREATE TABLE original(value TEXT); INSERT INTO original VALUES('preserve');");
-    expect(() => runMigrations(db, [...migrations, { version: 4, name: "broken", up: (d) => { d.exec("CREATE TABLE partial(id INTEGER)"); throw new Error("injected failure"); } }])).toThrow("injected failure");
+    expect(() => runMigrations(db, [...migrations, { version: 5, name: "broken", up: (d) => { d.exec("CREATE TABLE partial(id INTEGER)"); throw new Error("injected failure"); } }])).toThrow("injected failure");
     expect(db.prepare("SELECT name FROM sqlite_master WHERE name='partial'").get()).toBeUndefined();
     expect(appliedMigrations(db)).toEqual([]);
     expect(db.prepare("SELECT value FROM original").get().value).toBe("preserve");

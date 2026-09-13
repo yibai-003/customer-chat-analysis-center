@@ -264,7 +264,7 @@ export interface ModelConfig {
   purpose: "vision" | "text";
   isPurposeDefault: boolean;
   isEnabled: boolean;
-  capabilityStatus?: { text: boolean; json: boolean; vision: boolean };
+  capabilityStatus?: { text: boolean; json: boolean; vision: boolean; errors?: Partial<Record<"text" | "json" | "vision", string>> };
   capabilityCheckedAt?: string;
 }
 

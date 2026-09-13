@@ -10,7 +10,7 @@ import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSection
 import { analyzeRecord } from "./services/analysis-service";
 import { analyzeJob, retryFailedJob } from "./services/batch-analysis-service";
 import { exportJob } from "./services/excel-export-service";
-import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig, getModelsForPurpose } from "./services/model-config-service";
+import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig, getModelsForPurpose, modelVerification } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
 import { listFields, upsertField, deleteField } from "./services/field-config-service";
 import { analyzeField, retryField } from "./services/field-analysis-service";
@@ -78,13 +78,11 @@ export function createApp(dependencies: AppDependencies = {}) {
     try {
       const disk = fs.statfsSync(config.dataDir);
       const freeDiskMb = Math.floor(Number(disk.bavail) * Number(disk.bsize) / 1024 / 1024);
-      const fresh = (model: any) => model.capabilityStatus?.text === true && model.capabilityStatus?.json === true
-        && (!model.supportsVision || model.capabilityStatus?.vision === true)
-        && Boolean(model.capabilityCheckedAt) && Date.now() - Date.parse(model.capabilityCheckedAt) < 24 * 60 * 60 * 1000;
-      const vision = getModelsForPurpose("vision").some(fresh);
-      const text = getModelsForPurpose("text").some(fresh);
+      const checks = { vision: modelVerification(getModelsForPurpose("vision")[0]), text: modelVerification(getModelsForPurpose("text")[0]) };
+      const vision = checks.vision.verified;
+      const text = checks.text.verified;
       const ready = freeDiskMb >= config.minFreeDiskMb && vision && text;
-      return res.status(ready ? 200 : 503).json({ success: ready, data: { ready, database: true, freeDiskMb, minFreeDiskMb: config.minFreeDiskMb, models: { vision, text } }, error: ready ? null : "模型或磁盘空间未就绪" });
+      return res.status(ready ? 200 : 503).json({ success: ready, data: { ready, database: true, freeDiskMb, minFreeDiskMb: config.minFreeDiskMb, models: { vision, text }, modelChecks: checks }, error: ready ? null : "模型未检测、检测失败/过期，或磁盘空间不足" });
     } catch (error) { return fail(res, error, 503); }
   });
   app.get("/api/system/analysis-capacity", (_req, res) => {
