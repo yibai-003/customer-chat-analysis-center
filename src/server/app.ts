@@ -1,3 +1,4 @@
+import { createSafeUpload, validateXlsx, requireDiskSpace, UploadError } from "./security/upload-safety";
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -19,20 +20,6 @@ import { createKnowledgeRouter } from "./routes/knowledge-routes";
 import { getAnalysisCapacity } from "./services/analysis-capacity-service";
 import { initializeKnowledgeSync, type KnowledgeSync } from "./services/knowledge/knowledge-sync-service";
 import { setHotTopicKnowledgeSync } from "./services/knowledge/hot-topic-service";
-
-function isXlsxFile(filePath: string): boolean {
-  try {
-    const signature = fs.readFileSync(filePath).subarray(0, 4);
-    return signature.length === 4 && signature[0] === 0x50 && signature[1] === 0x4b
-      && (signature[2] === 0x03 || signature[2] === 0x05 || signature[2] === 0x07);
-  } catch { return false; }
-}
-function hasFreeDiskSpace(): boolean {
-  try {
-    const stats = fs.statfsSync(config.dataDir);
-    return Number(stats.bavail) * Number(stats.bsize) >= config.minFreeDiskMb * 1024 * 1024;
-  } catch { return true; }
-}
 
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
@@ -68,9 +55,15 @@ export function createApp(dependencies: AppDependencies = {}) {
     };
     next();
   });
-  const upload = multer({ dest: path.join(config.dataDir, "uploads"), limits: { fileSize: config.maxUploadMb * 1024 * 1024 } });
+  const upload = createSafeUpload();
+  app.use((req, _res, next) => {
+    if (req.method === "POST" && req.is("multipart/form-data")) {
+      try { requireDiskSpace(); } catch (error) { return next(error); }
+    }
+    next();
+  });
   const ok = (res: express.Response, data: unknown) => res.json({ success: true, data, error: null });
-  const fail = (res: express.Response, error: unknown, status = 400) => res.status(status).json({ success: false, data: null, error: error instanceof Error ? error.message : "请求失败" });
+  const fail = (res: express.Response, error: unknown, status = 400) => res.status(error instanceof UploadError ? error.status : status).json({ success: false, data: null, error: error instanceof Error ? error.message : "请求失败" });
   app.get("/api/health", (_req, res) => {
     res.json({ success: true, data: { status: "ok" }, error: null });
   });
@@ -109,12 +102,12 @@ export function createApp(dependencies: AppDependencies = {}) {
   });
   app.get("/api/records/:id", (req, res) => { const record = getRecord(req.params.id); return record ? ok(res, record) : fail(res, "记录不存在", 404); });
   app.post("/api/jobs/import", upload.single("file"), async (req, res) => {
-    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path) || !hasFreeDiskSpace()) {
-      if (req.file) fs.rmSync(req.file.path, { force: true });
+    if (!req.file) {
       return fail(res, "请上传 .xlsx 文件");
     }
     let moved = false;
     try {
+      await validateXlsx(req.file.path, req.file.originalname);
       const section = req.body.sectionId ? listSections().find((item) => item.id === req.body.sectionId && item.isEnabled) : undefined;
       if (req.body.sectionId && !section) return fail(res, "解析板块不存在或未启用");
       const importJob = createImportJob({
@@ -139,11 +132,11 @@ export function createApp(dependencies: AppDependencies = {}) {
     return job ? ok(res, job) : fail(res, "导入任务不存在", 404);
   });
   app.post("/api/jobs/import-preview", upload.single("file"), async (req, res) => {
-    if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path) || !hasFreeDiskSpace()) {
-      if (req.file) fs.rmSync(req.file.path, { force: true });
+    if (!req.file) {
       return fail(res, "请上传 .xlsx 文件");
     }
     try {
+      await validateXlsx(req.file.path, req.file.originalname);
       const section = req.body.sectionId ? listSections().find((item) => item.id === req.body.sectionId && item.isEnabled) : undefined;
       if (req.body.sectionId && !section) return fail(res, "解析板块不存在或未启用");
       return ok(res, await previewWorkbookStreaming(req.file.path, req.file.originalname, section && { id: section.id, name: section.name, sourceFields: section.sourceFields }));
@@ -228,7 +221,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       && error.type === "entity.parse.failed";
     const uploadError = error instanceof multer.MulterError;
     const fileTooLarge = uploadError && error.code === "LIMIT_FILE_SIZE";
-    const status = fileTooLarge ? 413 : parseError ? 400 : 500;
+    const status = error instanceof UploadError ? error.status : fileTooLarge ? 413 : parseError ? 400 : 500;
     const normalizedError = fileTooLarge
       ? new Error(`文件超过当前上限（${config.maxUploadMb} MB）。请调整 MAX_UPLOAD_MB，或使用拆分后的 Excel 文件。`)
       : parseError

@@ -1,3 +1,4 @@
+import { validateXlsx, UploadError } from "../security/upload-safety";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -39,21 +40,6 @@ function removeFile(filePath: string | undefined): void {
   } catch {
     // Cleanup is best-effort; the API result should still reflect the main operation.
   }
-}
-
-function isXlsxFile(filePath: string | undefined): boolean {
-  if (!filePath) return false;
-  try {
-    const signature = fs.readFileSync(filePath).subarray(0, 4);
-    return signature.length === 4 && signature[0] === 0x50 && signature[1] === 0x4b
-      && (signature[2] === 0x03 || signature[2] === 0x05 || signature[2] === 0x07);
-  } catch { return false; }
-}
-function hasFreeDiskSpace(): boolean {
-  try {
-    const stats = fs.statfsSync(config.dataDir);
-    return Number(stats.bavail) * Number(stats.bsize) >= Number(process.env.MIN_FREE_DISK_MB ?? 512) * 1024 * 1024;
-  } catch { return true; }
 }
 
 function parseColumns(value: unknown): KnowledgeColumn[] | undefined {
@@ -132,7 +118,7 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
     res.json({ success: true, data, error: null })
   );
   const fail = (res: express.Response, error: unknown, status = 400) => (
-    res.status(status).json({
+    res.status(error instanceof UploadError ? error.status : status).json({
       success: false,
       data: null,
       error: error instanceof Error ? error.message : String(error || "请求失败"),
@@ -148,7 +134,7 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
     upload.single("file"),
     async (req, res) => {
       const uploadedPath = req.file?.path;
-      if (!req.file || !req.file.originalname.toLowerCase().endsWith(".xlsx") || !isXlsxFile(req.file.path) || !hasFreeDiskSpace()) {
+      if (!req.file) {
         removeFile(uploadedPath);
         return fail(res, "请上传 .xlsx 文件");
       }
@@ -160,6 +146,7 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
       const originalFilename = normalizeUploadedFilename(req.file.originalname);
       const stagedPath = path.join(previewDirectory, `${token}.xlsx`);
       try {
+        await validateXlsx(req.file.path, req.file.originalname);
         fs.mkdirSync(previewDirectory, { recursive: true });
         fs.renameSync(req.file.path, stagedPath);
         const columns = parseColumns(req.body.columns);
@@ -225,6 +212,7 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
       let persistedPath: string | undefined;
       let completed = false;
       try {
+        await validateXlsx(pending.filePath, pending.originalFilename);
         fs.mkdirSync(importDirectory, { recursive: true });
         persistedPath = path.join(importDirectory, `${crypto.randomUUID()}.xlsx`);
         fs.renameSync(pending.filePath, persistedPath);

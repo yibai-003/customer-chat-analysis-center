@@ -13,6 +13,8 @@ npm run dev
 
 打开 `http://localhost:8787`。
 
+Excel 上传会检查压缩包结构、实际解压量和磁盘余量；资源上限、错误提示及当前边界见 [上传安全说明](docs/upload-safety.md)。
+
 服务存活检查为 `/api/health`；业务就绪检查为 `/api/ready`，后者会同时检查数据库、磁盘空间以及视觉/文本默认模型。
 
 也可以使用统一启动脚本：
