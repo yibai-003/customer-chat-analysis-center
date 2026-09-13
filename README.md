@@ -17,6 +17,8 @@ npm run dev
 
 依赖使用官方 npm 源并启用证书校验；新环境请使用 `npm ci` 按锁文件安装。安装步骤、证书和原生依赖排查见 [可复现安装指南](docs/reproducible-installation.md)。
 
+2026-09-13 依赖漏洞定向修复后，全部与运行依赖审计均为 0，341 项测试通过；后续更新仍需重新审计。版本与验证见 [依赖安全记录](docs/dependency-security-remediation.md)。
+
 新环境自动生成独立本地加密密钥。旧默认密钥环境需先备份、停止服务，再运行 `npm run keys:migrate -- --apply`；检查用 `npm run keys:migrate -- --status`。模型凭据恢复需单独保管密钥文件，详见 [密钥管理与迁移](docs/encryption-key-management.md)。
 
 Excel 上传会检查压缩包结构、实际解压量和磁盘余量；资源上限、错误提示及当前边界见 [上传安全说明](docs/upload-safety.md)。

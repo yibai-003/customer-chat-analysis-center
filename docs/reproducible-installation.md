@@ -68,6 +68,8 @@ npm.cmd ping
 
 ## 依赖审计待办
 
+后续更新：下述初次审计的 7 项已在依赖安全单元中定向修复，当前 Vitest 4.1.11 / uuid 11.1.1 的全部与运行依赖审计均为 0；54 个文件、341 项测试通过。原始发现保留作为记录，详见 [依赖漏洞修复与验收](dependency-security-remediation.md)。当前 `npm ci` 安装 332 个本机适用包，运行测试使用 `npm test`，无需旧 `--minWorkers` 参数。
+
 本次 `npm audit` 返回 7 项：5 moderate、1 high、1 critical。其中 `--omit=dev` 的运行依赖为 ExcelJS/uuid 链路 2 项 moderate；其余属于 Vitest 及其嵌套 Vite/esbuild/mocker/vite-node 工具链。原始报告保留在隔离目录 `audit-all.json`、`audit-production.json`。级别是 npm 审计结果，是否可利用仍需结合调用路径评估。
 
 审计建议涉及 Vitest 大版本升级及 ExcelJS 降级，不能直接执行强制修复。下一交付单元应审查公告与实际暴露面，选择兼容升级/定向替换方案，并回归 Excel 图片导入导出和整套测试。安装成功不代表依赖漏洞已修复。npm 还提示 esbuild 安装脚本许可元数据和若干旧间接包弃用，本次脚本实际已运行成功，未增加泛化的脚本许可。
