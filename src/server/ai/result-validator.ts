@@ -1,4 +1,17 @@
-import type { OutputField } from "../../shared/types";
+import type { AnalysisField, OutputField } from "../../shared/types";
+
+/** Screenshot prose can be returned as an object by multimodal providers.
+ * Preserve it losslessly as text only for free-form image fields. */
+export function validateFieldResult(raw: string, field: AnalysisField) {
+  const checked = validateAnalysisResult(raw, [field]);
+  const value = checked.result[field.key];
+  if (field.imageEnabled && field.type === "string" && !field.options?.length
+    && value !== null && typeof value === "object" && !Array.isArray(value)
+    && Object.keys(value).length > 0) {
+    return validateAnalysisResult(JSON.stringify({ ...checked.result, [field.key]: JSON.stringify(value, null, 2) }), [field]);
+  }
+  return checked;
+}
 
 export function validateAnalysisResult(raw: string, schema: OutputField[]) {
   let text = raw.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "");

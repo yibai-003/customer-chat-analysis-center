@@ -1,9 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { validateAnalysisResult } from "./result-validator";
+import { validateAnalysisResult, validateFieldResult } from "./result-validator";
+import type { AnalysisField } from "../../shared/types";
 
 const schema = [{ key: "reason", label: "原因", type: "string" as const, required: true }];
 
 describe("AI result validation", () => {
+  const imageField: AnalysisField = { id: "refund-reason", sectionId: "refund", key: "reason", label: "截图解析", type: "string", prompt: "", required: true, imageEnabled: true, dependsOn: [], sortOrder: 0, isEnabled: true };
+  it("preserves nested screenshot facts as text while keeping evidence", () => {
+    const facts = { 客户诉求: "退款", 关键词: ["损坏", "补发"], 证据: { 客服确认: true } };
+    const checked = validateFieldResult(JSON.stringify({ reason: facts, evidence: "客服确认损坏" }), imageField);
+    expect(checked.valid).toBe(true);
+    expect(JSON.parse(checked.result.reason as string)).toEqual(facts);
+    expect(checked.result.evidence).toBe("客服确认损坏");
+  });
+  it("does not coerce restricted options, other types, missing values or non-image fields", () => {
+    const raw = '{"reason":{"事实":"退款"}}';
+    expect(validateFieldResult(raw, { ...imageField, imageEnabled: false }).valid).toBe(false);
+    expect(validateFieldResult(raw, { ...imageField, options: ["退款"] }).valid).toBe(false);
+    expect(validateFieldResult(raw, { ...imageField, type: "number" }).valid).toBe(false);
+    expect(validateFieldResult(raw, { ...imageField, type: "object" }).result.reason).toEqual({ 事实: "退款" });
+    for (const invalid of ['{}', '{"reason":123}', '{"reason":[]}', '{"reason":{}}', 'invalid json']) {
+      expect(validateFieldResult(invalid, imageField).valid).toBe(false);
+    }
+  });
   it("accepts a JSON object with required fields", () => {
     expect(validateAnalysisResult('{"reason":"价格原因"}', schema).valid).toBe(true);
   });

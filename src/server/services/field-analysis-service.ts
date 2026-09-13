@@ -5,7 +5,7 @@ import { listFields, topologicalFields } from "./field-config-service";
 import { buildFieldMessages } from "../ai/field-prompt-builder";
 import { callVisionModel } from "../ai/openai-compatible-client";
 import { classifyModelError } from "../ai/openai-compatible-client";
-import { validateAnalysisResult } from "../ai/result-validator";
+import { validateFieldResult } from "../ai/result-validator";
 import { createFieldRun, getFieldResultContext } from "./field-run-service";
 import { matchKnowledgeItem } from "./knowledge/knowledge-match-service";
 import { extractKnowledgeValue } from "./knowledge/knowledge-extract-service";
@@ -113,10 +113,7 @@ async function runAiField(
       }
     }
     if (!response || !model) throw lastError ?? new Error("模型请求失败");
-    const checked = validateAnalysisResult(response.content, [{
-      key: field.key, label: field.label, type: field.type, required: field.required,
-      options: field.options,
-    }]);
+    const checked = validateFieldResult(response.content, field);
     const status = checked.valid ? "completed" : "needs_review";
     const run = createFieldRun({
       recordId, fieldId: field.id, status, result: checked.result,
