@@ -11,7 +11,48 @@
 .import-section-form { margin-top: 18px; }
 .import-section-form select { display: block; width: 100%; min-height: 42px; margin-top: 8px; padding: 8px; border: 2px solid var(--pixel-line); background: #fff; color: var(--pixel-ink); }
 .import-section-form select:focus-visible { outline: 2px solid var(--pixel-ink); outline-offset: 2px; }
-.workspace > .detail { position: static; height: auto; max-height: none; }
+.workspace > .detail {
+  position: relative;
+  isolation: isolate;
+  align-self: stretch;
+  height: auto;
+  min-height: calc(100dvh - var(--workspace-header-height, 76px));
+  max-height: none;
+  background: #f2f1e5;
+}
+.workspace > .detail::before,
+.workspace > .detail::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.workspace > .detail::before {
+  background:
+    linear-gradient(150deg, #dddcc25c, transparent 48%, #bdc79838),
+    url('../assets/botanical/fern-arching.webp') right top / 90% 560px repeat-y;
+  opacity: .14;
+}
+.workspace > .detail::after {
+  background: url('../assets/botanical/fern-fine.webp') left 260px / 75% 600px repeat-y;
+  opacity: .12;
+  animation: detail-foliage-drift 16s ease-in-out infinite alternate;
+}
+.detail > .detail-empty {
+  min-height: calc(100dvh - var(--workspace-header-height, 76px));
+  height: auto;
+  background: transparent;
+}
+.detail > .detail-empty > .botanical-art { width: 100%; max-width: 320px; height: 260px; }
+.detail > .detail-scroll { background: #fbfcf8e8; }
+@keyframes detail-foliage-drift {
+  from { background-position: left 260px; }
+  to { background-position: 8px 274px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace > .detail::after { animation: none; }
+}
 .detail-scroll { max-height: none; overflow: visible; scrollbar-gutter: auto; }
 @media (min-width: 1201px) {
   .workspace { grid-template-columns: 220px minmax(360px, 1fr) 20%; align-items: start; }
