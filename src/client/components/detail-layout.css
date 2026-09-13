@@ -1,4 +1,13 @@
 /* Review workspace: give analysis results room without expanding table columns. */
+.app > .topbar { position: sticky; top: 0; z-index: 3; height: auto; min-height: 76px; flex-wrap: wrap; gap: 12px; padding-block: 12px; }
+@media (min-width: 701px) {
+  .app .workspace > .sidebar { position: sticky; z-index: 4; top: var(--workspace-header-height, 76px); height: calc(100dvh - var(--workspace-header-height, 76px)); min-height: 0; max-height: calc(100dvh - var(--workspace-header-height, 76px)); align-self: start; padding: 18px 10px 12px; }
+  .sidebar-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+  .sidebar > .server-state { flex: 0 0 auto; }
+  .sidebar-scroll .section-title { margin-top: 20px; }
+  .sidebar-scroll .sidebar-botanical { padding-top: 12px; }
+  .sidebar-scroll .sidebar-botanical .botanical-art { height: 96px; }
+}
 .import-section-form { margin-top: 18px; }
 .import-section-form select { display: block; width: 100%; min-height: 42px; margin-top: 8px; padding: 8px; border: 2px solid var(--pixel-line); background: #fff; color: var(--pixel-ink); }
 .import-section-form select:focus-visible { outline: 2px solid var(--pixel-ink); outline-offset: 2px; }
@@ -6,7 +15,6 @@
 .detail-scroll { max-height: none; overflow: visible; scrollbar-gutter: auto; }
 @media (min-width: 1201px) {
   .workspace { grid-template-columns: 220px minmax(360px, 1fr) 20%; align-items: start; }
-  .workspace > .sidebar { min-height: calc(100dvh - 76px); align-self: stretch; }
   .workspace > .content { padding: 32px 24px 48px; }
   .detail-scroll { padding: 24px; }
   .content-header > .task-heading { padding-right: 0; }

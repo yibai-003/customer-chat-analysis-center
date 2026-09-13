@@ -221,6 +221,40 @@ async function openBatchDialog() {
 }
 
 describe("explicit import section and manual refresh", () => {
+  it("immediately displays saved review status and refreshes the task summary", async () => {
+    let saved = false;
+    responseFor = (url, init) => {
+      if (url === "/api/records/page-1") {
+        if (init?.method === "PATCH") saved = true;
+        return jsonResponse({ ...detail(record("page-1", 1)), status: saved ? "completed" : "needs_review", reviewStatus: saved ? "confirmed" : "needs_review" });
+      }
+      if (saved && url === "/api/jobs/job-1") return jsonResponse({ ...jobs[0], completedRecords: 1 });
+      if (saved && url.startsWith("/api/jobs/job-1/records")) return jsonResponse(page([{ ...record("page-1", 1), reviewStatus: "confirmed" }], 120, 1));
+      return defaultResponse(url);
+    };
+    await act(async () => root.render(<App />));
+    await act(async () => host.querySelector<HTMLButtonElement>(".record")!.click());
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".detail-actions button")].find(b => b.textContent === "保存复核")!.click());
+    expect(saved).toBe(true);
+    expect(host.querySelector(".record .review")?.textContent).toBe("已确认");
+    expect(host.querySelector(".detail-head .status")?.textContent).toContain("已完成");
+    expect(host.textContent).toContain("复核结果已保存");
+  });
+
+  it("shows a save error without discarding edited review notes", async () => {
+    const fallback = responseFor;
+    responseFor = (url, init) => url === "/api/records/page-1" && init?.method === "PATCH"
+      ? { ok: false, json: async () => ({ success: false, error: "保存失败测试" }) } as Response : fallback(url, init);
+    await act(async () => root.render(<App />));
+    await act(async () => host.querySelector<HTMLButtonElement>(".record")!.click());
+    const note = host.querySelector<HTMLTextAreaElement>(".detail-scroll > .result-field textarea")!;
+    await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(note, "未保存备注"); note.dispatchEvent(new Event("input", { bubbles: true })); });
+    const button = [...host.querySelectorAll<HTMLButtonElement>(".detail-actions button")].find(b => b.textContent === "保存复核")!;
+    await act(async () => button.click());
+    expect(host.textContent).toContain("保存失败测试");
+    expect(note.value).toBe("未保存备注");
+    expect(button.disabled).toBe(false);
+  });
   const clickText = async (text: string) => {
     const button = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === text);
     expect(button).toBeTruthy();

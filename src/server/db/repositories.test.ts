@@ -129,6 +129,20 @@ describe("job repository", () => {
     expect(getRecord(record.id)?.humanResult).toBeNull();
   });
 
+  it("updates bound record status and task counts on review without changing other section reviews", () => {
+    const job = createJob("review-status.xlsx", "review-status.xlsx", { id: "refund", name: "退款分析" });
+    addRecords(job.id, [{ sheetName: "Sheet1", rowNumber: 2, anchor: {}, sourceFields: {}, imagePath: "test.png" }]);
+    const record = db.prepare("SELECT id FROM records WHERE job_id=?").get(job.id);
+    updateRecord(record.id, { status: "failed", reviewStatus: "needs_review" });
+    const saved = updateRecord(record.id, { sectionId: "refund", status: "completed", reviewStatus: "confirmed", humanResult: { reason: "已复核" }, reviewNote: "确认" });
+    expect(saved).toMatchObject({ status: "completed", reviewStatus: "confirmed", sectionReviews: { refund: { reviewStatus: "confirmed", reviewNote: "确认" } } });
+    expect(getJob(job.id)).toMatchObject({ completedRecords: 1, failedRecords: 0 });
+    expect(listRecordsPage(job.id, { status: "failed" }).total).toBe(0);
+    updateRecord(record.id, { sectionId: "reception", status: "failed", reviewStatus: "needs_review", humanResult: { conclusion: "其他板块" } });
+    expect(getRecord(record.id)).toMatchObject({ status: "completed", reviewStatus: "confirmed" });
+    expect(getJob(job.id)?.completedRecords).toBe(1);
+  });
+
   it("persists import progress and claims an import only once", () => {
     const importJob = createImportJob({
       filename: "large.xlsx",

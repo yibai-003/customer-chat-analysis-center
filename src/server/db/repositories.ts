@@ -304,6 +304,7 @@ export function getRecord(id: string): RecordDetail | undefined {
   return { ...mapRecord(row), jobId: row.job_id, imagePath: row.image_path, humanResult: row.human_result_json ? JSON.parse(row.human_result_json) : null, reviewNote: row.review_note, sectionReviews, analysisRuns: runs, fieldRuns: listFieldRuns(id) };
 }
 export function updateRecord(id: string, input: { sectionId?: string; humanResult?: Record<string, unknown>; reviewStatus?: string; reviewNote?: string; status?: string }) {
+  return db.transaction(() => {
   const row = getRecord(id);
   if (!row) throw new Error("记录不存在");
   if (input.sectionId) {
@@ -318,9 +319,20 @@ export function updateRecord(id: string, input: { sectionId?: string; humanResul
       review_note = COALESCE(?, review_note), status = COALESCE(?, status), updated_at = ? WHERE id = ?`)
       .run(input.humanResult ? json(input.humanResult) : null, input.reviewStatus ?? null, input.reviewNote ?? null, input.status ?? null, now(), id);
   } else {
-    db.prepare("UPDATE records SET updated_at = ? WHERE id = ?").run(now(), id);
+    const job = getJob(row.jobId);
+    if (job?.sectionId === input.sectionId) {
+      db.prepare("UPDATE records SET status = COALESCE(?, status), review_status = COALESCE(?, review_status), updated_at = ? WHERE id = ?")
+        .run(input.status ?? null, input.reviewStatus ?? null, now(), id);
+      db.prepare(`UPDATE jobs SET
+        completed_records = (SELECT COUNT(*) FROM records WHERE job_id = ? AND status = 'completed'),
+        failed_records = (SELECT COUNT(*) FROM records WHERE job_id = ? AND status = 'failed'),
+        updated_at = ? WHERE id = ?`).run(row.jobId, row.jobId, now(), row.jobId);
+    } else {
+      db.prepare("UPDATE records SET updated_at = ? WHERE id = ?").run(now(), id);
+    }
   }
   return getRecord(id)!;
+  })();
 }
 export function createRun(input: { recordId: string; sectionId: string; modelSnapshot: unknown; prompt: string; schema: unknown; result: unknown; rawResponse?: string; errorMessage?: string; durationMs?: number; status: string; usage?: any }): AnalysisRun {
   const id = crypto.randomUUID(), timestamp = now();

@@ -89,6 +89,8 @@ function analysisProgressKey(job: Job) {
 }
 
 export default function App() {
+  const headerRef = useRef<HTMLElement>(null);
+  const [headerHeight, setHeaderHeight] = useState(76);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [job, setJob] = useState<Job | null>(null);
   const [recordPage, setRecordPage] = useState<RecordPage>(EMPTY_RECORD_PAGE);
@@ -104,6 +106,16 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [knowledgeSection, setKnowledgeSection] = useState<AnalysisSection | null>(null);
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return;
+    const measure = () => setHeaderHeight(header.getBoundingClientRect().height || 76);
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    return () => observer.disconnect();
+  }, [knowledgeSection]);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [taskActionBusy, setTaskActionBusy] = useState(false);
   const [importPreview, setImportPreview] = useState<WorkbookPreview | null>(null);
@@ -813,13 +825,17 @@ export default function App() {
     } finally { finishBusyOperation(operation); }
   };
   const saveReview = async () => {
-    if (!selected || !job) return;
+    if (!selected || !job || busy) return;
     const operation = captureJobOperation();
     const operationJobId = job.id;
     const recordId = selected.id;
     const detailRevision = detailRevisionRef.current;
     const sectionReview = currentSection ? selected.sectionReviews?.[currentSection.id] : undefined;
-    await api(`/api/records/${selected.id}`, {
+    const suspension = suspendAnalysisPoll(operationJobId);
+    startBusyOperation(operation);
+    setNotice("");
+    try {
+    const savedRecord = await api<RecordDetail>(`/api/records/${selected.id}`, {
       method: "PATCH", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sectionId: currentSection?.id, humanResult: sectionReview?.humanResult ?? selected.humanResult, reviewStatus: "confirmed", reviewNote: sectionReview?.reviewNote ?? selected.reviewNote, status: "completed" }),
     });
@@ -831,8 +847,18 @@ export default function App() {
     detailRequestIdRef.current += 1;
     detailRevisionRef.current += 1;
     detailDirtyRef.current = false;
+    setSelectedRecord(savedRecord);
+    const nextPage = { ...recordPageRef.current, items: recordPageRef.current.items.map((item) => item.id === recordId ? { ...item, status: savedRecord.status, reviewStatus: savedRecord.reviewStatus } : item) };
+    recordPageRef.current = nextPage;
+    setRecordPage(nextPage);
     const refreshed = await refresh(operationJobId);
     if (refreshed && isJobOperationCurrent(operation)) setNotice("复核结果已保存");
+    } catch (error) {
+      if (isJobOperationCurrent(operation)) setNotice(error instanceof Error ? error.message : "保存复核失败，请重试");
+    } finally {
+      resumeAnalysisPoll(suspension);
+      finishBusyOperation(operation);
+    }
   };
   const handleJobsDeleted = async (deletedIds: string[]) => {
     if (selectedRef.current && deletedIds.includes(selectedRef.current.jobId)) {
@@ -901,8 +927,8 @@ export default function App() {
   }
 
   return (
-    <div className="app">
-      <header className="topbar">
+    <div className="app" style={{ "--workspace-header-height": `${headerHeight}px` } as import("react").CSSProperties}>
+      <header className="topbar" ref={headerRef}>
         <div className="brand"><span className="brand-mark">析</span><div><strong>客服解析中心</strong><small>CHAT INTELLIGENCE WORKSPACE</small></div></div>
         <div className="top-actions">
           <button className="button light" disabled={refreshing || busy || taskActionBusy || Boolean(importJobId)} onClick={() => void refreshProgress()}>{refreshing ? "刷新中..." : "刷新进度"}</button>
@@ -915,11 +941,13 @@ export default function App() {
 
       <main className="workspace">
         <aside className="sidebar">
+          <div className="sidebar-scroll">
           <div className="sidebar-title"><span>解析任务</span><b>{String(jobs.length).padStart(2, "0")}</b></div>
           {!jobs.length ? <div className="side-empty">导入 Excel 文件<br />建立解析任务</div> : <JobList jobs={jobs} sections={sections} selectedId={job?.id} onSelect={(id) => void navigateToJob(id).catch((error) => setNotice(error instanceof Error ? error.message : "切换任务失败"))} onDeleted={handleJobsDeleted} />}
           <div className="sidebar-title section-title"><span>解析板块</span><button onClick={() => setDialog("section")}>管理</button></div>
           <nav>{sections.filter((s) => !s.parentId).map((parent) => <div className="section-group" key={parent.id}><div className="parent">╰ {parent.name}</div>{sections.filter((s) => s.parentId === parent.id).map((child) => <div className={`section-entry ${activeSection === child.id ? "active" : ""}`} key={child.id}><button className="section-select" disabled={Boolean(job?.sectionId && job.sectionId !== child.id)} title={job?.sectionId && job.sectionId !== child.id ? "当前任务已绑定其他解析板块" : undefined} onClick={() => setActiveSection(child.id)}><span />{child.name}<i /></button><button className="section-knowledge" aria-label={`打开${child.name}知识库`} title="知识库" onClick={() => setKnowledgeSection(child)}>知</button></div>)}</div>)}</nav>
           <div className="sidebar-botanical"><BotanicalArt variant="specimen" /><ArtworkCredits /></div>
+          </div>
           <div className="server-state"><i />服务端已连接 <b>LOCAL</b></div>
         </aside>
 
@@ -1033,6 +1061,6 @@ export function Detail({ record, section, fields, setRecord, onAnalyze, onRetry,
       })}</div>
     </div>
     <label className="result-field"><span>复核备注</span><textarea rows={2} value={currentReview?.reviewNote ?? record.reviewNote} onChange={(e) => changeNote(e.target.value)} /></label>
-    <div className="detail-actions"><button className="button dark" disabled={busy} onClick={onAnalyze}>{fieldRuns.length ? "重新解析 →" : "开始解析 →"}</button><button className="button light" onClick={onSave}>保存复核</button></div>
+    <div className="detail-actions"><button className="button dark" disabled={busy} onClick={onAnalyze}>{fieldRuns.length ? "重新解析 →" : "开始解析 →"}</button><button className="button light" disabled={busy} onClick={onSave}>保存复核</button></div>
   </div>;
 }
