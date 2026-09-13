@@ -16,34 +16,44 @@ export function ImportProgressDialog({
   const [job, setJob] = useState<ImportJob | null>(null);
   const [error, setError] = useState("");
   const reported = useRef(false);
+  const completedRef = useRef(onCompleted);
+  completedRef.current = onCompleted;
 
   useEffect(() => {
     let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
+    reported.current = false;
+    setJob(null);
+    setError("");
     const load = async () => {
+      let finished = false;
       try {
-        const response = await fetch(`/api/import-jobs/${importJobId}`);
+        const response = await fetch(`/api/import-jobs/${importJobId}`, { signal: controller.signal });
         const body = await response.json().catch(() => ({}));
         if (!response.ok || body.success === false) throw new Error(body.error || "读取导入进度失败");
         if (!active) return;
         const next = body.data as ImportJob;
         setJob(next);
+        setError("");
+        finished = terminal.has(next.status);
         if (next.status === "completed" && next.jobId && !reported.current) {
           reported.current = true;
-          onCompleted(next.jobId);
+          completedRef.current(next.jobId);
         }
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : "读取导入进度失败");
+      } finally {
+        if (active && !finished) timer = setTimeout(() => void load(), 800);
       }
     };
     void load();
-    const timer = window.setInterval(() => {
-      if (!job || !terminal.has(job.status)) void load();
-    }, 800);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      clearTimeout(timer);
+      controller.abort();
     };
-  }, [importJobId, onCompleted, job]);
+  }, [importJobId]);
 
   const processed = job?.processedImages ?? 0;
   const total = job?.totalImages ?? 0;

@@ -18,6 +18,6 @@ export function ImportPreviewDialog({
     {preview.sectionName && <div className="import-preview-section">当前解析板块：<strong>{preview.sectionName}</strong></div>}
     {preview.missingHeaders.length > 0 && <div className="import-errors"><strong>缺少必需表头</strong><p>{preview.missingHeaders.join("、")}</p></div>}
     {!preview.imageCount && <div className="notice">未识别到嵌入图片，确认导入后仍会被拒绝。</div>}
-    <div className="modal-actions"><button className="button light" onClick={onCancel} disabled={busy}>取消</button><button className="button dark" onClick={onConfirm} disabled={busy || !preview.imageCount || preview.missingHeaders.length > 0}>{busy ? "导入中..." : "确认导入 →"}</button></div>
+    <div className="modal-actions"><button className="button light" onClick={onCancel} disabled={busy}>返回选择板块</button><button className="button dark" onClick={onConfirm} disabled={busy || !preview.imageCount || preview.missingHeaders.length > 0}>{busy ? "导入中..." : "确认导入 →"}</button></div>
   </Modal>;
 }

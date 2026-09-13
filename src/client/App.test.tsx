@@ -220,6 +220,61 @@ async function openBatchDialog() {
   await waitFor(() => expect(host.textContent).toContain("批量解析运行设置"));
 }
 
+describe("explicit import section and manual refresh", () => {
+  const clickText = async (text: string) => {
+    const button = [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === text);
+    expect(button).toBeTruthy();
+    await act(async () => button!.click());
+  };
+  it("uses the explicitly chosen section for both preview and upload, even with another task open", async () => {
+    const refund = { ...section, id: "refund", name: "退款分析" };
+    responseFor = (url, init) => {
+      if (url === "/api/sections") return jsonResponse([section, refund]);
+      if (url === "/api/jobs/import-preview") return jsonResponse({ originalFilename: "new.xlsx", sectionId: "refund", sectionName: "退款分析", sheetCount: 1, imageCount: 1, missingHeaders: [], sheets: [] });
+      if (url === "/api/jobs/import") return jsonResponse({ id: "import-1" });
+      if (url === "/api/import-jobs/import-1") return jsonResponse({ id: "import-1", status: "processing", filename: "new.xlsx", totalImages: 1, processedImages: 0 });
+      return defaultResponse(url);
+    };
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+    const input = host.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", { configurable: true, value: [new File(["sample"], "new.xlsx")] });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(requests).not.toContain("/api/jobs/import-preview");
+    const select = host.querySelector<HTMLSelectElement>('[aria-label="文件所属解析板块"]')!;
+    expect(select.value).toBe("");
+    expect([...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "下一步：预览文件")?.disabled).toBe(true);
+    await act(async () => { select.value = "refund"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    await clickText("下一步：预览文件");
+    expect(host.textContent).toContain("当前解析板块：退款分析");
+    await clickText("确认导入 →");
+    for (const url of ["/api/jobs/import-preview", "/api/jobs/import"]) {
+      const body = requestOptions.find((r) => r.url === url)?.init?.body as FormData;
+      expect(body.get("sectionId")).toBe("refund");
+    }
+    // A second import must start with a fresh, explicit choice.
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    expect(host.querySelector<HTMLSelectElement>('[aria-label="文件所属解析板块"]')?.value).toBe("");
+  });
+
+  it("refreshes job progress without replacing unsaved review notes", async () => {
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+    await act(async () => host.querySelector<HTMLButtonElement>(".record")!.click());
+    const note = host.querySelector<HTMLTextAreaElement>(".detail-scroll > .result-field textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(note, "保留我的复核备注");
+      note.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const before = requests.filter((url) => url === "/api/jobs/job-1").length;
+    responseFor = (url) => url === "/api/jobs/job-1" ? jsonResponse({ ...jobs[0], completedRecords: 12 }) : defaultResponse(url);
+    await clickText("刷新进度");
+    expect(requests.filter((url) => url === "/api/jobs/job-1").length).toBe(before + 1);
+    expect(host.textContent).toContain("任务进度已刷新");
+    expect(host.querySelector<HTMLTextAreaElement>(".detail-scroll > .result-field textarea")!.value).toBe("保留我的复核备注");
+  });
+});
+
 async function confirmBatchAnalysis() {
   await openBatchDialog();
   const confirmButton = [...host.querySelectorAll<HTMLButtonElement>(".analysis-run-modal button")]

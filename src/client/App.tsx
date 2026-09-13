@@ -6,6 +6,7 @@ import { AnalysisRunDialog } from "./components/AnalysisRunDialog";
 import { JobList } from "./components/JobList";
 import { ImagePreviewDialog } from "./components/ImagePreviewDialog";
 import { ImportPreviewDialog } from "./components/ImportPreviewDialog";
+import { ImportSectionDialog } from "./components/ImportSectionDialog";
 import { ImportProgressDialog } from "./components/ImportProgressDialog";
 import { KnowledgeWorkspace } from "./components/knowledge/KnowledgeWorkspace";
 import { ModelConfigDialog } from "./components/ModelConfigDialog";
@@ -107,6 +108,9 @@ export default function App() {
   const [taskActionBusy, setTaskActionBusy] = useState(false);
   const [importPreview, setImportPreview] = useState<WorkbookPreview | null>(null);
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+  const [selectingImportFile, setSelectingImportFile] = useState<File | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshPendingRef = useRef(false);
   const [importJobId, setImportJobId] = useState<string | null>(null);
   const [analysisCapacity, setAnalysisCapacity] = useState<AnalysisCapacity | null>(null);
   const listRequestIdRef = useRef(0);
@@ -579,12 +583,12 @@ export default function App() {
     );
   };
 
-  const commitImport = async (file: File) => {
+  const commitImport = async (file: File, sectionId: string) => {
     const operation = captureJobOperation();
     startBusyOperation(operation); setNotice("");
     try {
       const form = new FormData(); form.append("file", file);
-      if (currentSection) form.append("sectionId", currentSection.id);
+      form.append("sectionId", sectionId);
       const created = await api<ImportJob>("/api/jobs/import", { method: "POST", body: form });
       if (!isJobOperationCurrent(operation)) return;
       pendingImportOriginRef.current = operation;
@@ -595,15 +599,22 @@ export default function App() {
       }
     } finally { finishBusyOperation(operation); }
   };
-  const importFile = async (file: File) => {
+  const importFile = (file: File) => {
+    setNotice("");
+    setImportPreview(null);
+    setPendingImportFile(null);
+    setSelectingImportFile(file);
+  };
+  const previewImport = async (file: File, sectionId: string) => {
     const operation = captureJobOperation();
     startBusyOperation(operation); setNotice("");
     try {
       const form = new FormData(); form.append("file", file);
-      if (currentSection) form.append("sectionId", currentSection.id);
+      form.append("sectionId", sectionId);
       const preview = await api<WorkbookPreview>("/api/jobs/import-preview", { method: "POST", body: form });
       if (!isJobOperationCurrent(operation)) return;
-      setPendingImportFile(file); setImportPreview(preview);
+      setSelectingImportFile(null);
+      setPendingImportFile(file); setImportPreview({ ...preview, sectionId });
     } catch (error) {
       if (isJobOperationCurrent(operation)) {
         setNotice(error instanceof Error ? error.message : "读取 Excel 失败");
@@ -861,6 +872,27 @@ export default function App() {
     }
   };
 
+  const refreshProgress = async () => {
+    if (refreshPendingRef.current) return;
+    refreshPendingRef.current = true;
+    setRefreshing(true);
+    const jobId = activeJobIdRef.current;
+    const generation = activeJobGenerationRef.current;
+    const suspension = jobId ? suspendAnalysisPoll(jobId) : null;
+    try {
+      const updated = await refresh(jobId ?? undefined);
+      if (updated && mountedRef.current && activeJobIdRef.current === jobId && activeJobGenerationRef.current === generation) {
+        setNotice("任务进度已刷新");
+      }
+    } catch (error) {
+      if (mountedRef.current && activeJobIdRef.current === jobId) setNotice(error instanceof Error ? error.message : "刷新失败，请重试");
+    } finally {
+      resumeAnalysisPoll(suspension);
+      refreshPendingRef.current = false;
+      if (mountedRef.current) setRefreshing(false);
+    }
+  };
+
   if (knowledgeSection) {
     return <KnowledgeWorkspace
       section={knowledgeSection}
@@ -873,7 +905,8 @@ export default function App() {
       <header className="topbar">
         <div className="brand"><span className="brand-mark">析</span><div><strong>客服解析中心</strong><small>CHAT INTELLIGENCE WORKSPACE</small></div></div>
         <div className="top-actions">
-          <label className="button primary">＋ 导入 Excel<input hidden type="file" accept=".xlsx" onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])} /></label>
+          <button className="button light" disabled={refreshing || busy || taskActionBusy || Boolean(importJobId)} onClick={() => void refreshProgress()}>{refreshing ? "刷新中..." : "刷新进度"}</button>
+          <label className="button primary">＋ 导入 Excel<input hidden type="file" accept=".xlsx" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) importFile(file); }} /></label>
           <button className="button ghost" onClick={() => setDialog("section")}>板块配置</button>
           <button className="button ghost" onClick={() => setDialog("model")}>模型配置</button>
           <button className="button export" disabled={!job || !currentSection} onClick={() => job && currentSection && (window.location.href = `/api/jobs/${job.id}/export?sections=${currentSection.id}`)}>导出结果 ↗</button>
@@ -896,7 +929,7 @@ export default function App() {
             {job && <div className="content-actions"><select aria-label="按记录状态筛选" value={filter} onChange={(e) => void changeFilter(e.target.value)}><option value="all">全部状态</option><option value="pending">待解析</option><option value="completed">已完成</option><option value="needs_review">需复核</option><option value="failed">失败</option></select>{job.status === "processing" && <><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("pause")}>暂停</button><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("cancel")}>取消</button></>}{job.status === "failed" && <button className="button light" disabled={taskActionBusy} onClick={() => taskAction("retry-failed")}>重试失败</button>}<button className="button dark" disabled={busy || taskActionBusy || job.status === "processing" || job.status === "cancelled"} onClick={() => void requestBatchAnalysis()}>{busy ? "解析中..." : job.status === "paused" ? "继续解析 →" : "批量解析 →"}</button></div>}
           </div>
           {notice && <div className="notice">{notice}</div>}
-          {!job ? <div className="blank"><div className="upload-art"><b>XLSX</b><i>＋</i></div><h2>把聊天记录带进来</h2><p>支持带嵌入图片和辅助字段的 .xlsx 文件</p><label className="button primary large">选择文件<input hidden type="file" accept=".xlsx" onChange={(e) => e.target.files?.[0] && importFile(e.target.files[0])} /></label></div> :
+          {!job ? <div className="blank"><div className="upload-art"><b>XLSX</b><i>＋</i></div><h2>把聊天记录带进来</h2><p>支持带嵌入图片和辅助字段的 .xlsx 文件</p><label className="button primary large">选择文件<input hidden type="file" accept=".xlsx" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) importFile(file); }} /></label></div> :
             <div className="record-list">
               <div className="list-head"><span />记录<span>来源字段</span><span>解析状态</span><span>复核</span><span>操作</span></div>
               {recordPage.items.map((record, index) => <button key={record.id} className={`record ${selected?.id === record.id ? "active" : ""}`} onClick={() => job && void requestRecordDetail(record.id, job.id, { explicit: true })}>
@@ -926,7 +959,8 @@ export default function App() {
       {dialog === "section" && <SectionConfigDialog sections={sections} close={() => setDialog(null)} saved={() => { setDialog(null); refresh(); }} />}
       {analysisCapacity && <AnalysisRunDialog capacity={analysisCapacity} onCancel={() => setAnalysisCapacity(null)} onConfirm={(options) => void startBatchAnalysis(options)} />}
       {previewImage && <ImagePreviewDialog {...previewImage} onClose={() => setPreviewImage(null)} />}
-      {importPreview && pendingImportFile && <ImportPreviewDialog preview={importPreview} busy={busy} onCancel={() => { setImportPreview(null); setPendingImportFile(null); }} onConfirm={async () => { const file = pendingImportFile; setImportPreview(null); setPendingImportFile(null); await commitImport(file); }} />}
+      {selectingImportFile && <ImportSectionDialog file={selectingImportFile} sections={sections} busy={busy} error={notice} onCancel={() => setSelectingImportFile(null)} onConfirm={(sectionId) => void previewImport(selectingImportFile, sectionId)} />}
+      {importPreview && pendingImportFile && <ImportPreviewDialog preview={importPreview} busy={busy} onCancel={() => { const file = pendingImportFile; setImportPreview(null); setPendingImportFile(null); setSelectingImportFile(file); }} onConfirm={async () => { const file = pendingImportFile; const sectionId = importPreview.sectionId; if (!sectionId) return; setImportPreview(null); setPendingImportFile(null); await commitImport(file, sectionId); }} />}
       {importJobId && <ImportProgressDialog importJobId={importJobId} onCompleted={handleImportCompleted} onClose={() => setImportJobId(null)} />}
     </div>
   );

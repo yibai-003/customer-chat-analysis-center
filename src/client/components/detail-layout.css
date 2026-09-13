@@ -1,4 +1,7 @@
 /* Review workspace: give analysis results room without expanding table columns. */
+.import-section-form { margin-top: 18px; }
+.import-section-form select { display: block; width: 100%; min-height: 42px; margin-top: 8px; padding: 8px; border: 2px solid var(--pixel-line); background: #fff; color: var(--pixel-ink); }
+.import-section-form select:focus-visible { outline: 2px solid var(--pixel-ink); outline-offset: 2px; }
 .workspace > .detail { position: static; height: auto; max-height: none; }
 .detail-scroll { max-height: none; overflow: visible; scrollbar-gutter: auto; }
 @media (min-width: 1201px) {
