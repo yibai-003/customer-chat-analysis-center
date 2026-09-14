@@ -1,6 +1,7 @@
 import path from "node:path";
 import crypto from "node:crypto";
 import ExcelJS from "exceljs";
+import { knowledgeColumns, parseConfiguration } from "../../security/configuration-input";
 import { db } from "../../db/client";
 import type {
   KnowledgeColumn,
@@ -129,7 +130,7 @@ function normalizeColumns(
       throw new Error(`父列不存在：${column.requiredParent}`);
     }
   }
-  return columns;
+  return parseConfiguration(knowledgeColumns, columns);
 }
 
 async function inspectWorkbook(

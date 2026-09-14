@@ -1,6 +1,7 @@
 import { assertRunOwnership, assertRecordOwnership, currentRunToken } from "../services/run-ownership";
 import { cancelAnalysis } from "../services/analysis-cancellation";
 import crypto from "node:crypto";
+import { sectionInput, parseConfiguration } from "../security/configuration-input";
 import { db } from "./client";
 import type { AnalysisSection, ImportJob, Job, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ModelConfig, ImportJobStatus, RecordStatus } from "../../shared/types";
 import { listFieldRuns } from "../services/field-run-service";
@@ -45,6 +46,15 @@ export function mergeSectionSourceFields(sectionId: string, headers: string[]) {
     .run(JSON.stringify(merged), now(), sectionId);
 }
   export function upsertSection(input: Partial<AnalysisSection> & { name: string; prompt: string }) {
+    input = parseConfiguration(sectionInput, input);
+    const seen = new Set(input.id ? [input.id] : []);
+    let parentId = input.parentId;
+    while (parentId) {
+      if (seen.has(parentId)) throw new Error("板块父子关系存在循环");
+      const parent = getSection(parentId);
+      if (!parent) throw new Error("父板块不存在");
+      seen.add(parentId); parentId = parent.parentId;
+    }
     if (!input || typeof input.name !== "string" || input.name.trim().length < 1 || input.name.length > 120) throw new Error("板块名称长度必须为 1-120 个字符");
     if (typeof input.prompt !== "string" || input.prompt.length > 20_000) throw new Error("板块提示词过长或格式无效");
     if (input.parentId !== undefined && input.parentId !== null && typeof input.parentId !== "string") throw new Error("父板块 ID 无效");
@@ -52,11 +62,12 @@ export function mergeSectionSourceFields(sectionId: string, headers: string[]) {
     if (input.outputSchema !== undefined && (!Array.isArray(input.outputSchema) || input.outputSchema.length > 200)) throw new Error("输出字段数量超过限制");
     if (input.sortOrder !== undefined && (!Number.isSafeInteger(input.sortOrder) || input.sortOrder < 0 || input.sortOrder > 100_000)) throw new Error("板块排序值无效");
   const id = input.id ?? crypto.randomUUID(), timestamp = now();
+  const enabled = input.isEnabled ?? getSection(id)?.isEnabled ?? true;
   db.prepare(`INSERT INTO analysis_sections (id,parent_id,name,prompt,output_schema_json,source_fields_json,sort_order,is_enabled,image_enabled,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,?,1,?,?,?) ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,name=excluded.name,prompt=excluded.prompt,
+    VALUES (?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET parent_id=excluded.parent_id,name=excluded.name,prompt=excluded.prompt,
     output_schema_json=excluded.output_schema_json,source_fields_json=excluded.source_fields_json,sort_order=excluded.sort_order,is_enabled=excluded.is_enabled,
     image_enabled=excluded.image_enabled,updated_at=excluded.updated_at`)
-    .run(id, input.parentId ?? null, input.name, input.prompt, json(input.outputSchema ?? []), json(input.sourceFields ?? []), input.sortOrder ?? 0, input.imageEnabled === false ? 0 : 1, timestamp, timestamp);
+    .run(id, input.parentId ?? null, input.name, input.prompt, json(input.outputSchema ?? []), json(input.sourceFields ?? []), input.sortOrder ?? 0, enabled ? 1 : 0, input.imageEnabled === false ? 0 : 1, timestamp, timestamp);
   return getSection(id);
 }
 export function deleteSection(id: string) { db.prepare("DELETE FROM analysis_sections WHERE id = ?").run(id); }

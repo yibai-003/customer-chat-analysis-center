@@ -9,8 +9,8 @@ import type { ModelConfig } from "../../shared/types";
 
 const inputSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  baseUrl: z.string().url(),
-  apiKey: z.string().optional(),
+  baseUrl: z.string().max(2048).url().refine(value => { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash; }, "Base URL 必须为无账号、查询参数或片段的 HTTP(S) 地址"),
+  apiKey: z.string().max(4096).optional(),
   model: z.string().trim().min(1).max(200),
   supportsVision: z.boolean().default(true),
   temperature: z.number().min(0).max(2).default(0.2),

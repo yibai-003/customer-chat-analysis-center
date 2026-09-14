@@ -23,6 +23,8 @@ npm run dev
 
 服务端输入边界见 [服务端输入约束](docs/server-input-validation.md)。
 
+配置 Schema 和热点技术失败/业务复核区分见 [配置与热点错误分类](docs/configuration-and-hot-topic-validation.md)。
+
 XLSX 关系、CRC 和图片资源限制见 [XLSX 资源校验](docs/xlsx-resource-validation.md)。
 
 上传与后台 Excel 导入共享未写入空间预算，避免并发重复占用余量；见 [共享磁盘预留](docs/shared-disk-reservations.md)。

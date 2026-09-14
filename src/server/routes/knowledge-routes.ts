@@ -1,4 +1,5 @@
 import { validateXlsx, UploadError } from "../security/upload-safety";
+import { knowledgeColumns, parseConfiguration } from "../security/configuration-input";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -46,12 +47,12 @@ function parseColumns(value: unknown): KnowledgeColumn[] | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (Array.isArray(value)) {
     if (value.length > 200) throw new Error("列映射数量超过限制");
-    return value as KnowledgeColumn[];
+    return parseConfiguration(knowledgeColumns, value);
   }
   if (typeof value !== "string") throw new Error("列映射格式无效");
   const parsed = JSON.parse(value) as unknown;
   if (!Array.isArray(parsed) || parsed.length > 200) throw new Error("列映射格式无效或数量过多");
-  return parsed as KnowledgeColumn[];
+  return parseConfiguration(knowledgeColumns, parsed);
 }
 
 function normalizePreviewColumns(

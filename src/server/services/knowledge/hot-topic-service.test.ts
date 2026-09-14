@@ -46,6 +46,14 @@ beforeEach(() => {
 });
 
 describe("hot-topic capture", () => {
+  it.each(["401 unauthorized", "CERT_HAS_EXPIRED", "network error", "429 rate limit", "invalid protocol"])("propagates %s as failed through record aggregation without new knowledge", async message => {
+    vi.mocked(callVisionModel).mockRejectedValue(new Error(message));
+    const result = await analyzeRecordFields("record-one", "hot-topic");
+    expect(result.failed).toBe(1); expect(result.needsReview).toBe(0);
+    expect(db.prepare("SELECT status FROM records WHERE id='record-one'").get().status).toBe("failed");
+    expect(db.prepare("SELECT status FROM analysis_field_runs WHERE record_id='record-one'").get().status).toBe("failed");
+    expect(getKnowledgeBase(HOT_TOPIC_BASE_ID)).toBeUndefined();
+  });
   it("keeps successful analysis completed when only catalog export fails", async () => {
     const exportSnapshot = vi.fn(() => { throw new Error("snapshot unavailable"); });
     setHotTopicKnowledgeSync({ assertUnchanged: vi.fn(), export: exportSnapshot } as any);
@@ -136,7 +144,7 @@ describe("hot-topic capture", () => {
     vi.mocked(callVisionModel).mockResolvedValueOnce(extract());
     if (kind === "network") vi.mocked(callVisionModel).mockRejectedValueOnce(new Error("model unavailable"));
     else vi.mocked(callVisionModel).mockResolvedValueOnce(response({ decision: kind === "invalid" ? "match" : "review", itemId: kind === "invalid" ? "forged-id" : "" }));
-    expect((await capture()).status).toBe("needs_review");
+    expect((await capture()).status).toBe(kind === "review" ? "needs_review" : "failed");
     expect(getKnowledgeBase(HOT_TOPIC_BASE_ID)).toBeUndefined();
     expect(db.prepare("SELECT COUNT(*) n FROM hot_topic_record_questions").get().n).toBe(0);
   });
@@ -146,7 +154,7 @@ describe("hot-topic capture", () => {
     vi.mocked(callVisionModel).mockResolvedValueOnce(response({ questions: [
       { question: "订单何时发货？", evidence }, { question: "可以开发票吗？", evidence },
     ] })).mockResolvedValueOnce(response({ questions: [{ question: "会不会漏水？", evidence: "不存在的原文" }] }));
-    expect((await capture()).status).toBe("needs_review");
+    expect((await capture()).status).toBe("failed");
     expect((await capture()).status).toBe("needs_review");
     expect(getKnowledgeBase(HOT_TOPIC_BASE_ID)).toBeUndefined();
   });
@@ -176,7 +184,7 @@ describe("hot-topic capture", () => {
     vi.mocked(callVisionModel).mockResolvedValue(extract());
     db.exec(`CREATE TEMP TRIGGER reject_hot_run BEFORE INSERT ON analysis_field_runs
       WHEN NEW.status='completed' BEGIN SELECT RAISE(ABORT,'simulated disk failure'); END;`);
-    try { expect((await capture()).status).toBe("needs_review"); }
+    try { expect((await capture()).status).toBe("failed"); }
     finally { db.exec("DROP TRIGGER reject_hot_run"); }
     expect(getKnowledgeBase(HOT_TOPIC_BASE_ID)).toBeUndefined();
     expect(db.prepare("SELECT COUNT(*) n FROM hot_topic_record_questions").get().n).toBe(0);

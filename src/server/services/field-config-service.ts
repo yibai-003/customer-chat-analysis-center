@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { fieldInput, parseConfiguration } from "../security/configuration-input";
 import { db } from "../db/client";
 import type { AnalysisField, AnalysisFieldInput, AnalysisFieldType } from "../../shared/types";
 import { isHotTopicField } from "../../shared/hot-topic";
@@ -125,6 +126,7 @@ export function topologicalFields(fields: AnalysisFieldLike[], sourceFields: str
 }
 
 export function upsertField(input: AnalysisFieldInput): AnalysisField {
+  input = parseConfiguration(fieldInput, input);
   if (!input || typeof input.sectionId !== "string" || !input.sectionId.trim()) throw new Error("板块 ID 无效");
   if (typeof input.key !== "string" || !/^\p{L}[\p{L}\p{N}_-]{0,63}$/u.test(input.key)) throw new Error("字段 Key 必须以字母开头且只包含字母、数字、下划线或短横线（最多 64 位）");
   if (typeof input.label !== "string" || input.label.trim().length < 1 || input.label.length > 120) throw new Error("字段名称长度必须为 1-120 个字符");
@@ -136,6 +138,7 @@ export function upsertField(input: AnalysisFieldInput): AnalysisField {
   const section = db.prepare("SELECT prompt, image_enabled, source_fields_json FROM analysis_sections WHERE id = ?").get(input.sectionId) as any;
   if (!section) throw new Error("板块不存在");
   const existing = input.id ? getField(input.id) : undefined;
+  if (existing && existing.sectionId !== input.sectionId) throw new Error("字段不能移动到其他板块");
   const executionType = input.executionType ?? existing?.executionType ?? "ai";
   if (input.knowledgeSyncEnabled && !isHotTopicField({ ...input, executionType })) {
     throw new Error("知识沉淀仅支持热点话题板块的高频问题 AI 字段");
@@ -183,6 +186,7 @@ export function upsertField(input: AnalysisFieldInput): AnalysisField {
   );
   if (errors.length) throw new Error(errors.join("；"));
   const timestamp = now();
+  topologicalFields([...listFields(input.sectionId).filter(item => item.id !== field.id), field], JSON.parse(section.source_fields_json || "[]"));
   db.prepare(`INSERT INTO analysis_fields
     (id,section_id,key,label,field_type,prompt,options_json,output_column,is_required,image_enabled,depends_on_json,sort_order,
      execution_type,export_enabled,knowledge_base_id,candidate_limit,match_field_key,knowledge_column,knowledge_sync_enabled,knowledge_capture_limit,is_enabled,created_at,updated_at)

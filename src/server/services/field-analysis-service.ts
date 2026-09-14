@@ -269,7 +269,7 @@ async function runFieldWithinBudget(
 ) {
   if (isHotTopicField(field) && field.knowledgeSyncEnabled) {
     const run = await captureHotTopicQuestions({ recordId, field, dependencies: dependencyValues(field, record.sourceFields, context) });
-    return { result: run.result, status: run.status === "completed" ? "completed" as const : "needs_review" as const, errorMessage: run.errorMessage, run };
+    return { result: run.result, status: run.status === "completed" ? "completed" as const : run.status === "failed" ? "failed" as const : "needs_review" as const, errorMessage: run.errorMessage, run };
   }
   switch (field.executionType ?? "ai") {
     case "knowledge_match":

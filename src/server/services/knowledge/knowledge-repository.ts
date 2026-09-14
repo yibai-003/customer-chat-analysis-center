@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { knowledgeBaseInput, knowledgeItemInput, parseConfiguration } from "../../security/configuration-input";
 import fs from "node:fs";
 import path from "node:path";
 import { db } from "../../db/client";
@@ -94,6 +95,7 @@ export function getKnowledgeBase(id: string): KnowledgeBase | undefined {
 }
 
 export function upsertKnowledgeBase(input: KnowledgeBaseInput): KnowledgeBase {
+  input = parseConfiguration(knowledgeBaseInput, input);
   const existing = input.id ? getKnowledgeBase(input.id) : undefined;
   if (existing && existing.sectionId !== input.sectionId) {
     throw new Error("知识库不能移动到其他板块");
@@ -205,6 +207,8 @@ interface KnowledgeItemRecordInput extends KnowledgeItemInput {
 }
 
 export function saveKnowledgeItemRecord(input: KnowledgeItemRecordInput): KnowledgeItem {
+  const validated = parseConfiguration(knowledgeItemInput, input);
+  input = { ...input, ...validated };
   if (!db.inTransaction) {
     throw new Error("知识条目和 FTS 必须在同一事务中更新");
   }
