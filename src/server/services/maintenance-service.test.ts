@@ -93,7 +93,7 @@ describe("offline reference-aware maintenance", () => {
   it("does not create missing databases or migrate old ones", async () => {
     await expect(maintainFiles({ ...options, databasePath: path.join(root, "missing/app.db") })).rejects.toThrow("不存在");
     expect(fs.existsSync(path.join(root, "missing"))).toBe(false);
-    database.exec("DELETE FROM schema_migrations WHERE version=4");
+    database.exec("DELETE FROM schema_migrations WHERE version=5");
     const before = fs.readFileSync(options.databasePath);
     await expect(maintainFiles(options)).rejects.toThrow("版本");
     expect(fs.readFileSync(options.databasePath)).toEqual(before);

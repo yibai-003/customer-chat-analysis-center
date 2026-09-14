@@ -156,15 +156,26 @@ export class KnowledgeSync {
   readonly file: string;
   readonly stateFile: string;
   private baseline?: string;
+  private outbox() {
+    if (!db.prepare("SELECT name FROM sqlite_master WHERE name='knowledge_sync_outbox'").get()) return undefined;
+    return db.prepare("SELECT * FROM knowledge_sync_outbox WHERE id=1").get() as {
+      revision: number; exported_revision: number; scope: string | null; baseline_hash: string | null;
+      pending_hash: string | null; last_error: string | null; exported_at: string | null;
+    } | undefined;
+  }
   constructor(file = path.resolve("knowledge/catalog.json"), stateFile = path.join(config.dataDir, "knowledge-sync-state.json")) {
     this.file = file; this.stateFile = stateFile;
     if (fs.existsSync(stateFile)) this.baseline = z.object({ hash: z.string() }).parse(JSON.parse(fs.readFileSync(stateFile, "utf8"))).hash;
+    const state = this.outbox();
+    if (state?.scope === path.resolve(this.file) && state.baseline_hash) this.baseline = state.baseline_hash;
   }
   private read() { return validateCatalog(JSON.parse(fs.readFileSync(this.file, "utf8"))); }
   private remember(catalog: Catalog) {
     const hash = digest(catalog);
     atomicWrite(this.stateFile, JSON.stringify({ hash }) + "\n");
     this.baseline = hash;
+    db.prepare(`UPDATE knowledge_sync_outbox SET exported_revision=revision,scope=?,baseline_hash=?,
+      pending_hash=NULL,last_error=NULL,exported_at=? WHERE id=1`).run(path.resolve(this.file), hash, new Date().toISOString());
   }
   private backup() {
     const folder = path.join(config.dataDir, "backups");
@@ -174,6 +185,14 @@ export class KnowledgeSync {
   }
   initialize(freshDatabase: boolean) {
     const local = captureCatalog();
+    const state = this.outbox();
+    if (!freshDatabase && state?.scope === path.resolve(this.file) && state.baseline_hash
+      && (state.revision !== state.exported_revision || state.pending_hash)) {
+      // Keep a recoverable export failure available through the UI. Conflicts still block startup.
+      try { this.assertUnchanged(); } catch { throw new Error("知识库同步冲突：仓库快照和本地数据库均有修改，数据未覆盖。"); }
+      try { this.export(); } catch { /* durable pending status is retained */ }
+      return;
+    }
     if (!fs.existsSync(this.file)) {
       if (this.baseline) throw new Error("知识库快照被删除，请恢复 knowledge/catalog.json 后重启。");
       this.export(); return;
@@ -187,7 +206,11 @@ export class KnowledgeSync {
     throw new Error("知识库同步冲突：仓库快照和本地数据库均有修改。数据未覆盖，请先备份并合并 knowledge/catalog.json。");
   }
   assertUnchanged() {
-    if (this.baseline && (!fs.existsSync(this.file) || digest(this.read()) !== this.baseline)) {
+    const state = this.outbox();
+    const baseline = state?.scope === path.resolve(this.file) ? state.baseline_hash ?? this.baseline : this.baseline;
+    const incoming = fs.existsSync(this.file) ? digest(this.read()) : undefined;
+    const pending = state?.scope === path.resolve(this.file) ? state.pending_hash : undefined;
+    if (baseline && incoming !== baseline && (!pending || incoming !== pending)) {
       throw new Error("仓库知识库已变更，请重启服务完成恢复后再编辑。");
     }
   }
@@ -202,9 +225,23 @@ export class KnowledgeSync {
     this.assertUnchanged();
     const catalog = captureCatalog();
     const contents = serialize(catalog);
-    if (!fs.existsSync(this.file) || fs.readFileSync(this.file, "utf8") !== contents) atomicWrite(this.file, contents);
-    this.remember(catalog);
+    db.prepare("UPDATE knowledge_sync_outbox SET scope=?,pending_hash=? WHERE id=1").run(path.resolve(this.file), digest(catalog));
+    try {
+      if (!fs.existsSync(this.file) || fs.readFileSync(this.file, "utf8") !== contents) atomicWrite(this.file, contents);
+      this.remember(catalog);
+    } catch (error) {
+      db.prepare("UPDATE knowledge_sync_outbox SET last_error='EXPORT_FAILED' WHERE id=1").run();
+      throw error;
+    }
     return { file: this.file, bases: catalog.bases.length, items: catalog.items.length };
+  }
+  status() {
+    const state = this.outbox();
+    let conflict = false;
+    try { this.assertUnchanged(); } catch { conflict = true; }
+    return { state: conflict ? "conflict" : state?.revision !== state?.exported_revision || state?.pending_hash ? "pending" : "synced",
+      localSaved: true, snapshotReady: !conflict && state?.revision === state?.exported_revision && !state?.pending_hash,
+      github: "not_checked", lastExportedAt: state?.exported_at ?? null, error: state?.last_error ?? null };
   }
 }
 

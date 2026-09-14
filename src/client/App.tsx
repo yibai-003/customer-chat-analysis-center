@@ -12,6 +12,7 @@ import { ModelConfigDialog } from "./components/ModelConfigDialog";
 import { RecordPager } from "./components/RecordPager";
 import { SectionConfigDialog } from "./components/SectionConfigDialog";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
+import { KnowledgeSyncStatus } from "./components/KnowledgeSyncStatus";
 
 const labels: Record<string, string> = {
   pending: "待解析", processing: "解析中", completed: "已完成",
@@ -113,6 +114,7 @@ export default function App() {
             <div className="task-heading"><BotanicalArt variant="leaves" /><small>ANALYSIS QUEUE</small><h1>{job?.originalFilename ?? "等待导入解析文件"}</h1><p>{job ? `共 ${job.totalRecords} 条记录，当前板块：${currentSection?.name}` : "导入包含聊天截图的 Excel，开始客服分析"}</p>{job && <AnalysisProgress job={job} />}</div>
             {job && <div className="content-actions"><select aria-label="按记录状态筛选" value={filter} onChange={(e) => void changeFilter(e.target.value)}><option value="all">全部状态</option><option value="pending">待解析</option><option value="completed">已完成</option><option value="needs_review">需复核</option><option value="failed">失败</option></select>{job.status === "processing" && <><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("pause")}>暂停</button><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("cancel")}>取消</button></>}{job.status === "failed" && <button className="button light" disabled={taskActionBusy} onClick={() => taskAction("retry-failed")}>重试失败</button>}<button className="button dark" disabled={busy || taskActionBusy || job.status === "processing" || job.status === "cancelled"} onClick={() => void requestBatchAnalysis()}>{busy ? "解析中..." : job.status === "paused" ? "继续解析 →" : "批量解析 →"}</button></div>}
           </div>
+          <KnowledgeSyncStatus />
           {notice && <div className="notice">{notice}</div>}
           {!job ? <div className="blank"><div className="upload-art"><b>XLSX</b><i>＋</i></div><h2>把聊天记录带进来</h2><p>支持带嵌入图片和辅助字段的 .xlsx 文件</p><label className="button primary large">选择文件<input hidden type="file" accept=".xlsx" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) importFile(file); }} /></label></div> :
             <div className="record-list">

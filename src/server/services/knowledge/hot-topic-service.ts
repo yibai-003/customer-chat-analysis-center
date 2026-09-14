@@ -227,11 +227,7 @@ function captureHotTopicWithinBudget(input: Parameters<typeof captureHotTopicQue
         });
       })();
       try { knowledgeSync?.export(); }
-      catch (error) {
-        const errorMessage = `解析和知识词条已保存，知识库快照同步失败：${error instanceof Error ? error.message : error}`;
-        db.prepare("UPDATE analysis_field_runs SET status = 'needs_review', error_message = ? WHERE id = ?").run(errorMessage, run.id);
-        return { ...run, status: "needs_review", errorMessage };
-      }
+      catch { /* Export has a durable pending marker; do not rerun a successful paid analysis. */ }
       return run;
     } catch (error) {
       assertAnalysisActive();

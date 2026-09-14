@@ -7,6 +7,7 @@ import { KnowledgeBaseList } from "./KnowledgeBaseList";
 import { KnowledgeImportDialog } from "./KnowledgeImportDialog";
 import { KnowledgeItemList } from "./KnowledgeItemList";
 import { KnowledgeSearchTest } from "./KnowledgeSearchTest";
+import { KnowledgeSyncStatus } from "../KnowledgeSyncStatus";
 
 type KnowledgeTab = "content" | "items" | "search";
 const knowledgeTabs: Array<[KnowledgeTab, string]> = [
@@ -126,6 +127,7 @@ export function KnowledgeWorkspace({
     </nav>
 
     <main className="knowledge-main">
+      <KnowledgeSyncStatus />
       {notice && <div className="notice">{notice}</div>}
       {error && <div className="form-error">{error}</div>}
       <section

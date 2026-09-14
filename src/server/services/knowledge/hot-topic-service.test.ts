@@ -46,6 +46,19 @@ beforeEach(() => {
 });
 
 describe("hot-topic capture", () => {
+  it("keeps successful analysis completed when only catalog export fails", async () => {
+    const exportSnapshot = vi.fn(() => { throw new Error("snapshot unavailable"); });
+    setHotTopicKnowledgeSync({ assertUnchanged: vi.fn(), export: exportSnapshot } as any);
+    vi.mocked(callVisionModel).mockResolvedValueOnce(extract());
+    const run = await capture();
+    expect(run.status).toBe("completed");
+    expect(db.prepare("SELECT status FROM analysis_field_runs WHERE id=?").get(run.id).status).toBe("completed");
+    expect(listKnowledgeItems(HOT_TOPIC_BASE_ID).items).toHaveLength(1);
+    expect(exportSnapshot).toHaveBeenCalledTimes(1);
+    expect(callVisionModel).toHaveBeenCalledTimes(1);
+    const state = db.prepare("SELECT revision,exported_revision FROM knowledge_sync_outbox").get();
+    expect(state.revision).toBeGreaterThan(state.exported_revision);
+  });
   it("cancels queued capture immediately and prevents late extraction from creating knowledge", async () => {
     let deliver!: (value: ReturnType<typeof extract>) => void;
     let started!: () => void;

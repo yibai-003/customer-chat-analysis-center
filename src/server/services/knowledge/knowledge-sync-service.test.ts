@@ -1,7 +1,7 @@
 ﻿import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../../db/client";
 import { captureCatalog, KnowledgeSync, restoreCatalog } from "./knowledge-sync-service";
 import { upsertKnowledgeBase, upsertKnowledgeItem, deleteKnowledgeBase } from "./knowledge-repository";
@@ -18,7 +18,7 @@ beforeEach(() => {
   directory = fs.mkdtempSync(path.join(os.tmpdir(), "knowledge-sync-test-"));
   sync = new KnowledgeSync(path.join(directory, "catalog.json"), path.join(directory, "state.json"));
 });
-afterEach(() => fs.rmSync(directory, { recursive: true, force: true }));
+afterEach(() => { vi.restoreAllMocks(); fs.rmSync(directory, { recursive: true, force: true }); });
 
 function seedKnowledge() {
   const base = upsertKnowledgeBase({
@@ -31,6 +31,67 @@ function seedKnowledge() {
 }
 
 describe("portable knowledge catalog", () => {
+  it("persists pending state with SQL writes, rolls it back with failed writes and recovers after restart", () => {
+    sync.initialize(false);
+    const before = db.prepare("SELECT revision FROM knowledge_sync_outbox").get().revision;
+    expect(() => db.transaction(() => { db.prepare("UPDATE analysis_sections SET name='rollback' WHERE id='chat'").run(); throw new Error("rollback"); })()).toThrow();
+    expect(db.prepare("SELECT revision FROM knowledge_sync_outbox").get().revision).toBe(before);
+    db.prepare("UPDATE analysis_sections SET name='saved before crash' WHERE id='chat'").run();
+    expect(sync.status().state).toBe("pending");
+    const restarted = new KnowledgeSync(sync.file, sync.stateFile);
+    restarted.initialize(false);
+    expect(restarted.status().state).toBe("synced");
+    expect(JSON.parse(fs.readFileSync(sync.file, "utf8")).sections.find((s: any) => s.id === "chat").name).toBe("saved before crash");
+  });
+  it("retries a failed file export after restart without replaying the mutation", () => {
+    seedKnowledge(); sync.initialize(false); const original = fs.readFileSync(sync.file, "utf8");
+    db.prepare("UPDATE knowledge_items SET values_json=? WHERE id='portable-item'").run(JSON.stringify({ 原因: "新原因" }));
+    vi.spyOn(fs, "renameSync").mockImplementation(() => { throw new Error("disk full"); });
+    expect(() => sync.export()).toThrow("disk full");
+    expect(sync.status()).toMatchObject({ state: "pending", error: "EXPORT_FAILED" });
+    expect(fs.readFileSync(sync.file, "utf8")).toBe(original);
+    const restarted = new KnowledgeSync(sync.file, sync.stateFile); restarted.initialize(false);
+    expect(restarted.status().state).toBe("pending");
+    vi.restoreAllMocks(); restarted.export();
+    expect(restarted.status().state).toBe("synced"); expect(captureCatalog().items).toHaveLength(1);
+    expect(captureCatalog().items[0].values_json).toContain("新原因");
+  });
+  it("recovers when the catalog was written but the state file failed, without false conflict", () => {
+    sync.initialize(false); db.prepare("UPDATE analysis_sections SET name='new value' WHERE id='chat'").run();
+    const rename = fs.renameSync;
+    vi.spyOn(fs, "renameSync").mockImplementation((from, to) => { if (to === sync.stateFile) throw new Error("state unavailable"); rename(from, to); });
+    expect(() => sync.export()).toThrow("state unavailable");
+    expect(() => sync.assertUnchanged()).not.toThrow();
+    vi.restoreAllMocks();
+    const restarted = new KnowledgeSync(sync.file, sync.stateFile); restarted.initialize(false);
+    expect(restarted.status().state).toBe("synced");
+  });
+  it("never overwrites a conflicting incoming file while export is pending", () => {
+    sync.initialize(false);
+    db.prepare("UPDATE analysis_sections SET name='local' WHERE id='chat'").run();
+    const remote = captureCatalog(); remote.sections.find(s => s.id === "chat")!.name = "remote";
+    fs.writeFileSync(sync.file, JSON.stringify(remote));
+    const restarted = new KnowledgeSync(sync.file, sync.stateFile);
+    expect(() => restarted.initialize(false)).toThrow(); expect(() => restarted.export()).toThrow();
+    expect(restarted.status().state).toBe("conflict");
+    expect(captureCatalog().sections.find(s => s.id === "chat")!.name).toBe("local");
+    expect(JSON.parse(fs.readFileSync(sync.file, "utf8"))).toEqual(remote);
+  });
+  it("reports database save success when snapshot export fails and retries only the snapshot through HTTP", async () => {
+    sync.initialize(false); const server = createApp({ knowledgeSync: sync }).listen(0, "127.0.0.1");
+    await new Promise<void>(resolve => server.once("listening", resolve));
+    const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    try {
+      vi.spyOn(fs, "renameSync").mockImplementation(() => { throw new Error("no space"); });
+      const saved = await fetch(base + "/api/sections/chat", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "saved once", prompt: "keep" }) });
+      expect(saved.status).toBe(200); expect(await saved.json()).toMatchObject({ success: true, sync: { state: "pending" } });
+      const revision = db.prepare("SELECT revision FROM knowledge_sync_outbox").get().revision;
+      expect((await fetch(base + "/api/knowledge-sync/retry", { method: "POST" })).status).toBe(503);
+      vi.restoreAllMocks();
+      expect(await (await fetch(base + "/api/knowledge-sync/retry", { method: "POST" })).json()).toMatchObject({ success: true, data: { state: "synced", github: "not_checked" } });
+      expect(db.prepare("SELECT revision FROM knowledge_sync_outbox").get().revision).toBe(revision);
+    } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+  });
   it("round-trips capture settings and accepts old catalogs without changing their hash", () => {
     seedKnowledge(); sync.initialize(false);
     const oldContents = fs.readFileSync(sync.file, "utf8");

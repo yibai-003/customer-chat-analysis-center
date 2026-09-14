@@ -49,10 +49,8 @@ export function createApp(dependencies: AppDependencies = {}) {
     const sendJson = res.json.bind(res);
     res.json = (body: any) => {
       if (res.statusCode < 400 && body?.success === true) {
-        try { knowledgeSync.export(); } catch (error) {
-          res.status(500);
-          return sendJson({ success: false, data: null, error: `本地保存已完成，但知识库快照导出失败：${(error as Error).message}` });
-        }
+        try { knowledgeSync.export(); } catch { /* the DB save succeeded; durable status enables export-only retry */ }
+        return sendJson({ ...body, sync: knowledgeSync.status() });
       }
       return sendJson(body);
     };
@@ -69,6 +67,16 @@ export function createApp(dependencies: AppDependencies = {}) {
   const fail = (res: express.Response, error: unknown, status = 400) => res.status(error instanceof UploadError ? error.status : status).json({ success: false, data: null, error: error instanceof Error ? error.message : "请求失败" });
   app.get("/api/health", (_req, res) => {
     res.json({ success: true, data: { status: "ok" }, error: null });
+  });
+  app.get("/api/knowledge-sync", (_req, res) => {
+    if (!knowledgeSync) return res.status(503).json({ success: false, data: null, error: "知识同步未初始化" });
+    return ok(res, knowledgeSync.status());
+  });
+  app.post("/api/knowledge-sync/retry", (_req, res) => {
+    if (!knowledgeSync) return res.status(503).json({ success: false, data: null, error: "知识同步未初始化" });
+    try { knowledgeSync.export(); return ok(res, knowledgeSync.status()); }
+    catch { return res.status(knowledgeSync.status().state === "conflict" ? 409 : 503).json({ success: false,
+      data: knowledgeSync.status(), error: "本地数据仍已保存，快照暂未生成。请检查文件权限、磁盘空间或仓库冲突后重试。" }); }
   });
   app.get("/api/ready", (_req, res) => {
     try {

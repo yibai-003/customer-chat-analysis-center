@@ -5,14 +5,16 @@ import Database from "better-sqlite3";
 import { applyLegacyBaseline } from "./002-legacy-baseline";
 import { applyRunLifecycle } from "./003-run-lifecycle";
 import { applyModelCapabilities } from "./004-model-capabilities";
+import { applyKnowledgeOutbox } from "./005-knowledge-outbox";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
   { version: 2, name: "legacy-baseline", up: applyLegacyBaseline },
   { version: 3, name: "run-lifecycle", up: applyRunLifecycle },
   { version: 4, name: "model-capabilities", up: applyModelCapabilities },
+  { version: 5, name: "knowledge-outbox", up: applyKnowledgeOutbox },
 ];
-export const currentSchemaVersion = 4;
+export const currentSchemaVersion = 5;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();
