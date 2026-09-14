@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import ExcelJS from "exceljs";
+import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { diskReservations, reservedFileWriter } from "../security/disk-reservations";
 import { createJob, addRecords, deleteJob, mergeSectionSourceFields, updateJobSourcePath } from "../db/repositories";
 import { config } from "../config";
 import { normalizeUploadedFilename } from "../utils/encoding";
@@ -41,6 +45,14 @@ export async function importWorkbook(filePath: string, originalFilename: string,
   const stagingImageDir = path.join(stagingDir, "images");
   let jobId: string | undefined;
   let finalJobDir: string | undefined;
+  let imageBytes = 0;
+  for (const worksheet of workbook.worksheets) for (const image of worksheet.getImages()) {
+    const media = (workbook as any).model.media?.find((item: any) => item.index === image.imageId || item.imageId === image.imageId);
+    if (!media?.buffer?.length) throw new Error("工作簿图片无法读取");
+    imageBytes += media.buffer.length;
+  }
+  const reservation = diskReservations.reserve((await fs.stat(filePath)).size + imageBytes);
+  try {
     const imported: Array<{ sheetName: string; rowNumber: number; anchor: unknown; sourceFields: Record<string, string>; imagePath: string }> = [];
     if (section) {
       const importedHeaders = [...new Set(workbook.worksheets.flatMap((worksheet) => {
@@ -50,9 +62,8 @@ export async function importWorkbook(filePath: string, originalFilename: string,
       }))];
       mergeSectionSourceFields(section.id, importedHeaders);
     }
-  try {
     await fs.mkdir(stagingImageDir, { recursive: true });
-    await fs.copyFile(filePath, path.join(stagingDir, "source.xlsx"));
+    await pipeline(createReadStream(filePath), reservedFileWriter(path.join(stagingDir, "source.xlsx"), reservation));
     const totalImages = workbook.worksheets.reduce((count, worksheet) => count + ((worksheet.getImages?.() ?? []) as any[]).length, 0);
     onProgress?.({ totalImages, processedImages: 0, currentSheet: "", currentRow: 0 });
     for (const worksheet of workbook.worksheets) {
@@ -68,7 +79,7 @@ export async function importWorkbook(filePath: string, originalFilename: string,
         const extension = media?.extension ?? "png";
         if (!media?.buffer?.length) throw new Error(`第 ${rowNumber} 行图片无法读取`);
         const target = path.join(stagingImageDir, `${imported.length + 1}.${extension}`);
-        await fs.writeFile(target, media.buffer);
+        await pipeline(Readable.from([media.buffer]), reservedFileWriter(target, reservation));
         imported.push({ sheetName: worksheet.name, rowNumber, anchor: normalizeImageAnchor(range), sourceFields, imagePath: target });
         if (onProgress && (imported.length % 25 === 0)) onProgress({ totalImages, processedImages: imported.length, currentSheet: worksheet.name, currentRow: rowNumber });
       }
@@ -94,5 +105,5 @@ export async function importWorkbook(filePath: string, originalFilename: string,
     }
     await fs.rm(finalJobDir ?? stagingDir, { recursive: true, force: true });
     throw error;
-  }
+  } finally { reservation.release(); }
 }

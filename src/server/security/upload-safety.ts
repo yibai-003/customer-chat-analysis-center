@@ -2,23 +2,17 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
-import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import multer from "multer";
 import unzipper from "unzipper";
 import { XMLValidator } from "fast-xml-parser";
 import { config } from "../config";
+import { UploadError } from "./upload-error";
+import { diskReservations, reservedFileWriter } from "./disk-reservations";
+export { UploadError } from "./upload-error";
 
-export class UploadError extends Error {
-  constructor(message: string, public status: number) { super(message); }
-}
 export function requireDiskSpace(extraBytes = 0) {
-  let stats: fs.StatsFs;
-  try { stats = fs.statfsSync(config.dataDir); }
-  catch { throw new UploadError("无法检查数据目录磁盘空间，请检查磁盘权限后重试", 503); }
-  if (stats.bavail * stats.bsize < config.minFreeDiskMb * 1048576 + extraBytes) {
-    throw new UploadError("磁盘空间不足，请清理空间或更换数据目录", 507);
-  }
+  diskReservations.assertAvailable(extraBytes);
 }
 export const defaultXlsxLimits = { entries: 20000, entryBytes: 64 * 1048576, totalBytes: 1024 * 1048576, metadataBytes: 2 * 1048576, imageBytes: 32 * 1048576, totalImageBytes: 256 * 1048576, maxImagePixels: 100_000_000, timeoutMs: 120000 };
 
@@ -147,19 +141,23 @@ export function createSafeUpload() {
   const root = path.join(config.dataDir, "uploads");
   fs.mkdirSync(root, { recursive: true });
   const storage: multer.StorageEngine = {
-    _handleFile(_req, file, callback) {
+    _handleFile(req, file, callback) {
       const target = path.join(root, crypto.randomUUID());
-      let size = 0;
-      let nextCheck = 0;
-      const guard = new Transform({ transform(chunk, _encoding, done) {
+      const limit = config.maxUploadMb * 1048576;
+      const contentLength = Number(req.headers["content-length"]);
+      const estimate = Number.isSafeInteger(contentLength) && contentLength > 0 ? Math.min(contentLength, limit) : limit;
+      let reservation: ReturnType<typeof diskReservations.reserve>;
+      try { reservation = diskReservations.reserve(estimate); } catch (error) { callback(error); return; }
+      void (async () => {
+        const abort = () => file.stream.destroy(new Error("上传连接已中断"));
+        req.once("aborted", abort);
         try {
-          if (size >= nextCheck) { requireDiskSpace(chunk.length + 1048576); nextCheck = size + 1048576; }
-          size += chunk.length; done(null, chunk);
-        } catch (e) { done(e as Error); }
-      } });
-      void pipeline(file.stream, guard, fs.createWriteStream(target, { flags: "wx" }))
-        .then(() => callback(null, { path: target, size, filename: path.basename(target), destination: root }))
-        .catch(async error => { await fsp.rm(target, { force: true }).catch(() => undefined); callback(error); });
+          if (req.aborted) throw new Error("上传连接已中断");
+          await pipeline(file.stream, reservedFileWriter(target, reservation));
+          return { path: target, size: (await fsp.stat(target)).size, filename: path.basename(target), destination: root };
+        } catch (error) { await fsp.rm(target, { force: true }).catch(() => undefined); throw error; }
+        finally { req.removeListener("aborted", abort); reservation.release(); }
+      })().then(info => callback(null, info), error => callback(error));
     },
     _removeFile(_req, file, callback) { fs.unlink(file.path, callback); },
   };

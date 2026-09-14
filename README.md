@@ -25,6 +25,8 @@ npm run dev
 
 XLSX 关系、CRC 和图片资源限制见 [XLSX 资源校验](docs/xlsx-resource-validation.md)。
 
+上传与后台 Excel 导入共享未写入空间预算，避免并发重复占用余量；见 [共享磁盘预留](docs/shared-disk-reservations.md)。
+
 前端导入、分页详情、轮询与复核保存已拆为实际使用的 hooks，结构与回归证据见 [前端状态模块](docs/frontend-state-modules.md)。
 
 知识快照导出失败会保留数据库修改与待同步状态，页面提供重试入口；快照生成不等于 GitHub 推送。详见 [知识同步失败恢复](docs/knowledge-sync-recovery.md)。

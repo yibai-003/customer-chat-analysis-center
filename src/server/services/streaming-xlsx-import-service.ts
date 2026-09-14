@@ -9,6 +9,7 @@ import { addRecords, createJob, deleteJob, mergeSectionSourceFields, updateJobSo
 import { config } from "../config";
 import { normalizeUploadedFilename } from "../utils/encoding";
 import { normalizeImageAnchor } from "./excel-import-service";
+import { diskReservations, reservedFileWriter } from "../security/disk-reservations";
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", isArray: (name) => ["sheet", "Relationship", "row", "c", "si", "r", "oneCellAnchor", "twoCellAnchor"].includes(name) });
 type StreamingAnchor = { row: number; column: number; embed: string; mediaPath?: string };
@@ -179,9 +180,17 @@ export async function importWorkbookStreaming(
   let finalJobDir: string | undefined;
   let processedImages = 0;
   const mediaByPath = new Map(directory.files.map((file) => [file.path, file]));
+  // Count each anchor: one embedded media file can be written once per worksheet record.
+  const imageBytes = allImages.reduce((sum, image) => {
+    const entry = image.mediaPath ? mediaByPath.get(image.mediaPath) : undefined;
+    if (!entry || !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 1) throw new Error("图片资源缺失或声明大小无效");
+    return sum + entry.uncompressedSize;
+  }, 0);
+  const sourceBytes = (await fsPromises.stat(filePath)).size;
+  const reservation = diskReservations.reserve(sourceBytes + imageBytes);
   try {
     await fsPromises.mkdir(stagingImageDir, { recursive: true });
-    await fsPromises.copyFile(filePath, path.join(stagingDir, "source.xlsx"));
+    await pipeline(fs.createReadStream(filePath), reservedFileWriter(path.join(stagingDir, "source.xlsx"), reservation));
     onProgress?.({ totalImages: allImages.length, processedImages: 0, currentSheet: "", currentRow: 0 });
     const imported: Array<{ sheetName: string; rowNumber: number; anchor: unknown; sourceFields: Record<string, string>; imagePath: string }> = [];
     if (section) {
@@ -201,7 +210,7 @@ export async function importWorkbookStreaming(
         const target = path.join(stagingImageDir, `${processedImages + 1}${extension}`);
         const mediaEntry = image.mediaPath ? mediaByPath.get(image.mediaPath) : undefined;
         if (!mediaEntry) throw new Error(`第 ${image.row} 行图片资源不存在`);
-        await pipeline(mediaEntry.stream(), fs.createWriteStream(target));
+        await pipeline(mediaEntry.stream(), reservedFileWriter(target, reservation));
         const stat = await fsPromises.stat(target);
         if (!stat.size) throw new Error(`第 ${image.row} 行图片为空`);
         imported.push({ sheetName: sheet.name, rowNumber: image.row, anchor: normalizeImageAnchor({ tl: { nativeRow: image.row - 1, nativeCol: image.column - 1 }, br: { nativeRow: image.row - 1, nativeCol: image.column - 1 } }), sourceFields, imagePath: target });
@@ -226,5 +235,5 @@ export async function importWorkbookStreaming(
     }
     await fsPromises.rm(finalJobDir ?? stagingDir, { recursive: true, force: true });
     throw error;
-  }
+  } finally { reservation.release(); }
 }
