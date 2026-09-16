@@ -152,6 +152,7 @@ async function runAiField(
       fieldId: field.id,
       operation: field.executionType ?? "ai",
     });
+    assertAnalysisActive();
     const checked = validateFieldResult(routed.content, field);
     const status = checked.valid ? "completed" : "needs_review";
     const run = createFieldRun({
@@ -325,6 +326,7 @@ async function runLostDealAttribution(
         }
       },
     });
+    assertAnalysisActive();
     const attribution = parseLostDealAttribution(routed.content, candidates, parseContext);
     const result = { [field.key]: attribution };
     const status = attribution.reviewRequired ? "needs_review" as const : "completed" as const;
@@ -472,6 +474,7 @@ async function runReceptionQualityAnalysis(
         }
       },
     });
+    assertAnalysisActive();
     const quality = parseReceptionQuality(routed.content, field.key, parseOptions);
     const result = { [field.key]: quality };
     const status = quality.reviewRequired ? "needs_review" as const : "completed" as const;
