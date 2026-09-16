@@ -168,6 +168,39 @@ describe("pool candidate ranking", () => {
     ]);
   });
 
+  it("proves quality tier order when expiry and remaining quota are equal", () => {
+    const ranked = rankPoolCandidates([
+      member("tier-c", { qualityTier: "C", priority: 1 }),
+      member("tier-a", { qualityTier: "A", priority: 999 }),
+      member("tier-b", { qualityTier: "B", priority: 100 }),
+    ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
+
+    expect(ranked.map((item) => item.id)).toEqual(["tier-a", "tier-b", "tier-c"]);
+  });
+
+  it("proves non-thinking precedes thinking within the same tier and quota", () => {
+    const ranked = rankPoolCandidates([
+      member("thinking", { thinkingMode: true, priority: 1 }),
+      member("non-thinking", { thinkingMode: false, priority: 999 }),
+    ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
+
+    expect(ranked.map((item) => item.id)).toEqual(["non-thinking"]);
+  });
+
+  it("proves manual priority precedes health within the same tier and mode", () => {
+    const ranked = rankPoolCandidates([
+      member("healthy-lower-priority", { priority: 20, consecutiveFailures: 0 }),
+      member("unhealthy-higher-priority", { priority: 10, consecutiveFailures: 4 }),
+      member("healthy-higher-priority", { priority: 30, consecutiveFailures: 0 }),
+    ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
+
+    expect(ranked.map((item) => item.id)).toEqual([
+      "unhealthy-higher-priority",
+      "healthy-lower-priority",
+      "healthy-higher-priority",
+    ]);
+  });
+
   it("uses thinking free members only when no eligible non-thinking free member remains", () => {
     const thinking = member("thinking", { thinkingMode: true });
     expect(rankPoolCandidates(
