@@ -138,20 +138,30 @@ export function ModelConfigDialog({
       {error && <div className="model-console-error" role="alert">{error}</div>}
 
       <div
-        id={`model-console-panel-${tab}`}
+        id="model-console-panel-providers"
         className="model-console-panel"
         role="tabpanel"
-        aria-labelledby={`model-console-tab-${tab}`}
+        aria-labelledby="model-console-tab-providers"
+        hidden={tab !== "providers"}
       >
         {tab === "providers" && (
           <ProviderView
             providers={providers}
             api={modelConfigApi}
-            refresh={loadProviders}
+            refreshProviders={loadProviders}
+            refreshPool={loadPool}
             markDirty={markDirty}
             reportError={setError}
           />
         )}
+      </div>
+      <div
+        id="model-console-panel-pool"
+        className="model-console-panel"
+        role="tabpanel"
+        aria-labelledby="model-console-tab-pool"
+        hidden={tab !== "pool"}
+      >
         {tab === "pool" && (
           <PoolView
             pool={pool}
@@ -163,6 +173,14 @@ export function ModelConfigDialog({
             reportError={setError}
           />
         )}
+      </div>
+      <div
+        id="model-console-panel-usage"
+        className="model-console-panel"
+        role="tabpanel"
+        aria-labelledby="model-console-tab-usage"
+        hidden={tab !== "usage"}
+      >
         {tab === "usage" && (
           <UsageView
             models={pool.members}

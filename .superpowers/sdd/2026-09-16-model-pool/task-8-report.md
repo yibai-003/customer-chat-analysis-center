@@ -215,3 +215,83 @@ Result: passed; Vite transformed 60 modules and emitted the production bundle.
 - Confirmed primary and purpose tab keyboard behavior wraps correctly and Home/End target the first/last tab.
 - Confirmed disabled, quota-blocked, and cooldown states retain precedence over capability text in the operational status column.
 - Confirmed no dependency, API, or visual-structure changes were introduced.
+
+## Fix Round 2/5
+
+Date: 2026-09-16
+
+### Review Findings Addressed
+
+1. Every primary tab now owns a stable, mounted panel with a matching
+   `aria-labelledby`. Inactive panels are hidden rather than removed. Vision
+   and text tabs now own distinct stable panels while preserving roving
+   `tabIndex` and Left/Right/Home/End behavior.
+2. Capability labels now derive freshness from `settings.capabilityTtlMs`
+   using the server time rules: missing timestamps are unverified;
+   invalid, stale, or future timestamps are expired before capability
+   pass/fail is considered; fresh failed snapshots are failed; and fresh
+   passing snapshots are verified.
+3. Successful provider creation and update now mark the dialog dirty before
+   concurrently refreshing providers and pool members. Refresh failures are
+   reported after mutation success and do not become mutation failures.
+   Provider mutations do not refresh pool settings.
+
+### TDD RED Evidence
+
+Command:
+
+```powershell
+npx vitest run src/client/components/ModelConfigDialog.test.tsx --pool=threads --maxWorkers=1
+```
+
+Result: 3 of 12 tests failed for the expected reasons:
+
+- inactive primary tab `aria-controls` targets did not exist;
+- residual capability status without a timestamp was treated as failed,
+  and TTL/future/invalid timestamp precedence was not applied;
+- provider PATCH refreshed providers but did not refresh pool members.
+
+### GREEN Verification
+
+Focused/App tests:
+
+```powershell
+npx vitest run src/client/components/ModelConfigDialog.test.tsx src/client/hooks/useModelReadiness.test.ts src/client/App.test.tsx --pool=threads --maxWorkers=1
+```
+
+Result: 3 files passed, 47 tests passed.
+
+Typecheck:
+
+```powershell
+npm run typecheck
+```
+
+Result: passed (`tsc --noEmit`).
+
+Production build:
+
+```powershell
+npm run build
+```
+
+Result: passed; Vite transformed 60 modules and emitted the production bundle.
+
+### Fix Self-Review
+
+- Confirmed all six tab ownership pairs point to existing panel IDs with
+  reciprocal labels, including inactive primary and purpose panels.
+- Confirmed capability classification ignores residual
+  `capabilityEligible` when the configured TTL or timestamp semantics make
+  the snapshot stale.
+- Confirmed provider POST and PATCH each refresh providers and pool members,
+  while settings are loaded only by the initial console request.
+- Confirmed pool refresh replaces a previously eligible row with the
+  server-invalidated unverified snapshot after a provider Base URL update.
+- Confirmed dirty state is set before either refresh starts and combined
+  refresh errors remain explicitly identified as post-mutation failures.
+- Confirmed only Task 8 files were modified.
+
+### Concerns
+
+- None.

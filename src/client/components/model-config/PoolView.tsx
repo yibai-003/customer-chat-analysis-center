@@ -61,15 +61,22 @@ function formatTokens(value?: number) {
 
 type CapabilityState = "verified" | "never" | "expired" | "failed";
 
-function capabilityStateFor(model: ModelConfig): CapabilityState {
-  if (model.capabilityEligible) return "verified";
-  if (!model.capabilityCheckedAt && !model.capabilityStatus) return "never";
+function capabilityStateFor(
+  model: ModelConfig,
+  capabilityTtlMs: number,
+  now = Date.now(),
+): CapabilityState {
+  if (!model.capabilityCheckedAt) return "never";
+  const checkedAt = Date.parse(model.capabilityCheckedAt);
+  const fresh = Number.isFinite(checkedAt)
+    && now >= checkedAt
+    && now - checkedAt < capabilityTtlMs;
+  if (!fresh) return "expired";
   const capability = model.capabilityStatus;
   const passed = capability?.text === true
     && capability.json === true
     && (model.purpose === "text" || (model.supportsVision && capability.vision === true));
-  if (!passed) return "failed";
-  return "expired";
+  return passed ? "verified" : "failed";
 }
 
 const capabilityLabels: Record<CapabilityState, { column: string; status: string; tone: string }> = {
@@ -304,7 +311,7 @@ export function PoolView({
           type="button"
           role="tab"
           aria-selected={purpose === "vision"}
-          aria-controls="model-pool-purpose-panel"
+          aria-controls="model-pool-purpose-panel-vision"
           tabIndex={purpose === "vision" ? 0 : -1}
           className={purpose === "vision" ? "active" : ""}
           onClick={() => selectPurpose("vision")}
@@ -317,7 +324,7 @@ export function PoolView({
           type="button"
           role="tab"
           aria-selected={purpose === "text"}
-          aria-controls="model-pool-purpose-panel"
+          aria-controls="model-pool-purpose-panel-text"
           tabIndex={purpose === "text" ? 0 : -1}
           className={purpose === "text" ? "active" : ""}
           onClick={() => selectPurpose("text")}
@@ -329,13 +336,16 @@ export function PoolView({
 
       {message && <div className="model-console-message" role="status">{message}</div>}
 
-      <div
-        id="model-pool-purpose-panel"
-        className="model-table-scroll"
-        role="tabpanel"
-        aria-labelledby={`model-pool-purpose-tab-${purpose}`}
-      >
-        <table className="model-pool-table">
+      {(["vision", "text"] as const).map((panelPurpose) => (
+        <div
+          key={panelPurpose}
+          id={`model-pool-purpose-panel-${panelPurpose}`}
+          className="model-table-scroll"
+          role="tabpanel"
+          aria-labelledby={`model-pool-purpose-tab-${panelPurpose}`}
+          hidden={purpose !== panelPurpose}
+        >
+          {purpose === panelPurpose && <table className="model-pool-table">
           <thead>
             <tr>
               <th>模型</th>
@@ -357,7 +367,7 @@ export function PoolView({
               const remaining = model.quotaTotalTokens == null
                 ? undefined
                 : Math.max(0, model.quotaTotalTokens - model.quotaUsedTokens);
-              const capabilityState = capabilityStateFor(model);
+              const capabilityState = capabilityStateFor(model, settings.capabilityTtlMs);
               const capability = capabilityLabels[capabilityState];
               const status = statusFor(model, capabilityState);
               return (
@@ -499,8 +509,9 @@ export function PoolView({
               <tr><td colSpan={11} className="model-console-empty">该用途暂无模型池成员。</td></tr>
             )}
           </tbody>
-        </table>
-      </div>
+          </table>}
+        </div>
+      ))}
 
       <div className="model-pool-settings">
         <label>

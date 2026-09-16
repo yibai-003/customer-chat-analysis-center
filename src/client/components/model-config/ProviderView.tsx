@@ -23,13 +23,15 @@ function formatDate(value?: string) {
 export function ProviderView({
   providers,
   api,
-  refresh,
+  refreshProviders,
+  refreshPool,
   markDirty,
   reportError,
 }: {
   providers: ModelProvider[];
   api: <T>(url: string, options?: RequestInit) => Promise<T>;
-  refresh: () => Promise<void>;
+  refreshProviders: () => Promise<void>;
+  refreshPool: () => Promise<void>;
   markDirty: () => void;
   reportError: (message: string) => void;
 }) {
@@ -82,14 +84,25 @@ export function ProviderView({
     markDirty();
     reset();
     setMessage(`服务商已${action}`);
-    try {
-      await refresh();
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "列表刷新失败";
-      reportError(`服务商已${action}，但列表刷新失败：${text}`);
-    } finally {
-      setBusyId(null);
+    const [providersResult, poolResult] = await Promise.allSettled([
+      refreshProviders(),
+      refreshPool(),
+    ]);
+    const refreshErrors: string[] = [];
+    if (providersResult.status === "rejected") {
+      refreshErrors.push(`服务商列表刷新失败：${
+        providersResult.reason instanceof Error ? providersResult.reason.message : "刷新失败"
+      }`);
     }
+    if (poolResult.status === "rejected") {
+      refreshErrors.push(`模型池刷新失败：${
+        poolResult.reason instanceof Error ? poolResult.reason.message : "刷新失败"
+      }`);
+    }
+    if (refreshErrors.length > 0) {
+      reportError(`服务商已${action}，但${refreshErrors.join("；")}`);
+    }
+    setBusyId(null);
   };
 
   const testProvider = async (provider: ModelProvider) => {
@@ -107,7 +120,7 @@ export function ProviderView({
       reportError(text);
     } finally {
       try {
-        await refresh();
+        await refreshProviders();
       } catch (error) {
         reportError(`连接测试已完成，但服务商状态刷新失败：${
           error instanceof Error ? error.message : "刷新失败"

@@ -266,12 +266,22 @@ describe("ModelConfigDialog", () => {
     const close = vi.fn();
     const saved = vi.fn();
     let providerLists = 0;
+    let poolLists = 0;
+    let settingsLists = 0;
     responseFor = (url, init) => {
       if (url === "/api/model-providers") {
         if (init?.method === "POST") return provider;
         providerLists += 1;
         if (providerLists > 1) return failure("供应商列表刷新失败");
         return [provider];
+      }
+      if (url === "/api/model-pools") {
+        poolLists += 1;
+        return defaultData(url);
+      }
+      if (url === "/api/model-pool-settings") {
+        settingsLists += 1;
+        return defaultData(url);
       }
       if (url === "/api/model-providers/new-provider") return provider;
       return defaultData(url);
@@ -291,6 +301,8 @@ describe("ModelConfigDialog", () => {
     expect(requests.filter((request) => (
       request.url === "/api/model-providers" && request.init?.method === "POST"
     ))).toHaveLength(1);
+    expect(poolLists).toBe(2);
+    expect(settingsLists).toBe(1);
     expect((screen.getByLabelText("名称") as HTMLInputElement).value).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "×" }));
     expect(saved).toHaveBeenCalledTimes(1);
@@ -330,8 +342,13 @@ describe("ModelConfigDialog", () => {
     const poolTab = screen.getByRole("tab", { name: "模型池" });
     const usageTab = screen.getByRole("tab", { name: "调用状态" });
 
-    expect(poolTab.id).toBe("model-console-tab-pool");
-    expect(poolTab.getAttribute("aria-controls")).toBe("model-console-panel-pool");
+    for (const tabElement of [providerTab, poolTab, usageTab]) {
+      const panelId = tabElement.getAttribute("aria-controls");
+      expect(panelId).toBeTruthy();
+      const panel = document.getElementById(panelId!);
+      expect(panel).toBeTruthy();
+      expect(panel?.getAttribute("aria-labelledby")).toBe(tabElement.id);
+    }
     expect(poolTab.tabIndex).toBe(0);
     expect(providerTab.tabIndex).toBe(-1);
     fireEvent.keyDown(poolTab, { key: "ArrowRight" });
@@ -347,7 +364,14 @@ describe("ModelConfigDialog", () => {
     const visionTab = screen.getByRole("tab", { name: "视觉模型" });
     const textTab = screen.getByRole("tab", { name: "文本模型" });
     expect(visionTab.getAttribute("aria-selected")).toBe("true");
-    expect(visionTab.getAttribute("aria-controls")).toBe("model-pool-purpose-panel");
+    expect(visionTab.getAttribute("aria-controls")).not.toBe(textTab.getAttribute("aria-controls"));
+    for (const tabElement of [visionTab, textTab]) {
+      const panelId = tabElement.getAttribute("aria-controls");
+      expect(panelId).toBeTruthy();
+      const panel = document.getElementById(panelId!);
+      expect(panel).toBeTruthy();
+      expect(panel?.getAttribute("aria-labelledby")).toBe(tabElement.id);
+    }
     fireEvent.keyDown(visionTab, { key: "ArrowRight" });
     expect(textTab.getAttribute("aria-selected")).toBe("true");
     expect(document.activeElement).toBe(textTab);
@@ -404,27 +428,42 @@ describe("ModelConfigDialog", () => {
     expect(screen.getByText("可调用")).toBeTruthy();
   });
 
-  it("distinguishes never verified, expired verification, and failed capability checks", async () => {
+  it("classifies capability snapshots with the configured TTL and server time semantics", async () => {
+    vi.setSystemTime(new Date("2026-09-16T06:00:00.000Z"));
     const capabilityMembers = [
       member({
         id: "never",
         name: "从未验证",
         capabilityEligible: false,
         capabilityCheckedAt: undefined,
-        capabilityStatus: undefined,
+        capabilityStatus: { text: false, json: false, vision: false },
       }),
       member({
         id: "expired",
         name: "验证过期",
-        capabilityEligible: false,
-        capabilityCheckedAt: "2026-09-15T01:00:00.000Z",
+        capabilityEligible: true,
+        capabilityCheckedAt: "2026-09-16T05:58:59.999Z",
+        capabilityStatus: { text: false, json: false, vision: false },
+      }),
+      member({
+        id: "invalid",
+        name: "时间无效",
+        capabilityEligible: true,
+        capabilityCheckedAt: "not-a-date",
+        capabilityStatus: { text: true, json: true, vision: true },
+      }),
+      member({
+        id: "future",
+        name: "未来验证",
+        capabilityEligible: true,
+        capabilityCheckedAt: "2026-09-16T06:00:01.000Z",
         capabilityStatus: { text: true, json: true, vision: true },
       }),
       member({
         id: "failed",
         name: "验证失败",
-        capabilityEligible: false,
-        capabilityCheckedAt: "2026-09-16T01:00:00.000Z",
+        capabilityEligible: true,
+        capabilityCheckedAt: "2026-09-16T05:59:30.000Z",
         capabilityStatus: {
           text: true,
           json: false,
@@ -432,25 +471,114 @@ describe("ModelConfigDialog", () => {
           errors: { json: "INVALID_OUTPUT" },
         },
       }),
+      member({
+        id: "passed",
+        name: "验证通过",
+        capabilityEligible: false,
+        capabilityCheckedAt: "2026-09-16T05:59:30.000Z",
+        capabilityStatus: { text: true, json: true, vision: true },
+      }),
     ];
-    responseFor = (url) => url === "/api/model-pools"
-      ? {
+    responseFor = (url) => {
+      if (url === "/api/model-pool-settings") {
+        return { paidDailyTokenLimit: 0, paidMonthlyTokenLimit: 0, capabilityTtlMs: 60_000 };
+      }
+      return url === "/api/model-pools" ? {
           members: capabilityMembers,
           summary: {
             total: capabilityMembers.length,
-            vision: { total: capabilityMembers.length, enabled: 3, verified: 0, blocked: 0 },
+            vision: {
+              total: capabilityMembers.length,
+              enabled: capabilityMembers.length,
+              verified: 1,
+              blocked: 0,
+            },
             text: { total: 0, enabled: 0, verified: 0, blocked: 0 },
           },
         }
-      : defaultData(url);
+        : defaultData(url);
+    };
     await renderDialog(capabilityMembers);
 
     const neverRow = (await screen.findByText("从未验证")).closest("tr")!;
     const expiredRow = screen.getByText("验证过期").closest("tr")!;
+    const invalidRow = screen.getByText("时间无效").closest("tr")!;
+    const futureRow = screen.getByText("未来验证").closest("tr")!;
     const failedRow = screen.getByText("验证失败").closest("tr")!;
+    const passedRow = screen.getByText("验证通过").closest("tr")!;
     expect(within(neverRow).getByText("未验证")).toBeTruthy();
     expect(within(neverRow).getByText("待能力验证")).toBeTruthy();
     expect(within(expiredRow).getAllByText("验证已过期")).toHaveLength(2);
+    expect(within(invalidRow).getAllByText("验证已过期")).toHaveLength(2);
+    expect(within(futureRow).getAllByText("验证已过期")).toHaveLength(2);
     expect(within(failedRow).getAllByText("能力验证失败")).toHaveLength(2);
+    expect(within(passedRow).getByText("已验证")).toBeTruthy();
+    expect(within(passedRow).getByText("可调用")).toBeTruthy();
+  });
+
+  it("refreshes providers and pool members after provider PATCH without refreshing settings", async () => {
+    const staleMember = member({
+      name: "旧能力快照",
+      capabilityEligible: true,
+      capabilityCheckedAt: "2026-09-16T05:59:30.000Z",
+    });
+    const invalidatedMember = member({
+      name: "旧能力快照",
+      capabilityEligible: false,
+      capabilityCheckedAt: undefined,
+      capabilityStatus: undefined,
+    });
+    let providerLists = 0;
+    let poolLists = 0;
+    let settingsLists = 0;
+    responseFor = (url, init) => {
+      if (url === "/api/model-providers/provider-1" && init?.method === "PATCH") {
+        return { ...provider, baseUrl: "https://new.example/v1" };
+      }
+      if (url === "/api/model-providers") {
+        providerLists += 1;
+        return providerLists === 1
+          ? [provider]
+          : [{ ...provider, baseUrl: "https://new.example/v1" }];
+      }
+      if (url === "/api/model-pools") {
+        poolLists += 1;
+        const currentMembers = poolLists === 1 ? [staleMember] : [invalidatedMember];
+        return {
+          members: currentMembers,
+          summary: {
+            total: 1,
+            vision: { total: 1, enabled: 1, verified: poolLists === 1 ? 1 : 0, blocked: 0 },
+            text: { total: 0, enabled: 0, verified: 0, blocked: 0 },
+          },
+        };
+      }
+      if (url === "/api/model-pool-settings") {
+        settingsLists += 1;
+        return { paidDailyTokenLimit: 0, paidMonthlyTokenLimit: 0, capabilityTtlMs: 86_400_000 };
+      }
+      return defaultData(url);
+    };
+
+    await renderDialog([staleMember]);
+    expect(await screen.findByText("已验证")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "服务商凭证" }));
+    fireEvent.click(screen.getByRole("button", { name: "编辑千问百炼" }));
+    fireEvent.change(screen.getByLabelText("Base URL"), {
+      target: { value: "https://new.example/v1" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "保存服务商" }));
+    });
+
+    await waitFor(() => {
+      expect(providerLists).toBe(2);
+      expect(poolLists).toBe(2);
+    });
+    expect(settingsLists).toBe(1);
+    fireEvent.click(screen.getByRole("tab", { name: "模型池" }));
+    const row = (await screen.findByText("旧能力快照")).closest("tr")!;
+    expect(within(row).queryByText("已验证")).toBeNull();
+    expect(within(row).getByText("未验证")).toBeTruthy();
   });
 });
