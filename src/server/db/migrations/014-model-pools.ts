@@ -113,29 +113,24 @@ export function applyModelPools(db: any) {
     VALUES (?, ?, ?, ?, 1, ?, ?)
   `);
   const assignProvider = db.prepare("UPDATE model_configs SET provider_id = ? WHERE id = ?");
-  const dashScopeDefault = modelRows.find((row) =>
-    isDashScope(row.base_url) && row.is_enabled === 1 && row.is_purpose_default === 1,
-  );
-  const dashScopeRows = modelRows.filter((row) => isDashScope(row.base_url));
-  if (dashScopeRows.length) {
-    const source = dashScopeDefault ?? dashScopeRows[0];
-    const id = "provider-dashscope";
-    createProvider.run(id, "千问百炼", source.base_url, source.api_key_ciphertext, now, now);
-    for (const row of dashScopeRows) assignProvider.run(id, row.id);
-  }
-
-  const otherProviders = new Map<string, { id: string; row: (typeof modelRows)[number] }>();
+  const providers = new Map<string, string>();
   for (const row of modelRows) {
-    if (isDashScope(row.base_url)) continue;
     const key = `${row.base_url}\0${row.api_key_ciphertext}`;
-    const existing = otherProviders.get(key);
+    const existing = providers.get(key);
     if (existing) {
-      assignProvider.run(existing.id, row.id);
+      assignProvider.run(existing, row.id);
       continue;
     }
     const id = providerId(row.base_url, row.api_key_ciphertext);
-    otherProviders.set(key, { id, row });
-    createProvider.run(id, row.name, row.base_url, row.api_key_ciphertext, now, now);
+    providers.set(key, id);
+    createProvider.run(
+      id,
+      isDashScope(row.base_url) ? "千问百炼" : row.name,
+      row.base_url,
+      row.api_key_ciphertext,
+      now,
+      now,
+    );
     assignProvider.run(id, row.id);
   }
 

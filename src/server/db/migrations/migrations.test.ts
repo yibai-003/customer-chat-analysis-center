@@ -11,6 +11,7 @@ import { applyReceptionQualityConfiguration } from "./009-reception-quality-norm
 import { applyUnifiedReceptionQualityConfiguration } from "./010-unified-reception-quality";
 import { applyOptimizedReceptionQualityConfiguration } from "./011-optimized-reception-quality-prompts";
 import { applyReceptionExcelSchemaConfiguration } from "./013-reception-excel-schema";
+import { applyModelPools } from "./014-model-pools";
 
 let dir: string;
 let db: any;
@@ -31,7 +32,7 @@ describe("versioned migrations", () => {
     expect(JSON.stringify(appliedMigrations(db))).toBe(before);
     expect(fs.readdirSync(path.join(dir, "backups/migrations"))).toHaveLength(1);
   });
-  it("migrates legacy model configs into pool providers without rewriting credentials", () => {
+  it("groups legacy model configs by base URL and ciphertext without rewriting credentials", () => {
     applyLegacyBaseline(db);
     const insert = db.prepare(`
       INSERT INTO model_configs (
@@ -39,8 +40,20 @@ describe("versioned migrations", () => {
         supports_vision, temperature, max_tokens, is_default, is_enabled, created_at, updated_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0.2, 1500, ?, 1, '2026-09-16T00:00:00.000Z', '2026-09-16T00:00:00.000Z')
     `);
-    insert.run("qwen-vision", "旧千问视觉", "https://dashscope.aliyuncs.com/compatible-mode/v1", "cipher-vision", "qwen-vl-max", "vision", 1, 1);
-    insert.run("qwen-text", "旧千问文本", "https://dashscope.aliyuncs.com/compatible-mode/v1", "cipher-text", "qwen-plus", "text", 1, 0);
+    const dashScopeBaseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    insert.run("qwen-vision", "旧千问视觉", dashScopeBaseUrl, "cipher-shared", "qwen-vl-max", "vision", 1, 1);
+    insert.run("qwen-text", "旧千问文本", dashScopeBaseUrl, "cipher-shared", "qwen-plus", "text", 1, 0);
+    insert.run("qwen-other-key", "旧千问另一密钥", dashScopeBaseUrl, "cipher-other", "qwen-max", "text", 0, 0);
+    insert.run(
+      "qwen-other-url",
+      "旧千问另一地址",
+      "https://dashscope.aliyuncs.com/compatible-mode/v2",
+      "cipher-shared",
+      "qwen-turbo",
+      "text",
+      0,
+      0,
+    );
     insert.run("other", "其他模型", "https://example.com/v1", "cipher-other", "other-model", "text", 1, 0);
     const originalCiphertextById = Object.fromEntries(
       (db.prepare("SELECT id, api_key_ciphertext FROM model_configs").all() as Array<{ id: string; api_key_ciphertext: string }>)
@@ -52,23 +65,43 @@ describe("versioned migrations", () => {
     expect(currentSchemaVersion).toBe(14);
     expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
     const qwenRows = db.prepare(`
-      SELECT provider_id, id, api_key_ciphertext
-      FROM model_configs
-      WHERE base_url LIKE '%dashscope.aliyuncs.com%'
-      ORDER BY id
-    `).all() as Array<{ provider_id: string; id: string; api_key_ciphertext: string }>;
-    expect(qwenRows).toHaveLength(2);
-    expect(qwenRows.every((row) => row.provider_id === qwenRows[0].provider_id)).toBe(true);
+      SELECT
+        model.provider_id,
+        model.id,
+        model.base_url,
+        model.api_key_ciphertext,
+        provider.base_url AS provider_base_url,
+        provider.api_key_ciphertext AS provider_api_key_ciphertext
+      FROM model_configs model
+      JOIN model_providers provider ON provider.id = model.provider_id
+      WHERE model.base_url LIKE '%dashscope.aliyuncs.com%'
+      ORDER BY model.id
+    `).all() as Array<{
+      provider_id: string;
+      id: string;
+      base_url: string;
+      api_key_ciphertext: string;
+      provider_base_url: string;
+      provider_api_key_ciphertext: string;
+    }>;
+    expect(qwenRows).toHaveLength(4);
+    const qwenById = Object.fromEntries(qwenRows.map((row) => [row.id, row]));
+    expect(qwenById["qwen-vision"].provider_id).toBe(qwenById["qwen-text"].provider_id);
+    expect(qwenById["qwen-other-key"].provider_id).not.toBe(qwenById["qwen-vision"].provider_id);
+    expect(qwenById["qwen-other-url"].provider_id).not.toBe(qwenById["qwen-vision"].provider_id);
     expect(qwenRows.every((row) => row.api_key_ciphertext === originalCiphertextById[row.id])).toBe(true);
+    expect(qwenRows.every((row) => row.provider_base_url === row.base_url)).toBe(true);
+    expect(qwenRows.every((row) => row.provider_api_key_ciphertext === row.api_key_ciphertext)).toBe(true);
     expect(db.prepare("SELECT COUNT(*) count FROM model_pool_settings").get()).toEqual({ count: 1 });
     expect(db.prepare("SELECT paid_daily_token_limit FROM model_pool_settings WHERE id='default'").get())
       .toEqual({ paid_daily_token_limit: 0 });
-    expect(db.prepare("SELECT name FROM model_providers WHERE id = ?").get(qwenRows[0].provider_id))
+    expect(db.prepare("SELECT name FROM model_providers WHERE id = ?").get(qwenById["qwen-vision"].provider_id))
       .toEqual({ name: "千问百炼" });
 
     runMigrations(db);
+    applyModelPools(db);
 
-    expect(db.prepare("SELECT COUNT(*) count FROM model_providers").get()).toEqual({ count: 2 });
+    expect(db.prepare("SELECT COUNT(*) count FROM model_providers").get()).toEqual({ count: 4 });
     expect(db.prepare("SELECT COUNT(*) count FROM model_pool_settings").get()).toEqual({ count: 1 });
   });
   it("replaces legacy reception prompts with compact structured protocols", () => {
