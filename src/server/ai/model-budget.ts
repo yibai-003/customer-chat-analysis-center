@@ -82,6 +82,12 @@ export async function withPaidTokenBudget<T>(
       if (!validTokenCount(reserved) || !validTokenCount(actual) || reserved > used) {
         throw new Error("Invalid paid token settlement");
       }
+      if (used - reserved + actual > maxPaidTokens) {
+        throw new ModelBudgetExceeded(
+          6,
+          `付费 Token 预算不足（实际用量 ${actual} 超过上限 ${maxPaidTokens}）`,
+        );
+      }
       used += actual - reserved;
     },
     paidTokensUsed: () => used,

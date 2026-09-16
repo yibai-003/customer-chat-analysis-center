@@ -145,6 +145,11 @@ describe("pool candidate ranking", () => {
 
   it("uses expiry, remaining quota, quality, and non-thinking order", () => {
     const ranked = rankPoolCandidates([
+      member("earlier-tier-c", {
+        quotaExpiresAt: "2026-09-20T00:00:00.000Z",
+        qualityTier: "C",
+        priority: 999,
+      }),
       member("later", { quotaExpiresAt: "2026-11-01T00:00:00.000Z", priority: 1 }),
       member("earlier-more", { quotaExpiresAt: "2026-10-01T00:00:00.000Z", quotaUsedTokens: 100 }),
       member("earlier-less", { quotaExpiresAt: "2026-10-01T00:00:00.000Z", quotaUsedTokens: 800 }),
@@ -154,6 +159,7 @@ describe("pool candidate ranking", () => {
     ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
 
     expect(ranked.map((item) => item.id)).toEqual([
+      "earlier-tier-c",
       "earlier-less",
       "earlier-more",
       "later",
@@ -398,6 +404,71 @@ describe("model pool routing", () => {
       expect.objectContaining({ model_config_id: id, event_type: "success", accounted_tokens: 0 }),
       expect.objectContaining({ model_config_id: id, event_type: "usage_unknown", accounted_tokens: 100 }),
     ]);
+  });
+
+  it("rejects actual paid usage that exceeds the batch paid-token budget", async () => {
+    const { paidTokensUsed, withPaidTokenBudget } = await import("../ai/model-budget");
+    createPoolMember({ model: "paid-overrun", billingMode: "paid", maxTokens: 100 });
+    updateModelPoolSettings({ paidDailyTokenLimit: 1000, paidMonthlyTokenLimit: 1000 });
+    vi.mocked(callVisionModel).mockResolvedValue(success("ok", {
+      prompt_tokens: 80,
+      completion_tokens: 80,
+    }));
+
+    await expect(withPaidTokenBudget(
+      () => callModelPool([], { purpose: "text", operation: "paid-overrun" }),
+      { maxPaidTokens: 100 },
+    )).rejects.toMatchObject({ code: "budget" });
+    expect(paidTokensUsed()).toBe(0);
+  });
+
+  it("serializes persistent paid reservations across concurrent routes", async () => {
+    const id = createPoolMember({ model: "paid-concurrent", billingMode: "paid", maxTokens: 100 });
+    updateModelPoolSettings({ paidDailyTokenLimit: 100, paidMonthlyTokenLimit: 100 });
+    let releaseTransport!: () => void;
+    const transportReleased = new Promise<void>((resolve) => { releaseTransport = resolve; });
+    vi.mocked(callVisionModel).mockImplementation(async () => {
+      await transportReleased;
+      return success("ok", {});
+    });
+
+    const first = import("../ai/model-budget").then(({ withPaidTokenBudget }) =>
+      withPaidTokenBudget(
+        () => callModelPool([], { purpose: "text", operation: "concurrent-first" }),
+        { maxPaidTokens: 100 },
+      ));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const second = import("../ai/model-budget").then(({ withPaidTokenBudget }) =>
+      withPaidTokenBudget(
+        () => callModelPool([], { purpose: "text", operation: "concurrent-second" }),
+        { maxPaidTokens: 100 },
+      ));
+    await expect(second).rejects.toMatchObject({ code: "budget" });
+    expect(callVisionModel).toHaveBeenCalledTimes(1);
+    releaseTransport();
+    await expect(first).resolves.toMatchObject({ model: expect.objectContaining({ id }) });
+  });
+
+  it("rolls back failure state and failure event when the policy transaction fails", async () => {
+    const first = createPoolMember({ model: "atomic-rate", priority: 1 });
+    createPoolMember({ model: "atomic-fallback", priority: 2 });
+    db.exec(`CREATE TRIGGER fail_cooldown_event BEFORE INSERT ON model_usage_events
+      WHEN NEW.event_type='cooldown'
+      BEGIN SELECT RAISE(ABORT, 'forced cooldown failure'); END`);
+    vi.mocked(callVisionModel)
+      .mockRejectedValueOnce(new Error("rate limited (429)"));
+
+    await expect(callModelPool([], { purpose: "text", operation: "atomic-rate" }))
+      .rejects.toThrow("forced cooldown failure");
+
+    expect(db.prepare(`SELECT consecutive_failures, cooldown_until, last_failure_at
+      FROM model_configs WHERE id=?`).get(first)).toEqual({
+      consecutive_failures: 0,
+      cooldown_until: null,
+      last_failure_at: null,
+    });
+    expect(events()).toEqual([]);
+    db.exec("DROP TRIGGER fail_cooldown_event");
   });
 
   it("blocks paid transport when no batch allowance exists", async () => {
