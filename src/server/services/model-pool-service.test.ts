@@ -187,6 +187,30 @@ describe("pool candidate ranking", () => {
     expect(ranked.map((item) => item.id)).toEqual(["non-thinking"]);
   });
 
+  it("proves the comparator orders paid non-thinking before thinking when both remain eligible", () => {
+    const ranked = rankPoolCandidates([
+      member("thinking-paid", {
+        billingMode: "paid",
+        quotaTotalTokens: undefined,
+        quotaExpiresAt: undefined,
+        thinkingMode: true,
+        priority: 10,
+      }),
+      member("non-thinking-paid", {
+        billingMode: "paid",
+        quotaTotalTokens: undefined,
+        quotaExpiresAt: undefined,
+        thinkingMode: false,
+        priority: 10,
+      }),
+    ], { now: NOW, allowPaid: true, failedMemberIds: new Set() });
+
+    expect(ranked.map((item) => item.id)).toEqual([
+      "non-thinking-paid",
+      "thinking-paid",
+    ]);
+  });
+
   it("proves manual priority precedes health within the same tier and mode", () => {
     const ranked = rankPoolCandidates([
       member("healthy-lower-priority", { priority: 20, consecutiveFailures: 0 }),
