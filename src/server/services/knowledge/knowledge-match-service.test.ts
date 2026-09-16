@@ -1,33 +1,10 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../../db/client";
 import { deleteKnowledgeItem, upsertKnowledgeBase, upsertKnowledgeItem } from "./knowledge-repository";
-import type { AnalysisField, KnowledgeCandidate, KnowledgeColumn } from "../../../shared/types";
-import { getModelsForPurpose } from "../model-config-service";
+import type { AnalysisField, KnowledgeCandidate, KnowledgeColumn, ModelRouteResult } from "../../../shared/types";
 
 vi.mock("./knowledge-search-service", () => ({
   searchKnowledge: vi.fn(),
-}));
-
-vi.mock("../model-config-service", () => ({
-  getModelForPurpose: vi.fn(() => ({
-    id: "text-model",
-    name: "Text Model",
-    baseUrl: "https://model.example/v1",
-    apiKey: "secret",
-    model: "text-model",
-    temperature: 0,
-    maxTokens: 200,
-  })),
-  getModelsForPurpose: vi.fn(() => [{
-    id: "text-model",
-    name: "Text Model",
-    baseUrl: "https://model.example/v1",
-    apiKey: "secret",
-    model: "text-model",
-    supportsVision: false,
-    temperature: 0,
-    maxTokens: 200,
-  }]),
 }));
 
 vi.mock("../../ai/openai-compatible-client", async (importOriginal) => {
@@ -35,8 +12,13 @@ vi.mock("../../ai/openai-compatible-client", async (importOriginal) => {
   return { ...actual, callVisionModel: vi.fn() };
 });
 
+vi.mock("../model-pool-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../model-pool-service")>();
+  return { ...actual, callModelPool: vi.fn() };
+});
+
 import { callVisionModel } from "../../ai/openai-compatible-client";
-import { getModelForPurpose } from "../model-config-service";
+import { callModelPool } from "../model-pool-service";
 import { searchKnowledge } from "./knowledge-search-service";
 import { matchKnowledgeItem } from "./knowledge-match-service";
 
@@ -164,12 +146,62 @@ function createKnowledge() {
   });
 }
 
+function routedResponse(
+  content: string,
+  raw: string,
+  attempts: ModelRouteResult["attempts"] = [{
+    modelConfigId: "text-model",
+    model: "text-model",
+    status: "success",
+    durationMs: 7,
+  }],
+): ModelRouteResult {
+  return {
+    content,
+    raw,
+    usage: {},
+    model: {
+      id: "text-model",
+      name: "Text Model",
+      baseUrl: "https://model.example/v1",
+      maskedApiKey: "****",
+      model: "text-model",
+      supportsVision: false,
+      temperature: 0,
+      maxTokens: 200,
+      isDefault: false,
+      purpose: "text",
+      isPurposeDefault: true,
+      isEnabled: true,
+      poolEnabled: true,
+      billingMode: "free",
+      qualityTier: "A",
+      priority: 100,
+      thinkingMode: false,
+      memberType: "general",
+      quotaTotalTokens: 1000,
+      quotaUsedTokens: 0,
+      quotaSafetyRatio: 0.95,
+      consecutiveFailures: 0,
+      capabilityEligible: true,
+      quotaBlocked: false,
+    },
+    attempts,
+  };
+}
+
+function mockModelResponse(content: string, raw: string) {
+  vi.mocked(callModelPool).mockResolvedValue(routedResponse(content, raw));
+}
+
 describe("knowledge match service", () => {
   beforeAll(() => initDb());
   beforeEach(() => {
     clearTestData();
     createRecordAndField();
     vi.clearAllMocks();
+    vi.mocked(callModelPool).mockReset();
+    vi.mocked(callVisionModel).mockReset();
   });
 
   it("accepts a supplied candidate ID and persists a complete immutable snapshot", async () => {
@@ -181,11 +213,10 @@ describe("knowledge match service", () => {
       matchedText: "品质-面板故障 面板 弹簧片",
     }];
     vi.mocked(searchKnowledge).mockReturnValue(candidates);
-    vi.mocked(callVisionModel).mockResolvedValue({
-      content: '{"knowledgeItemId":"candidate-panel"}',
-      raw: '{"choices":[{"message":{"content":"selected"}}]}',
-      usage: {},
-    });
+    mockModelResponse(
+      '{"knowledgeItemId":"candidate-panel"}',
+      '{"choices":[{"message":{"content":"selected"}}]}',
+    );
 
     const result = await matchKnowledgeItem({
       recordId: "record-match",
@@ -199,9 +230,16 @@ describe("knowledge match service", () => {
       result: { reasonMatch: "candidate-panel" },
       snapshotId: expect.any(String),
     });
-    expect(vi.mocked(getModelsForPurpose)).toHaveBeenCalledWith("text");
+    expect(callModelPool).toHaveBeenCalledTimes(1);
+    expect(callModelPool).toHaveBeenCalledWith(expect.any(Array), {
+      purpose: "text",
+      recordId: "record-match",
+      fieldId: field.id,
+      operation: "knowledge_match",
+    });
+    expect(callVisionModel).not.toHaveBeenCalled();
 
-    const modelMessages = vi.mocked(callVisionModel).mock.calls[0][1];
+    const modelMessages = vi.mocked(callModelPool).mock.calls[0][0];
     const serializedMessages = JSON.stringify(modelMessages);
     expect(serializedMessages).toContain("品质-面板故障");
     expect(serializedMessages).toContain("面板 弹簧片");
@@ -232,11 +270,7 @@ describe("knowledge match service", () => {
       score: 52,
       matchedText: "面板",
     }]);
-    vi.mocked(callVisionModel).mockResolvedValue({
-      content: '{"knowledgeItemId":"unknown-item"}',
-      raw: "unknown-item",
-      usage: {},
-    });
+    mockModelResponse('{"knowledgeItemId":"unknown-item"}', "unknown-item");
 
     await expect(matchKnowledgeItem({
       recordId: "record-match",
@@ -259,11 +293,7 @@ describe("knowledge match service", () => {
       score: 1,
       matchedText: "无法确认",
     }]);
-    vi.mocked(callVisionModel).mockResolvedValue({
-      content: '{"knowledgeItemId":""}',
-      raw: "empty",
-      usage: {},
-    });
+    mockModelResponse('{"knowledgeItemId":""}', "empty");
 
     await expect(matchKnowledgeItem({
       recordId: "record-match",
@@ -289,10 +319,11 @@ describe("knowledge match service", () => {
       result: { reasonMatch: "" },
     });
 
+    expect(callModelPool).not.toHaveBeenCalled();
     expect(callVisionModel).not.toHaveBeenCalled();
   });
 
-  it("does not try another model after a permanent authentication error", async () => {
+  it("uses one successful pool route for a logical match", async () => {
     createKnowledge();
     vi.mocked(searchKnowledge).mockReturnValue([{
       itemId: "candidate-panel",
@@ -300,19 +331,22 @@ describe("knowledge match service", () => {
       score: 52,
       matchedText: "面板",
     }]);
-    vi.mocked(getModelsForPurpose).mockReturnValue([
-      { id: "first", name: "first", model: "first" },
-      { id: "second", name: "second", model: "second" },
-    ] as never);
-    vi.mocked(callVisionModel).mockRejectedValue(new Error("401 unauthorized"));
+    mockModelResponse('{"knowledgeItemId":"candidate-panel"}', "selected");
 
     await expect(matchKnowledgeItem({
       recordId: "record-match",
       field,
       sectionName: "退货分析",
       dependencies: { 聊天内容: "面板故障" },
-    })).rejects.toThrow();
+    })).resolves.toMatchObject({
+      status: "completed",
+      result: { reasonMatch: "candidate-panel" },
+    });
 
-    expect(callVisionModel).toHaveBeenCalledTimes(1);
+    expect(callModelPool).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(callModelPool).mock.results[0].value).resolves.toMatchObject({
+      attempts: [{ modelConfigId: "text-model", status: "success" }],
+    });
+    expect(callVisionModel).not.toHaveBeenCalled();
   });
 });

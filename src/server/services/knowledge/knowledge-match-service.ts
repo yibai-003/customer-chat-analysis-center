@@ -9,8 +9,7 @@ import type {
   KnowledgeMatchResult,
 } from "../../../shared/types";
 import { buildKnowledgeMatchMessages } from "../../ai/knowledge-match-prompt-builder";
-import { callVisionModel, classifyModelError } from "../../ai/openai-compatible-client";
-import { getModelsForPurpose } from "../model-config-service";
+import { callModelPool } from "../model-pool-service";
 import { getKnowledgeBase } from "./knowledge-repository";
 import { searchKnowledge } from "./knowledge-search-service";
 
@@ -126,22 +125,14 @@ async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledg
     candidates: filterPromptCandidates(candidates, promptColumns),
   });
   let selected = cachedCandidate;
-  let response: Awaited<ReturnType<typeof callVisionModel>> | undefined;
+  let response: Awaited<ReturnType<typeof callModelPool>> | undefined;
   if (!selected) {
-    const models = getModelsForPurpose("text");
-    if (!models.length) return reviewResult(input.field.key, "请先配置并启用默认模型");
-    let lastError: unknown;
-    for (const model of models) {
-      assertAnalysisActive(); checkModelBudget();
-      try {
-        response = await callVisionModel(model, messages, { attempts: 1 });
-        if (response) break;
-      } catch (error) {
-        lastError = error;
-        if (!classifyModelError(error).retryable) throw error;
-      }
-    }
-    if (!response) throw lastError ?? new Error("模型请求失败");
+    response = await callModelPool(messages, {
+      purpose: "text",
+      recordId: input.recordId,
+      fieldId: input.field.id,
+      operation: "knowledge_match",
+    });
     assertAnalysisActive();
     const knowledgeItemId = parseKnowledgeItemId(response.content);
     if (knowledgeItemId === "") return reviewResult(input.field.key);

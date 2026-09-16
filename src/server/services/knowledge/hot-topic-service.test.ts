@@ -5,15 +5,18 @@ import { analyzeField, analyzeRecordFields } from "../field-analysis-service";
 import { captureHotTopicQuestions, parseHotTopicQuestions, setHotTopicKnowledgeSync } from "./hot-topic-service";
 import { getKnowledgeBase, listKnowledgeItems, upsertKnowledgeBase, upsertKnowledgeItem } from "./knowledge-repository";
 import { callVisionModel } from "../../ai/openai-compatible-client";
-import { getModelsForPurpose } from "../model-config-service";
+import { callModelPool } from "../model-pool-service";
 import { HOT_TOPIC_BASE_ID, HOT_TOPIC_PROMPT } from "../../../shared/hot-topic";
 import { withAnalysisCancellation, cancelAnalysis } from "../analysis-cancellation";
-import type { AnalysisField } from "../../../shared/types";
+import type { AnalysisField, ModelConfig, ModelRouteResult } from "../../../shared/types";
 
-vi.mock("../model-config-service", () => ({ getModelsForPurpose: vi.fn(() => [{ id: "test-text", name: "Text", model: "test-model" }]) }));
 vi.mock("../../ai/openai-compatible-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../ai/openai-compatible-client")>();
   return { ...actual, callVisionModel: vi.fn() };
+});
+vi.mock("../model-pool-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../model-pool-service")>();
+  return { ...actual, callModelPool: vi.fn() };
 });
 
 let field: AnalysisField;
@@ -26,6 +29,57 @@ function existing(question: string, enabled = true, sectionId = "hot-topic") {
   const base = upsertKnowledgeBase({ id: `existing-${sectionId}`, name: "已有问题", sectionId,
     originalFilename: "questions.xlsx", columns: [{ name: "问题", roles: ["result", "search"] }], isEnabled: true });
   return upsertKnowledgeItem({ id: `item-${sectionId}`, knowledgeBaseId: base.id, values: { 问题: question }, isEnabled: enabled });
+}
+
+function routedModel(id: string): ModelConfig {
+  return {
+    id,
+    name: `${id} name`,
+    baseUrl: `https://${id}.example/v1`,
+    maskedApiKey: "****",
+    model: `${id}-model`,
+    supportsVision: false,
+    temperature: 0,
+    maxTokens: 200,
+    isDefault: false,
+    purpose: "text",
+    isPurposeDefault: true,
+    isEnabled: true,
+    poolEnabled: true,
+    billingMode: "free",
+    qualityTier: "A",
+    priority: 100,
+    thinkingMode: false,
+    memberType: "general",
+    quotaTotalTokens: 1000,
+    quotaUsedTokens: 0,
+    quotaSafetyRatio: 0.95,
+    consecutiveFailures: 0,
+    capabilityEligible: true,
+    quotaBlocked: false,
+  };
+}
+
+function routedResponse(
+  value: unknown,
+  modelId = "test-text",
+  usage: ModelRouteResult["usage"] = {},
+  raw = JSON.stringify(value),
+  attempts?: ModelRouteResult["attempts"],
+): ModelRouteResult {
+  const model = routedModel(modelId);
+  return {
+    content: JSON.stringify(value),
+    raw,
+    usage,
+    model,
+    attempts: attempts ?? [{
+      modelConfigId: model.id,
+      model: model.model,
+      status: "success",
+      durationMs: 7,
+    }],
+  };
 }
 
 beforeEach(() => {
@@ -43,19 +97,150 @@ beforeEach(() => {
     (id,job_id,sheet_name,row_number,anchor_json,source_fields_json,image_path,status,review_status,created_at,updated_at)
     VALUES (?,'job-one','Sheet1',2,'{}',?,'','pending','pending',?,?)`).run(id, JSON.stringify(dependencies), timestamp, timestamp);
   vi.mocked(callVisionModel).mockReset();
+  vi.mocked(callModelPool).mockReset();
+  vi.mocked(callModelPool).mockImplementation(async (messages) => {
+    const model = routedModel("test-text");
+    const response = await callVisionModel(model as never, messages, { attempts: 1 });
+    return {
+      ...response,
+      model,
+      attempts: [{
+        modelConfigId: model.id,
+        model: model.model,
+        status: "success",
+        durationMs: 1,
+      }],
+    };
+  });
   setHotTopicKnowledgeSync(undefined);
 });
 
 describe("hot-topic capture", () => {
-  it("does not try another model after a permanent authentication error", async () => {
-    vi.mocked(getModelsForPurpose).mockReturnValue([
-      { id: "first", name: "first", model: "first" },
-      { id: "second", name: "second", model: "second" },
-    ] as never);
-    vi.mocked(callVisionModel).mockRejectedValue(new Error("401 unauthorized"));
+  it("records each logical ask route independently and aggregates usage once", async () => {
+    const item = existing("开票咨询");
+    vi.mocked(callModelPool)
+      .mockResolvedValueOnce(routedResponse(
+        { questions: [{ question: "可以提供发票吗？", evidence }] },
+        "extractor",
+        { prompt_tokens: 3, completion_tokens: 2 },
+        "extract-raw",
+      ))
+      .mockResolvedValueOnce(routedResponse(
+        { decision: "match", itemId: item.id },
+        "matcher",
+        { prompt_tokens: 5, completion_tokens: 7 },
+        "match-raw",
+      ));
+
+    const run = await capture();
+
+    expect(run.status).toBe("completed");
+    expect(callModelPool).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(callModelPool).mock.calls.map(([, options]) => options)).toEqual([
+      {
+        purpose: "text",
+        recordId: "record-one",
+        fieldId: field.id,
+        operation: "hot_topic_capture",
+      },
+      {
+        purpose: "text",
+        recordId: "record-one",
+        fieldId: field.id,
+        operation: "hot_topic_capture",
+      },
+    ]);
+    expect(run.modelConfigSnapshot).toEqual({
+      purpose: "text",
+      models: [
+        {
+          id: "extractor",
+          name: "extractor name",
+          model: "extractor-model",
+          purpose: "text",
+          attempts: [{
+            modelConfigId: "extractor",
+            model: "extractor-model",
+            status: "success",
+            durationMs: 7,
+          }],
+        },
+        {
+          id: "matcher",
+          name: "matcher name",
+          model: "matcher-model",
+          purpose: "text",
+          attempts: [{
+            modelConfigId: "matcher",
+            model: "matcher-model",
+            status: "success",
+            durationMs: 7,
+          }],
+        },
+      ],
+    });
+    expect(JSON.parse(run.rawResponse ?? "[]")).toEqual([
+      {
+        request: { fieldPrompt: field.prompt, dependencies },
+        response: "extract-raw",
+      },
+      {
+        request: expect.objectContaining({
+          question: { question: "可以提供发票吗？", evidence },
+        }),
+        response: "match-raw",
+      },
+    ]);
+    expect(run.inputTokens).toBe(8);
+    expect(run.outputTokens).toBe(9);
+  });
+
+  it("writes one knowledge item after a 429 failover succeeds", async () => {
+    vi.mocked(callModelPool).mockResolvedValueOnce(routedResponse(
+      { questions: [{ question: "订单何时发货？", evidence }] },
+      "second",
+      { prompt_tokens: 4, completion_tokens: 3 },
+      "second-raw",
+      [
+        {
+          modelConfigId: "first",
+          model: "first-model",
+          status: "switched",
+          errorCode: "rate_limit",
+          durationMs: 5,
+        },
+        {
+          modelConfigId: "second",
+          model: "second-model",
+          status: "success",
+          durationMs: 6,
+        },
+      ],
+    ));
+
+    const run = await capture();
+
+    expect(run.status).toBe("completed");
+    expect(callModelPool).toHaveBeenCalledTimes(1);
+    expect(listKnowledgeItems(HOT_TOPIC_BASE_ID).items).toHaveLength(1);
+    expect(db.prepare("SELECT COUNT(*) n FROM hot_topic_record_questions").get()).toEqual({ n: 1 });
+    expect(run.modelConfigSnapshot).toMatchObject({
+      models: [{
+        id: "second",
+        attempts: [
+          { modelConfigId: "first", status: "switched", errorCode: "rate_limit" },
+          { modelConfigId: "second", status: "success" },
+        ],
+      }],
+    });
+  });
+
+  it("records a permanent pool error as a failed capture", async () => {
+    vi.mocked(callModelPool).mockRejectedValueOnce(new Error("401 unauthorized"));
 
     expect((await capture()).status).toBe("failed");
-    expect(callVisionModel).toHaveBeenCalledTimes(1);
+    expect(callModelPool).toHaveBeenCalledTimes(1);
+    expect(callVisionModel).not.toHaveBeenCalled();
   });
 
   it.each(["401 unauthorized", "CERT_HAS_EXPIRED", "network error", "429 rate limit", "invalid protocol"])("propagates %s as failed through record aggregation without new knowledge", async message => {
