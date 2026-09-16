@@ -67,7 +67,7 @@ purpose-first `/api/ready` behavior.
 
 ### GREEN
 
-Targeted server verification:
+Targeted verification on an isolated worktree at the committed revision:
 
 ```text
 npx vitest run src/server/services/model-provider-service.test.ts \
@@ -78,7 +78,7 @@ npx vitest run src/server/services/model-provider-service.test.ts \
   --pool=threads --maxWorkers=1
 
 Test Files  5 passed (5)
-Tests       70 passed (70)
+Tests       64 passed (64)
 ```
 
 TypeScript verification:
@@ -88,12 +88,12 @@ npm run typecheck
 tsc --noEmit: passed
 ```
 
-Full regression suite:
+Full regression suite on the isolated committed revision:
 
 ```text
 npm test
 Test Files  72 passed (72)
-Tests       537 passed (537)
+Tests       530 passed (530)
 ```
 
 ## Changed Files
