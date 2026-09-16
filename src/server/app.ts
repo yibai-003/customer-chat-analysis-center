@@ -22,6 +22,7 @@ import { createKnowledgeRouter } from "./routes/knowledge-routes";
 import { getAnalysisCapacity } from "./services/analysis-capacity-service";
 import { initializeKnowledgeSync, type KnowledgeSync } from "./services/knowledge/knowledge-sync-service";
 import { setHotTopicKnowledgeSync } from "./services/knowledge/hot-topic-service";
+import { createModelPoolRouter } from "./routes/model-pool-router";
 
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
@@ -218,6 +219,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.post("/api/model-configs/:id/test", async (req, res) => { try { return ok(res, await testModelConnection(req.params.id)); } catch (error) { return fail(res, error); } });
   app.post("/api/model-configs/:id/test-capabilities", async (req, res) => { try { return ok(res, await testModelCapabilities(req.params.id)); } catch (error) { return fail(res, error); } });
   app.use("/api", createKnowledgeRouter(upload));
+  app.use("/api", createModelPoolRouter());
   app.use(express.static(path.join(projectRoot, "dist")));
   app.use((
     error: unknown,
