@@ -160,6 +160,34 @@ describe("model provider credentials", () => {
     expect(resolvePoolMembers("text").some((item) => item.id === model.id)).toBe(false);
   });
 
+  it("uses the configured capability TTL when resolving pool eligibility", () => {
+    const model = createModelConfig({
+      name: "动态能力有效期",
+      baseUrl: "https://capability-ttl.example/v1",
+      apiKey: "capability-ttl-secret",
+      model: "capability-ttl-model",
+      purpose: "text",
+    });
+    db.prepare(`UPDATE model_configs SET pool_enabled=1, capability_json=?,
+      capability_checked_at=? WHERE id=?`).run(
+      JSON.stringify({ text: true, json: true, vision: false }),
+      Date.now() - 120_000,
+      model.id,
+    );
+
+    try {
+      db.prepare("UPDATE model_pool_settings SET capability_ttl_ms=60000 WHERE id='default'").run();
+      expect(resolvePoolMembers("text").find((item) => item.id === model.id)?.capabilityEligible)
+        .toBe(false);
+
+      db.prepare("UPDATE model_pool_settings SET capability_ttl_ms=180000 WHERE id='default'").run();
+      expect(resolvePoolMembers("text").find((item) => item.id === model.id)?.capabilityEligible)
+        .toBe(true);
+    } finally {
+      db.prepare("UPDATE model_pool_settings SET capability_ttl_ms=86400000 WHERE id='default'").run();
+    }
+  });
+
   it("tests a provider through an enabled member and records the public result", async () => {
     const provider = createModelProvider({
       name: "连接测试供应商",

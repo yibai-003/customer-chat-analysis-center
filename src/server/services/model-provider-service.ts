@@ -14,6 +14,10 @@ export interface ResolvedPoolMember extends ModelConfig {
   providerEnabled: boolean;
 }
 
+export interface PoolMemberStatus extends ModelConfig {
+  providerEnabled: boolean;
+}
+
 export const safeBaseUrlSchema = z.string().max(2048).url().refine((value) => {
   const url = new URL(value);
   return ["http:", "https:"].includes(url.protocol)
@@ -50,6 +54,14 @@ function mapProviderRow(row: any): ModelProvider {
   };
 }
 
+export function getCapabilityTtlMs() {
+  const row = db.prepare(
+    "SELECT capability_ttl_ms FROM model_pool_settings WHERE id='default'",
+  ).get() as { capability_ttl_ms: number } | undefined;
+  if (!row) throw new Error("模型池设置不存在");
+  return row.capability_ttl_ms;
+}
+
 export function mapModelConfigRow(row: any): ModelConfig {
   const ciphertext = row.provider_id && row.provider_api_key
     ? row.provider_api_key
@@ -60,9 +72,10 @@ export function mapModelConfigRow(row: any): ModelConfig {
     ? new Date(row.capability_checked_at).toISOString()
     : undefined;
   const capabilityTime = Date.parse(capabilityCheckedAt ?? "");
+  const now = Date.now();
   const capabilityFresh = Number.isFinite(capabilityTime)
-    && Date.now() >= capabilityTime
-    && Date.now() - capabilityTime < 86400000;
+    && now >= capabilityTime
+    && now - capabilityTime < getCapabilityTtlMs();
   const capabilityPassed = capabilityStatus?.text === true
     && capabilityStatus?.json === true
     && (row.purpose !== "vision" || (Boolean(row.supports_vision) && capabilityStatus.vision === true));
@@ -203,6 +216,16 @@ export function resolveModelMember(id: string): ResolvedPoolMember {
     baseUrl: usesProvider ? row.provider_base_url : row.base_url,
     providerEnabled: usesProvider ? Boolean(row.provider_enabled) : true,
   };
+}
+
+export function listPoolMemberStatuses(purpose: ModelPurpose): PoolMemberStatus[] {
+  const rows = db.prepare(`${modelWithProviderSql}
+    WHERE m.purpose=? AND m.pool_enabled=1
+    ORDER BY m.is_purpose_default DESC, m.priority ASC, m.created_at DESC`).all(purpose) as any[];
+  return rows.map((row) => ({
+    ...mapModelConfigRow(row),
+    providerEnabled: row.provider_id ? Boolean(row.provider_enabled) : true,
+  }));
 }
 
 export function resolvePoolMembers(purpose: ModelPurpose): ResolvedPoolMember[] {

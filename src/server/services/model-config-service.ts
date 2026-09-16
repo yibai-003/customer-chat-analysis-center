@@ -8,6 +8,8 @@ import { buildChatCompletionsUrl, extractResponseContent } from "../ai/openai-co
 import type { ModelConfig } from "../../shared/types";
 import {
   findOrCreateModelProvider,
+  getCapabilityTtlMs,
+  listPoolMemberStatuses,
   mapModelConfigRow,
   redactCredential,
   resolveModelMember,
@@ -250,8 +252,62 @@ async function runCapabilityCheck(id: string) {
 export function modelVerification(model: ModelConfig | undefined, now = Date.now()) {
   if (!model) return { configured: false, verified: false, state: "unconfigured" };
   const time = Date.parse(model.capabilityCheckedAt ?? "");
-  const fresh = Number.isFinite(time) && now >= time && now - time < 86400000;
+  const fresh = Number.isFinite(time) && now >= time && now - time < getCapabilityTtlMs();
   const passed = model.capabilityStatus?.text === true && model.capabilityStatus?.json === true
     && (model.purpose !== "vision" || (model.supportsVision && model.capabilityStatus.vision === true));
   return { configured: true, verified: fresh && passed, state: !Number.isFinite(time) ? "untested" : !fresh ? "expired" : passed ? "passed" : "failed", checkedAt: model.capabilityCheckedAt, modelId: model.id };
+}
+
+function poolMemberSchedulable(
+  member: ReturnType<typeof listPoolMemberStatuses>[number],
+  verified: boolean,
+  now: number,
+) {
+  if (!member.isEnabled
+    || !member.poolEnabled
+    || !member.providerEnabled
+    || !verified
+    || member.memberType !== "general") return false;
+  if (member.cooldownUntil && Date.parse(member.cooldownUntil) > now) return false;
+  if (member.billingMode === "free") {
+    if (member.quotaExpiresAt) {
+      const expiresAt = Date.parse(member.quotaExpiresAt);
+      if (!Number.isFinite(expiresAt) || expiresAt <= now) return false;
+    }
+    const safetyLimit = (member.quotaTotalTokens ?? 0) * member.quotaSafetyRatio;
+    if (member.quotaBlocked || member.quotaUsedTokens >= safetyLimit) return false;
+  }
+  return true;
+}
+
+function getModelReadinessForPurpose(purpose: "vision" | "text", now: number) {
+  const poolMembers = listPoolMemberStatuses(purpose);
+  if (!poolMembers.length) {
+    return modelVerification(getModelsForPurpose(purpose)[0], now);
+  }
+
+  const checks = poolMembers.map((member) => ({
+    member,
+    verification: modelVerification(member, now),
+  }));
+  const schedulable = checks.find(({ member, verification }) =>
+    poolMemberSchedulable(member, verification.verified, now)
+  );
+  if (schedulable) return schedulable.verification;
+
+  const representative = checks.find(({ verification }) => !verification.verified)?.verification
+    ?? checks[0].verification;
+  return {
+    ...representative,
+    configured: true,
+    verified: false,
+    state: representative.verified ? "unavailable" : representative.state,
+  };
+}
+
+export function getModelReadinessChecks(now = Date.now()) {
+  return {
+    vision: getModelReadinessForPurpose("vision", now),
+    text: getModelReadinessForPurpose("text", now),
+  };
 }
