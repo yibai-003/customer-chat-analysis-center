@@ -12,12 +12,19 @@ export function AnalysisRunDialog({
   onCancel,
 }: {
   capacity: AnalysisCapacity;
-  onConfirm: (options: Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize">>) => void;
+  onConfirm: (options: Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize" | "maxPaidTokens">>) => void;
   onCancel: () => void;
 }) {
   const [concurrency, setConcurrency] = useState(capacity.recommendation.concurrency);
   const [batchSize, setBatchSize] = useState(capacity.recommendation.batchSize);
+  const [maxPaidTokens, setMaxPaidTokens] = useState("0");
+  const [paidTokenError, setPaidTokenError] = useState(false);
   const { metrics, recommendation, allowedRanges } = capacity;
+  const parsedMaxPaidTokens = Number(maxPaidTokens);
+  const validMaxPaidTokens = maxPaidTokens.trim() !== ""
+    && Number.isSafeInteger(parsedMaxPaidTokens)
+    && parsedMaxPaidTokens >= 0
+    && parsedMaxPaidTokens <= 100_000_000;
   const exceedsRecommendation = (
     concurrency > recommendation.concurrency
     || batchSize > recommendation.batchSize
@@ -79,7 +86,28 @@ export function AnalysisRunDialog({
         />
         <small>{allowedRanges.batchSize.min}-{allowedRanges.batchSize.max}</small>
       </label>
+      <label>
+        最大付费 Token
+        <input
+          aria-label="最大付费 Token"
+          type="number"
+          min={0}
+          max={100_000_000}
+          step={1000}
+          value={maxPaidTokens}
+          aria-invalid={paidTokenError}
+          onChange={(event) => {
+            setMaxPaidTokens(event.target.value);
+            setPaidTokenError(false);
+          }}
+        />
+        <small>0 表示仅使用免费池；免费额度不可用时任务暂停并等待处理。</small>
+      </label>
     </div>
+
+    {paidTokenError && <div className="form-error" role="alert">
+      最大付费 Token 必须是 0 到 100000000 之间的整数。
+    </div>}
 
     {exceedsRecommendation && <div className="analysis-load-warning">
       当前设置高于系统推荐值，可能增加内存占用或模型接口负载。
@@ -89,7 +117,13 @@ export function AnalysisRunDialog({
       <button className="button light" onClick={onCancel}>取消</button>
       <button
         className="button dark"
-        onClick={() => onConfirm({ concurrency, batchSize })}
+        onClick={() => {
+          if (!validMaxPaidTokens) {
+            setPaidTokenError(true);
+            return;
+          }
+          onConfirm({ concurrency, batchSize, maxPaidTokens: parsedMaxPaidTokens });
+        }}
       >
         按此配置开始解析
       </button>

@@ -20,6 +20,7 @@ import { analyzeRecordFields } from "./field-analysis-service";
 import { config } from "../config";
 import type { AnalysisJobOptions, BatchProgress, Job, RecordStatus } from "../../shared/types";
 import { listFields } from "./field-config-service";
+import { withPaidTokenBudget } from "../ai/model-budget";
 
 interface AnalysisProgress extends BatchProgress {
   completedFields: number;
@@ -106,12 +107,13 @@ export function resolveAnalysisRunOptions(
     concurrency: config.analysisConcurrency,
     batchSize: config.analysisBatchSize,
   },
-): Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize">> & Pick<AnalysisJobOptions, "recordIds"> {
+): Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize" | "maxPaidTokens">> & Pick<AnalysisJobOptions, "recordIds"> {
   const defaultConcurrency = validInteger(defaults.concurrency, 1, 6) ? defaults.concurrency : 2;
   const defaultBatchSize = validInteger(defaults.batchSize, 5, 100) ? defaults.batchSize : 20;
   return {
     concurrency: validInteger(options.concurrency, 1, 6) ? options.concurrency! : defaultConcurrency,
     batchSize: validInteger(options.batchSize, 5, 100) ? options.batchSize! : defaultBatchSize,
+    maxPaidTokens: validInteger(options.maxPaidTokens, 0, 100_000_000) ? options.maxPaidTokens! : 0,
     recordIds: options.recordIds,
   };
 }
@@ -263,7 +265,11 @@ export function analyzeJob(
   const job = getJob(jobId)!;
   if (!acquireJobRun(jobId)) throw new Error("任务正在运行或当前状态不允许解析");
   try {
-    return runPreparedAnalysisJob(prepareAcquiredAnalysisJob(jobId, sectionId, options));
+    const prepared = prepareAcquiredAnalysisJob(jobId, sectionId, options);
+    return withPaidTokenBudget(
+      () => runPreparedAnalysisJob(prepared),
+      { maxPaidTokens: prepared.runOptions.maxPaidTokens },
+    );
   } catch (error) {
     releaseJobRun(jobId, job.status);
     throw error;

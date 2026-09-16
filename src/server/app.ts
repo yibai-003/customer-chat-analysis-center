@@ -179,6 +179,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       void (dependencies.analyzeJobRunner ?? analyzeJob)(req.params.id, req.body.sectionId, {
         concurrency: req.body.concurrency,
         batchSize: req.body.batchSize,
+        maxPaidTokens: req.body.maxPaidTokens,
       }).catch((error) => console.error("批量解析失败", error));
       return ok(res, getJob(req.params.id));
     } catch (error) { return fail(res, error); }

@@ -44,12 +44,17 @@ describe("AnalysisRunDialog", () => {
 
     const concurrency = screen.getByLabelText("AI 并发数") as HTMLInputElement;
     const batchSize = screen.getByLabelText("每批记录数") as HTMLInputElement;
+    const maxPaidTokens = screen.getByLabelText("最大付费 Token") as HTMLInputElement;
     expect(concurrency.value).toBe("1");
     expect(concurrency.min).toBe("1");
     expect(concurrency.max).toBe("6");
     expect(batchSize.value).toBe("10");
     expect(batchSize.min).toBe("5");
     expect(batchSize.max).toBe("100");
+    expect(maxPaidTokens.value).toBe("0");
+    expect(maxPaidTokens.min).toBe("0");
+    expect(maxPaidTokens.step).toBe("1000");
+    expect(screen.getByText("0 表示仅使用免费池；免费额度不可用时任务暂停并等待处理。")).toBeTruthy();
   });
 
   it("warns above the recommendation and submits the chosen numeric values", () => {
@@ -61,6 +66,17 @@ describe("AnalysisRunDialog", () => {
 
     expect(screen.getByText("当前设置高于系统推荐值，可能增加内存占用或模型接口负载。")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "按此配置开始解析" }));
-    expect(onConfirm).toHaveBeenCalledWith({ concurrency: 3, batchSize: 25 });
+    expect(onConfirm).toHaveBeenCalledWith({ concurrency: 3, batchSize: 25, maxPaidTokens: 0 });
+  });
+
+  it.each(["-1", "1.5", ""]) ("rejects invalid paid-token input %s before confirm", (value) => {
+    const onConfirm = vi.fn();
+    render(<AnalysisRunDialog capacity={capacity} onCancel={() => undefined} onConfirm={onConfirm} />);
+
+    fireEvent.change(screen.getByLabelText("最大付费 Token"), { target: { value } });
+    fireEvent.click(screen.getByRole("button", { name: "按此配置开始解析" }));
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert").textContent).toContain("最大付费 Token 必须是 0 到 100000000 之间的整数。");
   });
 });
