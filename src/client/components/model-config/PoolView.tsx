@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type {
   ModelBillingMode,
   ModelConfig,
@@ -59,11 +59,34 @@ function formatTokens(value?: number) {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
 
-function statusFor(model: ModelConfig) {
+type CapabilityState = "verified" | "never" | "expired" | "failed";
+
+function capabilityStateFor(model: ModelConfig): CapabilityState {
+  if (model.capabilityEligible) return "verified";
+  if (!model.capabilityCheckedAt && !model.capabilityStatus) return "never";
+  const capability = model.capabilityStatus;
+  const passed = capability?.text === true
+    && capability.json === true
+    && (model.purpose === "text" || (model.supportsVision && capability.vision === true));
+  if (!passed) return "failed";
+  return "expired";
+}
+
+const capabilityLabels: Record<CapabilityState, { column: string; status: string; tone: string }> = {
+  verified: { column: "已验证", status: "", tone: "ready" },
+  never: { column: "未验证", status: "待能力验证", tone: "warning" },
+  expired: { column: "验证已过期", status: "验证已过期", tone: "warning" },
+  failed: { column: "能力验证失败", status: "能力验证失败", tone: "danger" },
+};
+
+function statusFor(model: ModelConfig, capabilityState: CapabilityState) {
   if (!model.isEnabled || !model.poolEnabled) return { text: "已禁用", tone: "muted" };
   if (model.quotaBlocked) return { text: "额度已耗尽", tone: "danger" };
   if (model.cooldownUntil) return { text: "冷却中", tone: "warning" };
-  if (!model.capabilityEligible) return { text: "能力验证失败", tone: "danger" };
+  if (capabilityState !== "verified") {
+    const capability = capabilityLabels[capabilityState];
+    return { text: capability.status, tone: capability.tone };
+  }
   if (model.billingMode === "paid") return { text: "付费可用", tone: "paid" };
   return { text: "可调用", tone: "ready" };
 }
@@ -86,15 +109,17 @@ export function PoolView({
   pool,
   settings,
   api,
+  refreshPool,
   refreshSettings,
-  changed,
+  markDirty,
   reportError,
 }: {
   pool: PoolData;
   settings: ModelPoolSettings;
   api: <T>(url: string, options?: RequestInit) => Promise<T>;
+  refreshPool: () => Promise<void>;
   refreshSettings: () => Promise<void>;
-  changed: () => Promise<void>;
+  markDirty: () => void;
   reportError: (message: string) => void;
 }) {
   const [purpose, setPurpose] = useState<ModelPurpose>("vision");
@@ -139,21 +164,32 @@ export function PoolView({
           quotaSafetyRatio: Number(editState.quotaSafetyRatio || 0.95),
         }),
       });
-      setEditingId(null);
-      setEditState(null);
-      await changed();
     } catch (error) {
       reportError(error instanceof Error ? error.message : "模型池成员保存失败");
+      return;
+    }
+    markDirty();
+    setEditingId(null);
+    setEditState(null);
+    try {
+      await refreshPool();
+    } catch (error) {
+      reportError(`模型池成员已保存，但列表刷新失败：${
+        error instanceof Error ? error.message : "刷新失败"
+      }`);
     }
   };
 
   const install = async () => {
     setInstalling(true);
     setMessage("正在安装或更新千问免费池...");
+    let mutated = false;
     try {
       const result = await api<InstallResult>("/api/model-pools/qianwen-free/install", {
         method: "POST",
       });
+      mutated = true;
+      markDirty();
       const createdSet = new Set(result.created);
       const preExisting = result.needsVerification.filter((id) => !createdSet.has(id));
       const created = result.needsVerification.filter((id) => createdSet.has(id));
@@ -176,7 +212,6 @@ export function PoolView({
           `新建 ${result.created.length}，更新 ${result.updated.length}，已验证 ${verified}/${result.needsVerification.length}`,
         );
       }
-      await changed();
       setMessage(
         `新建 ${result.created.length}，更新 ${result.updated.length}，验证完成 ${verified}/${result.needsVerification.length}`,
       );
@@ -186,6 +221,14 @@ export function PoolView({
       reportError(text);
     } finally {
       setInstalling(false);
+    }
+    if (!mutated) return;
+    try {
+      await refreshPool();
+    } catch (error) {
+      reportError(`千问免费池已变更，但列表刷新失败：${
+        error instanceof Error ? error.message : "刷新失败"
+      }`);
     }
   };
 
@@ -200,11 +243,39 @@ export function PoolView({
           capabilityTtlMs: Number(settingsForm.capabilityTtlMs),
         }),
       });
-      await refreshSettings();
-      setMessage("付费预算与能力验证时效已保存");
     } catch (error) {
       reportError(error instanceof Error ? error.message : "模型池设置保存失败");
+      return;
     }
+    markDirty();
+    setMessage("付费预算与能力验证时效已保存");
+    try {
+      await refreshSettings();
+    } catch (error) {
+      reportError(`模型池设置已保存，但刷新失败：${
+        error instanceof Error ? error.message : "刷新失败"
+      }`);
+    }
+  };
+
+  const selectPurpose = (nextPurpose: ModelPurpose, focus = false) => {
+    setPurpose(nextPurpose);
+    if (focus) document.getElementById(`model-pool-purpose-tab-${nextPurpose}`)?.focus();
+  };
+
+  const handlePurposeKeyDown = (
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentPurpose: ModelPurpose,
+  ) => {
+    let nextPurpose: ModelPurpose | undefined;
+    if (event.key === "ArrowRight" || event.key === "ArrowLeft") {
+      nextPurpose = currentPurpose === "vision" ? "text" : "vision";
+    }
+    if (event.key === "Home") nextPurpose = "vision";
+    if (event.key === "End") nextPurpose = "text";
+    if (!nextPurpose) return;
+    event.preventDefault();
+    selectPurpose(nextPurpose, true);
   };
 
   return (
@@ -227,18 +298,30 @@ export function PoolView({
         </button>
       </div>
 
-      <div className="model-purpose-tabs" aria-label="模型用途">
+      <div className="model-purpose-tabs" role="tablist" aria-label="模型用途">
         <button
+          id="model-pool-purpose-tab-vision"
           type="button"
+          role="tab"
+          aria-selected={purpose === "vision"}
+          aria-controls="model-pool-purpose-panel"
+          tabIndex={purpose === "vision" ? 0 : -1}
           className={purpose === "vision" ? "active" : ""}
-          onClick={() => setPurpose("vision")}
+          onClick={() => selectPurpose("vision")}
+          onKeyDown={(event) => handlePurposeKeyDown(event, "vision")}
         >
           视觉模型
         </button>
         <button
+          id="model-pool-purpose-tab-text"
           type="button"
+          role="tab"
+          aria-selected={purpose === "text"}
+          aria-controls="model-pool-purpose-panel"
+          tabIndex={purpose === "text" ? 0 : -1}
           className={purpose === "text" ? "active" : ""}
-          onClick={() => setPurpose("text")}
+          onClick={() => selectPurpose("text")}
+          onKeyDown={(event) => handlePurposeKeyDown(event, "text")}
         >
           文本模型
         </button>
@@ -246,7 +329,12 @@ export function PoolView({
 
       {message && <div className="model-console-message" role="status">{message}</div>}
 
-      <div className="model-table-scroll">
+      <div
+        id="model-pool-purpose-panel"
+        className="model-table-scroll"
+        role="tabpanel"
+        aria-labelledby={`model-pool-purpose-tab-${purpose}`}
+      >
         <table className="model-pool-table">
           <thead>
             <tr>
@@ -269,7 +357,9 @@ export function PoolView({
               const remaining = model.quotaTotalTokens == null
                 ? undefined
                 : Math.max(0, model.quotaTotalTokens - model.quotaUsedTokens);
-              const status = statusFor(model);
+              const capabilityState = capabilityStateFor(model);
+              const capability = capabilityLabels[capabilityState];
+              const status = statusFor(model, capabilityState);
               return (
                 <tr key={model.id}>
                   <td className="model-name-cell">
@@ -374,7 +464,7 @@ export function PoolView({
                       />
                     ) : displayDate(model.quotaExpiresAt)}
                   </td>
-                  <td>{model.capabilityEligible ? "已验证" : "未通过"}</td>
+                  <td>{capability.column}</td>
                   <td>{model.cooldownUntil ? displayDate(model.cooldownUntil) : "无"}</td>
                   <td>
                     {editing ? (

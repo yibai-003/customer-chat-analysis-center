@@ -24,13 +24,13 @@ export function ProviderView({
   providers,
   api,
   refresh,
-  changed,
+  markDirty,
   reportError,
 }: {
   providers: ModelProvider[];
   api: <T>(url: string, options?: RequestInit) => Promise<T>;
   refresh: () => Promise<void>;
-  changed: () => Promise<void>;
+  markDirty: () => void;
   reportError: (message: string) => void;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -58,6 +58,7 @@ export function ProviderView({
   const save = async () => {
     setBusyId(editingId ?? "new");
     setMessage("");
+    const action = editingId ? "更新" : "创建";
     try {
       const body: Partial<ProviderForm> = {
         name: form.name,
@@ -73,10 +74,19 @@ export function ProviderView({
           body: JSON.stringify(body),
         },
       );
-      reset();
-      await changed();
     } catch (error) {
       reportError(error instanceof Error ? error.message : "服务商保存失败");
+      setBusyId(null);
+      return;
+    }
+    markDirty();
+    reset();
+    setMessage(`服务商已${action}`);
+    try {
+      await refresh();
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "列表刷新失败";
+      reportError(`服务商已${action}，但列表刷新失败：${text}`);
     } finally {
       setBusyId(null);
     }
@@ -91,12 +101,18 @@ export function ProviderView({
         { method: "POST" },
       );
       setMessage(`${provider.name} 连接成功，耗时 ${result.latencyMs}ms`);
-      await refresh();
     } catch (error) {
       const text = error instanceof Error ? error.message : "连接测试失败";
       setMessage(text);
       reportError(text);
     } finally {
+      try {
+        await refresh();
+      } catch (error) {
+        reportError(`连接测试已完成，但服务商状态刷新失败：${
+          error instanceof Error ? error.message : "刷新失败"
+        }`);
+      }
       setBusyId(null);
     }
   };

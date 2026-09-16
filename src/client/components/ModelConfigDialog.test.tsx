@@ -88,6 +88,13 @@ function success(data: unknown) {
   });
 }
 
+function failure(error: string, status = 500) {
+  return new Response(JSON.stringify({ success: false, data: null, error }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 function defaultData(url: string) {
   if (url === "/api/model-pools") {
     return {
@@ -115,7 +122,8 @@ beforeEach(() => {
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     requests.push({ url, init });
-    return success(await responseFor(url, init));
+    const result = await responseFor(url, init);
+    return result instanceof Response ? result : success(result);
   }));
 });
 
@@ -139,7 +147,7 @@ describe("ModelConfigDialog", () => {
     expect(await screen.findByText("千问视觉")).toBeTruthy();
     expect(screen.queryByText("千问文本")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "文本模型" }));
+    fireEvent.click(screen.getByRole("tab", { name: "文本模型" }));
     expect(await screen.findByText("千问文本")).toBeTruthy();
     expect(screen.queryByText("千问视觉")).toBeNull();
   });
@@ -254,6 +262,98 @@ describe("ModelConfigDialog", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
+  it("marks a successful provider creation dirty before a failed refresh and does not invite a duplicate retry", async () => {
+    const close = vi.fn();
+    const saved = vi.fn();
+    let providerLists = 0;
+    responseFor = (url, init) => {
+      if (url === "/api/model-providers") {
+        if (init?.method === "POST") return provider;
+        providerLists += 1;
+        if (providerLists > 1) return failure("供应商列表刷新失败");
+        return [provider];
+      }
+      if (url === "/api/model-providers/new-provider") return provider;
+      return defaultData(url);
+    };
+    await act(async () => {
+      render(<ModelConfigDialog models={members} close={close} saved={saved} />);
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "服务商凭证" }));
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "新服务商" } });
+    fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "https://new.example/v1" } });
+    fireEvent.change(screen.getByLabelText("API Key"), { target: { value: "new-secret" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "创建服务商" }));
+    });
+
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("已创建"));
+    expect(requests.filter((request) => (
+      request.url === "/api/model-providers" && request.init?.method === "POST"
+    ))).toHaveLength(1);
+    expect((screen.getByLabelText("名称") as HTMLInputElement).value).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "×" }));
+    expect(saved).toHaveBeenCalledTimes(1);
+    expect(close).not.toHaveBeenCalled();
+  });
+
+  it("refreshes provider test metadata after failure while preserving the test failure message", async () => {
+    let providerLists = 0;
+    responseFor = (url, init) => {
+      if (url === "/api/model-providers") {
+        providerLists += 1;
+        return providerLists === 1 ? [provider] : [{
+          ...provider,
+          lastTestedAt: "2026-09-16T05:00:00.000Z",
+          lastError: "401 credential rejected",
+        }];
+      }
+      if (url === "/api/model-providers/provider-1/test" && init?.method === "POST") {
+        return failure("连接失败：401 credential rejected", 400);
+      }
+      return defaultData(url);
+    };
+    await renderDialog();
+    fireEvent.click(screen.getByRole("tab", { name: "服务商凭证" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "测试" }));
+    });
+
+    await waitFor(() => expect(screen.getByText("401 credential rejected")).toBeTruthy());
+    expect(screen.getByRole("status").textContent).toBe("连接失败：401 credential rejected");
+    expect(providerLists).toBe(2);
+  });
+
+  it("supports accessible primary and purpose tab keyboard navigation", async () => {
+    await renderDialog();
+    const providerTab = screen.getByRole("tab", { name: "服务商凭证" });
+    const poolTab = screen.getByRole("tab", { name: "模型池" });
+    const usageTab = screen.getByRole("tab", { name: "调用状态" });
+
+    expect(poolTab.id).toBe("model-console-tab-pool");
+    expect(poolTab.getAttribute("aria-controls")).toBe("model-console-panel-pool");
+    expect(poolTab.tabIndex).toBe(0);
+    expect(providerTab.tabIndex).toBe(-1);
+    fireEvent.keyDown(poolTab, { key: "ArrowRight" });
+    expect(usageTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(usageTab);
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe(usageTab.id);
+    fireEvent.keyDown(usageTab, { key: "Home" });
+    expect(document.activeElement).toBe(providerTab);
+    fireEvent.keyDown(providerTab, { key: "End" });
+    expect(document.activeElement).toBe(usageTab);
+
+    fireEvent.click(poolTab);
+    const visionTab = screen.getByRole("tab", { name: "视觉模型" });
+    const textTab = screen.getByRole("tab", { name: "文本模型" });
+    expect(visionTab.getAttribute("aria-selected")).toBe("true");
+    expect(visionTab.getAttribute("aria-controls")).toBe("model-pool-purpose-panel");
+    fireEvent.keyDown(visionTab, { key: "ArrowRight" });
+    expect(textTab.getAttribute("aria-selected")).toBe("true");
+    expect(document.activeElement).toBe(textTab);
+    expect(screen.getByRole("tabpanel", { name: "文本模型" })).toBeTruthy();
+  });
+
   it("requests usage events with purpose, model, and event filters", async () => {
     await renderDialog();
     fireEvent.click(screen.getByRole("tab", { name: "调用状态" }));
@@ -274,7 +374,13 @@ describe("ModelConfigDialog", () => {
       member({ id: "paid", name: "付费备用", billingMode: "paid" }),
       member({ id: "quota", name: "额度耗尽", quotaBlocked: true }),
       member({ id: "cooldown", name: "冷却模型", cooldownUntil: "2026-09-17T00:00:00.000Z" }),
-      member({ id: "capability", name: "能力失败", capabilityEligible: false }),
+      member({
+        id: "capability",
+        name: "能力失败",
+        capabilityEligible: false,
+        capabilityCheckedAt: "2026-09-16T01:00:00.000Z",
+        capabilityStatus: { text: false, json: true, vision: true },
+      }),
       member({ id: "disabled", name: "禁用模型", isEnabled: false }),
       member({ id: "ready", name: "就绪模型" }),
     ];
@@ -293,8 +399,58 @@ describe("ModelConfigDialog", () => {
     await screen.findByText("付费可用");
     expect(screen.getByText("额度已耗尽")).toBeTruthy();
     expect(screen.getByText("冷却中")).toBeTruthy();
-    expect(screen.getByText("能力验证失败")).toBeTruthy();
+    expect(screen.getAllByText("能力验证失败")).toHaveLength(2);
     expect(screen.getByText("已禁用")).toBeTruthy();
     expect(screen.getByText("可调用")).toBeTruthy();
+  });
+
+  it("distinguishes never verified, expired verification, and failed capability checks", async () => {
+    const capabilityMembers = [
+      member({
+        id: "never",
+        name: "从未验证",
+        capabilityEligible: false,
+        capabilityCheckedAt: undefined,
+        capabilityStatus: undefined,
+      }),
+      member({
+        id: "expired",
+        name: "验证过期",
+        capabilityEligible: false,
+        capabilityCheckedAt: "2026-09-15T01:00:00.000Z",
+        capabilityStatus: { text: true, json: true, vision: true },
+      }),
+      member({
+        id: "failed",
+        name: "验证失败",
+        capabilityEligible: false,
+        capabilityCheckedAt: "2026-09-16T01:00:00.000Z",
+        capabilityStatus: {
+          text: true,
+          json: false,
+          vision: true,
+          errors: { json: "INVALID_OUTPUT" },
+        },
+      }),
+    ];
+    responseFor = (url) => url === "/api/model-pools"
+      ? {
+          members: capabilityMembers,
+          summary: {
+            total: capabilityMembers.length,
+            vision: { total: capabilityMembers.length, enabled: 3, verified: 0, blocked: 0 },
+            text: { total: 0, enabled: 0, verified: 0, blocked: 0 },
+          },
+        }
+      : defaultData(url);
+    await renderDialog(capabilityMembers);
+
+    const neverRow = (await screen.findByText("从未验证")).closest("tr")!;
+    const expiredRow = screen.getByText("验证过期").closest("tr")!;
+    const failedRow = screen.getByText("验证失败").closest("tr")!;
+    expect(within(neverRow).getByText("未验证")).toBeTruthy();
+    expect(within(neverRow).getByText("待能力验证")).toBeTruthy();
+    expect(within(expiredRow).getAllByText("验证已过期")).toHaveLength(2);
+    expect(within(failedRow).getAllByText("能力验证失败")).toHaveLength(2);
   });
 });

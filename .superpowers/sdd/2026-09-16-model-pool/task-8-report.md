@@ -149,3 +149,69 @@ Result: passed. Git emitted only the repository's normal LF-to-CRLF working-copy
 
 - Verification requests are intentionally sequential to make progress deterministic and avoid adding client-side concurrency pressure; large installs may take time, but progress remains visible.
 - Automated jsdom coverage, typecheck, and production build passed. No separate manual browser visual pass was performed.
+
+## Fix Round 1/5
+
+Date: 2026-09-16
+
+### Review Findings Addressed
+
+1. Mutation success is now recorded synchronously through `markDirty()` immediately after each confirmed provider, member, install, or settings mutation. Provider, pool, and settings refreshes are resource-specific and run in separate error paths, so refresh failures cannot reclassify a committed mutation as failed or leave the console unmarked.
+2. Provider connection tests refresh provider rows in the completion path after both success and failure. The original connection outcome remains in the status message while refreshed `lastTestedAt` and `lastError` values update in the provider row.
+3. Primary and purpose tabs now use stable tab/panel IDs, `aria-controls`, `aria-labelledby`, `aria-selected`, and roving `tabIndex`. Left/Right/Home/End keys update selection and focus. The vision/text segmented control is implemented as an accessible tablist without changing its visual structure.
+4. Pool rows distinguish capability states using `capabilityCheckedAt`, `capabilityStatus`, and `capabilityEligible`:
+   - no snapshot: `未验证` / `待能力验证`;
+   - passing but no longer eligible: `验证已过期`;
+   - checked snapshot with required capability failure: `能力验证失败`;
+   - current passing snapshot: `已验证`.
+
+### TDD RED Evidence
+
+Command:
+
+```powershell
+npx vitest run src/client/components/ModelConfigDialog.test.tsx --pool=threads --maxWorkers=1
+```
+
+Result: 4 of 11 tests failed for the expected reasons:
+
+- a successful provider creation followed by list refresh failure remained unmarked dirty and was reported only as a refresh error;
+- a failed provider test did not refresh row metadata;
+- tabs had no stable ARIA ownership or keyboard navigation;
+- all ineligible capability snapshots rendered as the same failed state.
+
+### GREEN Evidence
+
+Amended focused/App command:
+
+```powershell
+npx vitest run src/client/components/ModelConfigDialog.test.tsx src/client/hooks/useModelReadiness.test.ts src/client/App.test.tsx --pool=threads --maxWorkers=1
+```
+
+Result: 3 files passed, 46 tests passed.
+
+Typecheck:
+
+```powershell
+npm run typecheck
+```
+
+Result: passed (`tsc --noEmit`).
+
+Production build:
+
+```powershell
+npm run build
+```
+
+Result: passed; Vite transformed 60 modules and emitted the production bundle.
+
+### Fix Self-Review
+
+- Confirmed provider creation resets the credential form after mutation success even when the provider-list refresh fails, and the test records only one POST.
+- Confirmed dirty state is set before refresh for provider creation/update, model-member edits, Qianwen installation, and pool settings.
+- Confirmed mutation errors and refresh errors have distinct messages and control flow.
+- Confirmed failed provider tests preserve the original outcome text while refreshing persisted test metadata.
+- Confirmed primary and purpose tab keyboard behavior wraps correctly and Home/End target the first/last tab.
+- Confirmed disabled, quota-blocked, and cooldown states retain precedence over capability text in the operational status column.
+- Confirmed no dependency, API, or visual-structure changes were introduced.

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type KeyboardEvent } from "react";
 import type {
   ModelConfig,
   ModelPoolSettings,
@@ -20,6 +20,11 @@ export async function modelConfigApi<T>(url: string, options?: RequestInit): Pro
 }
 
 type ConsoleTab = "providers" | "pool" | "usage";
+const consoleTabs: ReadonlyArray<{ value: ConsoleTab; label: string }> = [
+  { value: "providers", label: "服务商凭证" },
+  { value: "pool", label: "模型池" },
+  { value: "usage", label: "调用状态" },
+];
 
 const emptySummary: PoolData["summary"] = {
   total: 0,
@@ -79,14 +84,29 @@ export function ModelConfigDialog({
     };
   }, []);
 
-  const handleChanged = useCallback(async () => {
-    await Promise.all([loadProviders(), loadPool(), loadSettings()]);
+  const markDirty = useCallback(() => {
     setDirty(true);
-  }, [loadPool, loadProviders, loadSettings]);
+  }, []);
 
   const closeConsole = () => {
     if (dirty) saved();
     else close();
+  };
+
+  const selectTab = (nextTab: ConsoleTab, focus = false) => {
+    setTab(nextTab);
+    if (focus) document.getElementById(`model-console-tab-${nextTab}`)?.focus();
+  };
+
+  const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    let nextIndex: number | undefined;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % consoleTabs.length;
+    if (event.key === "ArrowLeft") nextIndex = (index - 1 + consoleTabs.length) % consoleTabs.length;
+    if (event.key === "Home") nextIndex = 0;
+    if (event.key === "End") nextIndex = consoleTabs.length - 1;
+    if (nextIndex == null) return;
+    event.preventDefault();
+    selectTab(consoleTabs[nextIndex].value, true);
   };
 
   return (
@@ -97,18 +117,18 @@ export function ModelConfigDialog({
       className="model-console-modal"
     >
       <div className="model-console-tabs" role="tablist" aria-label="模型配置视图">
-        {([
-          ["providers", "服务商凭证"],
-          ["pool", "模型池"],
-          ["usage", "调用状态"],
-        ] as const).map(([value, label]) => (
+        {consoleTabs.map(({ value, label }, index) => (
           <button
             key={value}
+            id={`model-console-tab-${value}`}
             type="button"
             role="tab"
             aria-selected={tab === value}
+            aria-controls={`model-console-panel-${value}`}
+            tabIndex={tab === value ? 0 : -1}
             className={tab === value ? "active" : ""}
-            onClick={() => setTab(value)}
+            onClick={() => selectTab(value)}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
           >
             {label}
           </button>
@@ -117,13 +137,18 @@ export function ModelConfigDialog({
 
       {error && <div className="model-console-error" role="alert">{error}</div>}
 
-      <div className="model-console-panel" role="tabpanel">
+      <div
+        id={`model-console-panel-${tab}`}
+        className="model-console-panel"
+        role="tabpanel"
+        aria-labelledby={`model-console-tab-${tab}`}
+      >
         {tab === "providers" && (
           <ProviderView
             providers={providers}
             api={modelConfigApi}
             refresh={loadProviders}
-            changed={handleChanged}
+            markDirty={markDirty}
             reportError={setError}
           />
         )}
@@ -132,8 +157,9 @@ export function ModelConfigDialog({
             pool={pool}
             settings={settings}
             api={modelConfigApi}
+            refreshPool={loadPool}
             refreshSettings={loadSettings}
-            changed={handleChanged}
+            markDirty={markDirty}
             reportError={setError}
           />
         )}
