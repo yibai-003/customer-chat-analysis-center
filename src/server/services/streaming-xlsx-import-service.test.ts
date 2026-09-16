@@ -54,4 +54,23 @@ describe("streaming xlsx import", () => {
       missingHeaders: [],
     });
   });
+
+  it("normalizes a shared-string header that preserves trailing whitespace", async () => {
+    const file = path.join(os.tmpdir(), `streaming-whitespace-${Date.now()}.xlsx`);
+    files.push(file);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("质检明细");
+    sheet.addRow(["平台", "接待流程质检结果 ", "聊天截图"]);
+    sheet.addRow(["测试平台", "", ""]);
+    await workbook.xlsx.writeFile(file);
+
+    const preview = await previewWorkbookStreaming(file, "质检明细.xlsx", {
+      id: "reception-quality",
+      name: "接待流程质检",
+      sourceFields: ["平台", "接待流程质检结果", "聊天截图"],
+    });
+
+    expect(preview.sheets[0]?.headers).toEqual(["平台", "接待流程质检结果", "聊天截图"]);
+    expect(preview.missingHeaders).toEqual([]);
+  });
 });

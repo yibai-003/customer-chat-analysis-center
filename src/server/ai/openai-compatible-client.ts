@@ -6,11 +6,21 @@ export interface DecryptedModelConfig {
 
 export function classifyModelError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  if (/abort|timeout/i.test(message)) return { code: "timeout", message: "模型请求超时，请稍后重试" };
-  if (/401|403|api.?key|unauthor/i.test(message)) return { code: "auth", message: "模型鉴权失败，请检查 API Key" };
-  if (/429|rate.?limit/i.test(message)) return { code: "rate_limit", message: "模型请求过于频繁，请稍后重试" };
-  if (/fetch failed|network|ECONN|ENOTFOUND/i.test(message)) return { code: "network", message: "模型服务连接失败，请检查接口地址" };
-  return { code: "model", message };
+  const httpStatus = Number(/\((\d{3})\)/.exec(message)?.[1] ?? 0);
+  if (httpStatus === 401 || httpStatus === 403) return { code: "auth", message: "模型鉴权失败，请检查 API Key", retryable: false };
+  if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500) return { code: "service", message, retryable: true };
+  if (httpStatus >= 400) return { code: "configuration", message, retryable: false };
+  if (/总预算/i.test(message)) return { code: "budget", message, retryable: false };
+  if (/abort|timeout/i.test(message)) return { code: "timeout", message: "模型请求超时，请稍后重试", retryable: true };
+  if (/401|403|api.?key|unauthor/i.test(message)) return { code: "auth", message: "模型鉴权失败，请检查 API Key", retryable: false };
+  if (/429|rate.?limit/i.test(message)) return { code: "rate_limit", message: "模型请求过于频繁，请稍后重试", retryable: true };
+  if (/fetch failed|network|ECONN|ENOTFOUND|ETIMEDOUT/i.test(message)) {
+    return { code: "network", message: "模型服务连接失败，请检查接口地址", retryable: true };
+  }
+  if (/400|404|model.+(?:not found|does not exist)|不支持图片|接口地址返回了网页/i.test(message)) {
+    return { code: "configuration", message, retryable: false };
+  }
+  return { code: "model", message, retryable: false };
 }
 
 export function extractMessageContent(message: any): string {
@@ -105,7 +115,8 @@ async function callWithinBudget(config: DecryptedModelConfig, messages: unknown[
     if (/^\s*<(?:!doctype|html)\b/i.test(rawText)) {
       throw new Error("模型接口地址返回了网页内容，请将地址配置为 OpenAI 兼容 API 地址（通常以 /v1 结尾）");
     }
-    throw new Error(body?.error?.message || `模型服务错误 (${response!.status})`);
+    const detail = body?.error?.message || "模型服务错误";
+    throw new Error(/\(\d{3}\)/.test(detail) ? detail : `${detail} (${response!.status})`);
   }
   if (/^\s*<(?:!doctype|html)\b/i.test(rawText)) {
     throw new Error("模型接口地址返回了网页内容，请将地址配置为 OpenAI 兼容 API 地址（通常以 /v1 结尾）");

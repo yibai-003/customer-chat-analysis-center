@@ -40,6 +40,18 @@ describe("field config service", () => {
     expect(fields.find((item) => item.key === "conclusion")?.imageEnabled).toBe(true);
   });
 
+  it("allows capture only on the internal lost-deal attribution field", () => {
+    const attribution = {
+      ...field("未成交归因", ["截图内容总结"]),
+      sectionId: "lost-deal",
+      type: "object" as const,
+      executionType: "lost_deal_attribution" as const,
+      knowledgeSyncEnabled: true,
+    };
+    expect(validateFieldGraph([{ ...field("截图内容总结", []), sectionId: "lost-deal" }, attribution])).toEqual([]);
+    expect(validateFieldGraph([{ ...attribution, key: "客户原因" }])).toContainEqual(expect.stringContaining("知识沉淀"));
+  });
+
   it("keeps refund analysis to screenshot parsing, knowledge matching, and direct extraction", () => {
     const fields = listFields("refund");
     expect(fields.filter((field) => field.isEnabled).map((field) => field.key)).toEqual([

@@ -13,8 +13,12 @@ let directory: string;
 let sync: KnowledgeSync;
 beforeEach(() => {
   initDb();
-  db.exec("DELETE FROM knowledge_item_fts; DELETE FROM analysis_sections;");
-  initDb();
+  db.exec(`
+    DELETE FROM knowledge_item_fts;
+    DELETE FROM knowledge_items;
+    DELETE FROM knowledge_bases WHERE section_id = 'lost-deal';
+    DELETE FROM analysis_fields WHERE section_id = 'lost-deal';
+  `);
   directory = fs.mkdtempSync(path.join(os.tmpdir(), "knowledge-sync-test-"));
   sync = new KnowledgeSync(path.join(directory, "catalog.json"), path.join(directory, "state.json"));
 });
@@ -31,6 +35,39 @@ function seedKnowledge() {
 }
 
 describe("portable knowledge catalog", () => {
+  it("keeps historical field runs when a restored catalog omits an old field", () => {
+    const timestamp = "2026-09-15T00:00:00.000Z";
+    db.prepare(`
+      INSERT INTO jobs (
+        id, original_filename, source_path, status, total_records,
+        completed_records, failed_records, created_at, updated_at
+      ) VALUES ('history-job', 'history.xlsx', 'history.xlsx', 'ready', 1, 0, 0, ?, ?)
+    `).run(timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO records (
+        id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
+        image_path, status, review_status, review_note, created_at, updated_at
+      ) VALUES ('history-record', 'history-job', 'Sheet1', 2, '{}', '{}', '', 'completed', 'confirmed', '', ?, ?)
+    `).run(timestamp, timestamp);
+    const old = upsertField({
+      sectionId: "lost-deal", key: "历史旧字段", label: "历史旧字段",
+      type: "string", imageEnabled: false, exportEnabled: true,
+    });
+    db.prepare(`
+      INSERT INTO analysis_field_runs (
+        id, record_id, field_id, status, result_json, dependencies_json,
+        prompt_snapshot, field_snapshot_json, model_config_snapshot_json, created_at
+      ) VALUES ('history-run', 'history-record', ?, 'completed', ?, '{}', '', '{}', '{}', ?)
+    `).run(old.id, JSON.stringify({ 历史旧字段: "保留原结果" }), timestamp);
+    const incoming = captureCatalog();
+    incoming.fields = incoming.fields.filter((field) => field.id !== old.id);
+
+    restoreCatalog(incoming);
+
+    expect(db.prepare("SELECT result_json FROM analysis_field_runs WHERE id='history-run'").get())
+      .toEqual({ result_json: JSON.stringify({ 历史旧字段: "保留原结果" }) });
+    expect(getField(old.id)).toMatchObject({ isEnabled: false, exportEnabled: false });
+  });
   it("persists pending state with SQL writes, rolls it back with failed writes and recovers after restart", () => {
     sync.initialize(false);
     const before = db.prepare("SELECT revision FROM knowledge_sync_outbox").get().revision;

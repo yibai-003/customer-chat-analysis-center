@@ -5,7 +5,7 @@ import { db } from "../db/client";
 import { config } from "../config";
 import { listFields } from "./field-config-service";
 import { aggregateFieldResults } from "./field-run-service";
-import { buildOutputPlan } from "./excel-template-service";
+import { buildOutputPlan, normalizeExcelHeader } from "./excel-template-service";
 
 export function exportColumns(sections: ReturnType<typeof listSections>) {
   return sections.flatMap((section) => listFields(section.id)
@@ -32,7 +32,8 @@ export async function exportJob(jobId: string, sectionIds: string[]) {
     const records = listRecords(jobId).filter((record) => record.sheetName === worksheet.name);
     if (!records.length) continue;
     const headerRow = worksheet.getRow(1);
-    const sourceHeaders = Array.from({ length: headerRow.cellCount }, (_, index) => String(headerRow.getCell(index + 1).value ?? ""));
+    const sourceHeaders = Array.from({ length: headerRow.cellCount }, (_, index) =>
+      normalizeExcelHeader(headerRow.getCell(index + 1).value));
     const plans: Array<{ section: typeof sections[number]; fields: ReturnType<typeof listFields>; output: ReturnType<typeof buildOutputPlan> }> = [];
     let headers = sourceHeaders.slice();
     for (const section of sections) {
@@ -43,7 +44,10 @@ export async function exportJob(jobId: string, sectionIds: string[]) {
     }
     const metadata = exportMetadataHeaders().map((header, index) => ({ header, column: headers.length + index + 1 }));
     [...plans.flatMap((item) => item.output), ...metadata].forEach((item) => {
-      if (!headerRow.getCell(item.column).value) headerRow.getCell(item.column).value = item.header;
+      if (normalizeExcelHeader(headerRow.getCell(item.column).value) !== item.header
+        || headerRow.getCell(item.column).value !== item.header) {
+        headerRow.getCell(item.column).value = item.header;
+      }
     });
     for (const record of records) {
       const detail = getRecord(record.id)!;

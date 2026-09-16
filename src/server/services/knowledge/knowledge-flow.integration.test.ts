@@ -215,7 +215,6 @@ describe("dynamic reason knowledge flow", () => {
     const recordId = (db.prepare(recordIdQuery).get(job.id) as { id: string }).id;
 
     await analyzeField(recordId, sectionId, "screenshotContent");
-    await analyzeField(recordId, sectionId, "reasonPathMatch");
 
     const snapshot = db.prepare(`
       SELECT id, knowledge_item_id, item_values_json
@@ -290,7 +289,7 @@ describe("dynamic reason knowledge flow", () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM knowledge_match_snapshots WHERE record_id = ?").get(recordId))
       .toEqual({ count: 1 });
     expect(db.prepare("SELECT COUNT(*) AS count FROM analysis_field_runs WHERE field_id IN ('task-9-level1', 'task-9-level2', 'task-9-level3') AND model_config_snapshot_json = '{}'").get())
-      .toEqual({ count: 3 });
+      .toEqual({ count: 6 });
 
     const detail = getRecord(recordId)!;
     const fieldRunResults = Object.fromEntries(

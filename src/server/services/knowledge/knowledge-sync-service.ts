@@ -29,7 +29,16 @@ const schemas = {
     id, section_id: id, key: id, label: text, field_type: text, prompt: text,
     options_json: json(z.array(z.unknown())), output_column: text.nullable(), is_required: flag,
     image_enabled: flag, depends_on_json: json(z.array(text)), sort_order: integer,
-    execution_type: z.enum(["ai", "knowledge_match", "knowledge_extract"]), export_enabled: flag,
+    execution_type: z.enum([
+      "ai",
+      "knowledge_match",
+      "knowledge_extract",
+      "lost_deal_attribution",
+      "lost_deal_derive",
+      "lost_deal_script",
+      "reception_quality_analysis",
+      "reception_quality_derive",
+    ]), export_enabled: flag,
     knowledge_base_id: id.nullable(), candidate_limit: integer, match_field_key: text.nullable(),
     knowledge_column: text.nullable(), knowledge_sync_enabled: flag.optional().default(0), knowledge_capture_limit: z.union([z.literal(1), z.literal(2)]).optional().default(2), is_enabled: flag,
   }).strict(),
@@ -120,7 +129,22 @@ export function restoreCatalog(input: unknown) {
     for (const group of ["items", "fields", "bases", "sections"] as Group[]) {
       const keep = new Set(catalog[group].map((r) => r.id));
       for (const row of db.prepare(`SELECT id FROM ${tables[group]}`).all() as { id: string }[]) {
-        if (!keep.has(row.id)) db.prepare(`DELETE FROM ${tables[group]} WHERE id = ?`).run(row.id);
+        if (!keep.has(row.id)) {
+          if (group === "fields") {
+            const historical = db.prepare(
+              "SELECT 1 FROM analysis_field_runs WHERE field_id = ? LIMIT 1",
+            ).get(row.id);
+            if (historical) {
+              db.prepare(`
+                UPDATE analysis_fields
+                SET is_enabled = 0, export_enabled = 0, updated_at = ?
+                WHERE id = ?
+              `).run(timestamp, row.id);
+              continue;
+            }
+          }
+          db.prepare(`DELETE FROM ${tables[group]} WHERE id = ?`).run(row.id);
+        }
       }
     }
     // Rebuild derived search indexes and path keys, including edits that exchange paths.

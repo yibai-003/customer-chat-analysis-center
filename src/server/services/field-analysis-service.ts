@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { db } from "../db/client";
 import { assertAnalysisActive } from "./analysis-cancellation";
 import { checkModelBudget, withModelBudget } from "../ai/model-budget";
 import { withSingleAnalysisRun } from "./single-analysis-run";
@@ -14,6 +15,21 @@ import { matchKnowledgeItem } from "./knowledge/knowledge-match-service";
 import { extractKnowledgeValue } from "./knowledge/knowledge-extract-service";
 import { captureHotTopicQuestions } from "./knowledge/hot-topic-service";
 import { isHotTopicField } from "../../shared/hot-topic";
+import {
+  attributionFromContext,
+  buildLostDealAttributionMessages,
+  deriveLostDealFields,
+  loadLostDealKnowledgeCandidates,
+  parseLostDealAttribution,
+} from "./lost-deal-attribution";
+import { buildLostDealScriptSuggestion } from "./lost-deal-script-rules";
+import { replaceLostDealReasonLinks } from "./lost-deal-capture";
+import {
+  buildReceptionQualityMessages,
+  deriveReceptionQualityFields,
+  parseReceptionQuality,
+  receptionQualityFromContext,
+} from "./reception-quality";
 import type { AnalysisField, AnalysisFieldRun } from "../../shared/types";
 
 export interface FieldExecutionState {
@@ -37,10 +53,16 @@ export async function executeFieldGraph(
   fields: AnalysisField[],
   runner: (field: AnalysisField, context: Record<string, unknown>) => Promise<FieldRunnerResult>,
   sourceFields: string[] = [],
+  initialContext: Record<string, unknown> = {},
+  graphFields: AnalysisField[] = fields,
 ) {
-  const ordered = topologicalFields(fields, sourceFields) as AnalysisField[];
+  const selectedKeys = new Set(fields.map((field) => field.key));
+  const ordered = (topologicalFields(
+    graphFields,
+    [...new Set([...sourceFields, ...Object.keys(initialContext)])],
+  ) as AnalysisField[]).filter((field) => selectedKeys.has(field.key));
   const states: Record<string, FieldExecutionState> = {};
-  const context: Record<string, unknown> = {};
+  const context: Record<string, unknown> = { ...initialContext };
   for (const field of ordered) {
     assertAnalysisActive();
     const dependencyFailed = field.dependsOn.some((key) => states[key]?.status === "failed" || states[key]?.status === "skipped");
@@ -111,11 +133,12 @@ async function runAiField(
       assertAnalysisActive(); checkModelBudget();
       try {
         if (field.imageEnabled && !candidate.supportsVision) throw new Error("当前模型不支持图片解析");
-        response = await callVisionModel(candidate, messages);
+        response = await callVisionModel(candidate, messages, { attempts: 1 });
         model = candidate;
         break;
       } catch (error) {
         lastError = error;
+        if (!classifyModelError(error).retryable) throw error;
       }
     }
     if (!response || !model) throw lastError ?? new Error("模型请求失败");
@@ -247,6 +270,263 @@ function runKnowledgeExtract(
   }
 }
 
+async function runLostDealAttribution(
+  recordId: string,
+  record: NonNullable<ReturnType<typeof getRecord>>,
+  field: AnalysisField,
+  context: Record<string, unknown>,
+) {
+  const dependencies = dependencyValues(field, record.sourceFields, context);
+  const started = Date.now();
+  let model: Awaited<ReturnType<typeof getModelsForPurpose>>[number] | undefined;
+  let rawResponse: string | undefined;
+  try {
+    const candidates = loadLostDealKnowledgeCandidates(field);
+    if (!candidates.customerReasons.length || !candidates.serviceReasons.length) {
+      throw new Error("未成交原因知识库尚未初始化或没有启用条目");
+    }
+    const summary = typeof dependencies["截图内容总结"] === "string"
+      ? dependencies["截图内容总结"] as string
+      : "";
+    const messages = buildLostDealAttributionMessages({
+      field,
+      summary,
+      sourceFields: record.sourceFields,
+      candidates,
+    });
+    let response: Awaited<ReturnType<typeof callVisionModel>> | undefined;
+    let lastError: unknown;
+    for (const candidate of getModelsForPurpose("text")) {
+      assertAnalysisActive(); checkModelBudget();
+      try {
+        response = await callVisionModel(candidate, messages, { attempts: 1 });
+        rawResponse = response.raw;
+        model = candidate;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!classifyModelError(error).retryable) throw error;
+      }
+    }
+    if (!response || !model) throw lastError ?? new Error("模型请求失败");
+    const selectedModel = model;
+    const attribution = parseLostDealAttribution(response.content, candidates, {
+      summary,
+      sourceFields: record.sourceFields,
+    });
+    const result = { [field.key]: attribution };
+    const status = attribution.reviewRequired ? "needs_review" as const : "completed" as const;
+    const errorMessage = attribution.reviewRequired ? "归因证据不足或置信度偏低，请人工复核" : undefined;
+    const run = db.transaction(() => {
+      const created = createFieldRun({
+      recordId,
+      fieldId: field.id,
+      status,
+      result,
+      evidence: attribution.evidence.join("\n"),
+      dependencies,
+      promptSnapshot: field.prompt,
+      fieldSnapshot: field,
+      modelConfigSnapshot: { name: selectedModel.name, model: selectedModel.model, baseUrl: selectedModel.baseUrl },
+      rawResponse: response.raw,
+      errorMessage,
+      durationMs: Date.now() - started,
+      usage: response.usage,
+      });
+      replaceLostDealReasonLinks(recordId, field.id, attribution, Boolean(field.knowledgeSyncEnabled));
+      return created;
+    })();
+    return { result, status, errorMessage, run };
+  } catch (error) {
+    assertAnalysisActive();
+    const message = classifyModelError(error).message;
+    const run = createFieldRun({
+      recordId,
+      fieldId: field.id,
+      status: "failed",
+      result: {},
+      dependencies,
+      promptSnapshot: field.prompt,
+      fieldSnapshot: field,
+      modelConfigSnapshot: model ? { name: model.name, model: model.model } : {},
+      rawResponse,
+      errorMessage: message,
+      durationMs: Date.now() - started,
+    });
+    return { result: {}, status: "failed" as const, errorMessage: message, run };
+  }
+}
+
+function runLostDealDerived(
+  recordId: string,
+  record: NonNullable<ReturnType<typeof getRecord>>,
+  field: AnalysisField,
+  context: Record<string, unknown>,
+) {
+  const dependencies = dependencyValues(field, record.sourceFields, context);
+  const started = Date.now();
+  const attribution = attributionFromContext(context);
+  const derived = deriveLostDealFields(attribution);
+  const result = { [field.key]: derived[field.key] ?? "" };
+  const run = createFieldRun({
+    recordId,
+    fieldId: field.id,
+    status: attribution.reviewRequired ? "needs_review" : "completed",
+    result,
+    evidence: attribution.evidence.join("\n"),
+    dependencies,
+    promptSnapshot: field.prompt,
+    fieldSnapshot: field,
+    modelConfigSnapshot: {},
+    durationMs: Date.now() - started,
+  });
+  return {
+    result,
+    status: attribution.reviewRequired ? "needs_review" as const : "completed" as const,
+    errorMessage: attribution.reviewRequired ? "归因证据不足或置信度偏低，请人工复核" : undefined,
+    run,
+  };
+}
+
+function runLostDealScript(
+  recordId: string,
+  record: NonNullable<ReturnType<typeof getRecord>>,
+  field: AnalysisField,
+  context: Record<string, unknown>,
+) {
+  const dependencies = dependencyValues(field, record.sourceFields, context);
+  const started = Date.now();
+  const attribution = attributionFromContext(context);
+  const result = {
+    [field.key]: buildLostDealScriptSuggestion({
+      customerReasons: attribution.customerReasons.map((item) => item.name).filter((name) => name !== "待复核"),
+      serviceReasons: attribution.serviceReasons.map((item) => item.name).filter((name) => name !== "待复核"),
+      evidence: attribution.evidence,
+    }),
+  };
+  const run = createFieldRun({
+    recordId,
+    fieldId: field.id,
+    status: attribution.reviewRequired ? "needs_review" : "completed",
+    result,
+    evidence: attribution.evidence.join("\n"),
+    dependencies,
+    promptSnapshot: field.prompt,
+    fieldSnapshot: field,
+    modelConfigSnapshot: { strategy: "local_rules" },
+    durationMs: Date.now() - started,
+  });
+  return {
+    result,
+    status: attribution.reviewRequired ? "needs_review" as const : "completed" as const,
+    errorMessage: attribution.reviewRequired ? "归因证据不足或置信度偏低，请人工复核" : undefined,
+    run,
+  };
+}
+
+async function runReceptionQualityAnalysis(
+  recordId: string,
+  record: NonNullable<ReturnType<typeof getRecord>>,
+  field: AnalysisField,
+  context: Record<string, unknown>,
+) {
+  const dependencies = dependencyValues(field, record.sourceFields, context);
+  const started = Date.now();
+  let model: Awaited<ReturnType<typeof getModelsForPurpose>>[number] | undefined;
+  let rawResponse: string | undefined;
+  try {
+    const messages = buildReceptionQualityMessages({
+      field,
+      screenshotFacts: dependencies["截图内容总结"],
+      sourceFields: record.sourceFields,
+    });
+    let response: Awaited<ReturnType<typeof callVisionModel>> | undefined;
+    let lastError: unknown;
+    for (const candidate of getModelsForPurpose("text")) {
+      assertAnalysisActive();
+      checkModelBudget();
+      try {
+        response = await callVisionModel(candidate, messages, { attempts: 1 });
+        rawResponse = response.raw;
+        model = candidate;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!classifyModelError(error).retryable) throw error;
+      }
+    }
+    if (!response || !model) throw lastError ?? new Error("模型请求失败");
+    const quality = parseReceptionQuality(response.content, field.key, {
+      screenshotFacts: dependencies["截图内容总结"],
+    });
+    const result = { [field.key]: quality };
+    const status = quality.reviewRequired ? "needs_review" as const : "completed" as const;
+    const errorMessage = quality.reviewRequired ? "质检场景或部分项目证据不足，请人工复核" : undefined;
+    const evidence = [...quality.preSaleIssues, ...quality.afterSaleIssues].map((issue) => issue.evidence).join("\n");
+    const run = createFieldRun({
+      recordId,
+      fieldId: field.id,
+      status,
+      result,
+      evidence,
+      dependencies,
+      promptSnapshot: field.prompt,
+      fieldSnapshot: field,
+      modelConfigSnapshot: { name: model.name, model: model.model, baseUrl: model.baseUrl },
+      rawResponse: response.raw,
+      errorMessage,
+      durationMs: Date.now() - started,
+      usage: response.usage,
+    });
+    return { result, status, errorMessage, run };
+  } catch (error) {
+    assertAnalysisActive();
+    const message = classifyModelError(error).message;
+    const run = createFieldRun({
+      recordId,
+      fieldId: field.id,
+      status: "failed",
+      result: {},
+      dependencies,
+      promptSnapshot: field.prompt,
+      fieldSnapshot: field,
+      modelConfigSnapshot: model ? { name: model.name, model: model.model } : {},
+      rawResponse,
+      errorMessage: message,
+      durationMs: Date.now() - started,
+    });
+    return { result: {}, status: "failed" as const, errorMessage: message, run };
+  }
+}
+
+function runReceptionQualityDerived(
+  recordId: string,
+  record: NonNullable<ReturnType<typeof getRecord>>,
+  field: AnalysisField,
+  context: Record<string, unknown>,
+) {
+  const dependencies = dependencyValues(field, record.sourceFields, context);
+  const started = Date.now();
+  const quality = receptionQualityFromContext(context);
+  const result = { [field.key]: deriveReceptionQualityFields(quality)[field.key] ?? "" };
+  const status = quality.reviewRequired ? "needs_review" as const : "completed" as const;
+  const errorMessage = quality.reviewRequired ? "质检场景或部分项目证据不足，请人工复核" : undefined;
+  const run = createFieldRun({
+    recordId,
+    fieldId: field.id,
+    status,
+    result,
+    evidence: [...quality.preSaleIssues, ...quality.afterSaleIssues].map((issue) => issue.evidence).join("\n"),
+    dependencies,
+    promptSnapshot: field.prompt,
+    fieldSnapshot: field,
+    modelConfigSnapshot: { strategy: "local_rules" },
+    errorMessage,
+    durationMs: Date.now() - started,
+  });
+  return { result, status, errorMessage, run };
+}
+
 async function runField(
   recordId: string,
   sectionName: string,
@@ -276,13 +556,76 @@ async function runFieldWithinBudget(
       return runKnowledgeMatch(recordId, sectionName, record, field, context);
     case "knowledge_extract":
       return runKnowledgeExtract(recordId, record, field, context);
+    case "lost_deal_attribution":
+      return runLostDealAttribution(recordId, record, field, context);
+    case "lost_deal_derive":
+      return runLostDealDerived(recordId, record, field, context);
+    case "lost_deal_script":
+      return runLostDealScript(recordId, record, field, context);
+    case "reception_quality_analysis":
+      return runReceptionQualityAnalysis(recordId, record, field, context);
+    case "reception_quality_derive":
+      return runReceptionQualityDerived(recordId, record, field, context);
     default:
       return runAiField(recordId, sectionName, record, field, context, image);
   }
 }
 
 export async function analyzeRecordFields(recordId: string, sectionId: string): Promise<FieldBatchProgress> {
-  return withSingleAnalysisRun(recordId, sectionId, () => analyzeRecordFieldsWithinRun(recordId, sectionId));
+  return withSingleAnalysisRun(
+    recordId,
+    sectionId,
+    () => withModelBudget(() => analyzeRecordFieldsWithinRun(recordId, sectionId), { requests: 4 }),
+  );
+}
+
+function latestRunsByField(record: NonNullable<ReturnType<typeof getRecord>>, sectionId: string) {
+  const latest = new Map<string, (typeof record.fieldRuns)[number]>();
+  for (const run of record.fieldRuns) {
+    if (run.sectionId === sectionId && !latest.has(run.fieldId)) latest.set(run.fieldId, run);
+  }
+  return latest;
+}
+
+function descendantKeys(fields: AnalysisField[], startingKeys: Set<string>) {
+  const selected = new Set(startingKeys);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const field of fields) {
+      if (!selected.has(field.key) && field.dependsOn.some((key) => selected.has(key))) {
+        selected.add(field.key);
+        changed = true;
+      }
+    }
+  }
+  return selected;
+}
+
+function persistedState(run: NonNullable<ReturnType<typeof getRecord>>["fieldRuns"][number]): FieldExecutionState {
+  return {
+    status: run.status,
+    result: run.result,
+    errorMessage: run.errorMessage,
+  };
+}
+
+function createSkippedRuns(
+  recordId: string,
+  fields: AnalysisField[],
+  states: Record<string, FieldExecutionState>,
+) {
+  for (const field of fields) {
+    const state = states[field.key];
+    if (state?.status !== "skipped") continue;
+    createFieldRun({
+      recordId, fieldId: field.id, status: "skipped", result: {},
+      dependencies: Object.fromEntries(field.dependsOn.map((key) => [key, states[key]?.result])),
+      promptSnapshot: field.prompt, fieldSnapshot: field,
+      modelConfigSnapshot: {},
+      errorMessage: state.errorMessage,
+    });
+  }
 }
 
 async function analyzeRecordFieldsWithinRun(recordId: string, sectionId: string): Promise<FieldBatchProgress> {
@@ -292,27 +635,28 @@ async function analyzeRecordFieldsWithinRun(recordId: string, sectionId: string)
   assertJobSection(record.jobId, section.id);
   updateJobSection(record.jobId, { id: section.id, name: section.name });
   const fields = listFields(sectionId).filter((field) => field.isEnabled);
-  const image = fields.some((field) => (field.executionType ?? "ai") === "ai" && field.imageEnabled)
+  const latestRuns = latestRunsByField(record, sectionId);
+  const rerunKeys = record.status !== "completed" && latestRuns.size > 0
+    ? descendantKeys(fields, new Set(fields
+      .filter((field) => latestRuns.get(field.id)?.status !== "completed")
+      .map((field) => field.key)))
+    : new Set(fields.map((field) => field.key));
+  const fieldsToRun = fields.filter((field) => rerunKeys.has(field.key));
+  const retainedStates = Object.fromEntries(fields
+    .filter((field) => !rerunKeys.has(field.key) && latestRuns.get(field.id)?.status === "completed")
+    .map((field) => [field.key, persistedState(latestRuns.get(field.id)!)]));
+  const initialContext = Object.assign({}, ...Object.values(retainedStates).map((state) => state.result));
+  const image = fieldsToRun.some((field) => (field.executionType ?? "ai") === "ai" && field.imageEnabled)
     ? await fs.readFile(record.imagePath)
     : null;
   updateRecord(recordId, { status: "processing" });
-  const states = await executeFieldGraph(fields, async (field, context) => {
+  const rerunStates = await executeFieldGraph(fieldsToRun, async (field, context) => {
     const run = await runField(recordId, section.name, record, field, context, image);
     if (run.status === "failed") throw new Error(run.errorMessage);
     return { result: run.result, status: run.status, errorMessage: run.errorMessage };
-  }, section.sourceFields ?? []);
-  for (const field of fields) {
-    const state = states[field.key];
-    if (state.status === "skipped") {
-      createFieldRun({
-        recordId, fieldId: field.id, status: "skipped", result: {},
-        dependencies: Object.fromEntries(field.dependsOn.map((key) => [key, states[key]?.result])),
-        promptSnapshot: field.prompt, fieldSnapshot: field,
-        modelConfigSnapshot: {},
-        errorMessage: state.errorMessage,
-      });
-    }
-  }
+  }, section.sourceFields ?? [], initialContext, fields);
+  const states = { ...retainedStates, ...rerunStates };
+  createSkippedRuns(recordId, fieldsToRun, states);
   const currentStates = Object.values(states);
   const completed = currentStates.filter((state) => state.status === "completed").length;
   const failed = currentStates.filter((state) => state.status === "failed").length;
@@ -324,30 +668,43 @@ async function analyzeRecordFieldsWithinRun(recordId: string, sectionId: string)
 }
 
 export async function analyzeField(recordId: string, sectionId: string, fieldKey: string): Promise<AnalysisFieldRun> {
-  return withSingleAnalysisRun(recordId, sectionId, () => analyzeFieldWithinRun(recordId, sectionId, fieldKey));
+  return withSingleAnalysisRun(
+    recordId,
+    sectionId,
+    () => withModelBudget(() => analyzeFieldWithinRun(recordId, sectionId, fieldKey), { requests: 4 }),
+  );
 }
 
 async function analyzeFieldWithinRun(recordId: string, sectionId: string, fieldKey: string): Promise<AnalysisFieldRun> {
   const record = getRecord(recordId);
   const section = getSection(sectionId);
-  const field = listFields(sectionId).find((item) => item.key === fieldKey && item.isEnabled);
+  const fields = listFields(sectionId).filter((item) => item.isEnabled);
+  const field = fields.find((item) => item.key === fieldKey);
   if (!record || !section || !field) throw new Error("记录、板块或字段不存在");
   assertJobSection(record.jobId, section.id);
   updateJobSection(record.jobId, { id: section.id, name: section.name });
-  const image = (field.executionType ?? "ai") === "ai" && field.imageEnabled
+  const keysToRun = descendantKeys(fields, new Set([field.key]));
+  const fieldsToRun = fields.filter((item) => keysToRun.has(item.key));
+  const image = fieldsToRun.some((item) => (item.executionType ?? "ai") === "ai" && item.imageEnabled)
     ? await fs.readFile(record.imagePath)
     : null;
-  const context = getFieldResultContext(recordId, field.dependsOn, sectionId);
-  const dependencyValues = Object.fromEntries(field.dependsOn.map((key) => [key, context[key] ?? record.sourceFields[key]]));
-  const missing = field.dependsOn.filter((key) => dependencyValues[key] === undefined);
+  const reusableKeys = fields.filter((item) => !keysToRun.has(item.key)).map((item) => item.key);
+  const context = getFieldResultContext(recordId, reusableKeys, sectionId);
+  const missing = field.dependsOn.filter((key) => context[key] === undefined && record.sourceFields[key] === undefined);
   if (missing.length) throw new Error(`依赖字段未完成：${missing.join(", ")}`);
-  const run = await runField(recordId, section.name, record, field, dependencyValues, image);
+  const executedStates = await executeFieldGraph(fieldsToRun, async (item, currentContext) => {
+    const run = await runField(recordId, section.name, record, item, currentContext, image);
+    if (run.status === "failed") throw new Error(run.errorMessage);
+    return { result: run.result, status: run.status, errorMessage: run.errorMessage };
+  }, section.sourceFields ?? [], context, fields);
+  createSkippedRuns(recordId, fieldsToRun, executedStates);
   const latest = getRecord(recordId)!;
-  const states = listFields(sectionId).filter(f => f.isEnabled).map(f => latest.fieldRuns.find(r => r.fieldId === f.id)?.status ?? "pending");
-  const status = states.includes("failed") ? "failed" : states.includes("needs_review") || states.includes("skipped") ? "needs_review"
-    : states.includes("pending") ? "pending" : "completed";
+  const latestRuns = latestRunsByField(latest, sectionId);
+  const statuses = fields.map((item) => latestRuns.get(item.id)?.status ?? "pending");
+  const status = statuses.includes("failed") ? "failed" : statuses.includes("needs_review") || statuses.includes("skipped") ? "needs_review"
+    : statuses.includes("pending") ? "pending" : "completed";
   updateRecord(recordId, { status, reviewStatus: status === "failed" || status === "needs_review" ? "needs_review" : "pending" });
-  return run.run;
+  return latestRuns.get(field.id)!;
 }
 
 export async function retryField(recordId: string, sectionId: string, fieldKey: string) {

@@ -3,8 +3,10 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../db/client";
+import { updateRecord } from "../db/repositories";
 import { analyzeField, analyzeRecordFields, executeFieldGraph } from "./field-analysis-service";
 import { createFieldRun, getFieldResultContext } from "./field-run-service";
+import { listKnowledgeItems } from "./knowledge/knowledge-repository";
 import type { AnalysisField } from "../../shared/types";
 
 vi.mock("./model-config-service", () => ({
@@ -30,20 +32,13 @@ vi.mock("./model-config-service", () => ({
   }]),
 }));
 
-vi.mock("../ai/openai-compatible-client", () => ({
-  callVisionModel: vi.fn(async (_model: unknown, messages: unknown[]) => {
-    const serialized = JSON.stringify(messages);
-    const key = serialized.includes("图片 AI") ? "imageAi" : "textAi";
-    return {
-      content: JSON.stringify({ [key]: key === "imageAi" ? "图片结果" : "文本结果" }),
-      raw: "{}",
-      usage: {},
-    };
-  }),
-  classifyModelError: vi.fn((error: unknown) => ({
-    message: error instanceof Error ? error.message : String(error),
-  })),
-}));
+vi.mock("../ai/openai-compatible-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../ai/openai-compatible-client")>();
+  return {
+    ...actual,
+    callVisionModel: vi.fn(),
+  };
+});
 
 vi.mock("./knowledge/knowledge-match-service", () => ({
   matchKnowledgeItem: vi.fn(async (input: { field: AnalysisField }) => ({
@@ -56,6 +51,36 @@ vi.mock("./knowledge/knowledge-match-service", () => ({
 import { callVisionModel } from "../ai/openai-compatible-client";
 import { getModelForPurpose, getModelsForPurpose } from "./model-config-service";
 import { matchKnowledgeItem } from "./knowledge/knowledge-match-service";
+
+async function defaultModelCall(_model: unknown, messages: unknown[]) {
+  const { currentModelBudget } = await import("../ai/model-budget");
+  currentModelBudget()?.consume();
+  const serialized = JSON.stringify(messages);
+  if (serialized.includes("customerReasons")) {
+    return {
+      content: JSON.stringify({
+        customerReasons: [{ knowledgeItemId: "lost-customer-item", evidence: "客户说预算只有100元", confidence: 0.92 }],
+        serviceReasons: [{ knowledgeItemId: "lost-service-item", evidence: "客户询问保障但客服未回应", confidence: 0.82 }],
+        demandTypes: [{ name: "价格需求", evidence: "客户询问优惠", confidence: 0.88 }],
+        specificDemand: "希望优惠到100元",
+        specificDemandEvidence: "客户说预算只有100元",
+        evidence: ["客户说预算只有100元", "客户询问保障但客服未回应"],
+        confidence: 0.86,
+      }),
+      raw: "{}",
+      usage: {},
+    };
+  }
+  const lostDealSummary = serialized.includes("未成交分析");
+  const key = lostDealSummary ? "截图内容总结" : serialized.includes("图片 AI") ? "imageAi" : "textAi";
+  return {
+    content: JSON.stringify({ [key]: lostDealSummary
+      ? "客户说预算只有100元。客户询问保障但客服未回应。客户询问优惠。"
+      : key === "imageAi" ? "图片结果" : "文本结果" }),
+    raw: "{}",
+    usage: {},
+  };
+}
 
 const fields: AnalysisField[] = [
   {
@@ -96,6 +121,7 @@ describe("field analysis executor", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(callVisionModel).mockImplementation(defaultModelCall);
     db.exec(`
       DELETE FROM knowledge_match_snapshots;
       DELETE FROM analysis_field_runs;
@@ -223,6 +249,441 @@ describe("field analysis executor", () => {
     `).get() as { result_json: string; model_config_snapshot_json: string };
     expect(JSON.parse(extractRun.result_json)).toEqual({ reasonName: "品质问题" });
     expect(JSON.parse(extractRun.model_config_snapshot_json)).toEqual({});
+  });
+
+  it("runs one vision call and one unified quality call for reception pre-sale and after-sale outputs", async () => {
+    const timestamp = "2026-09-16T00:00:00.000Z";
+    db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (?, NULL, ?, '', '[]', '[]', 99, 1, 1, ?, ?)
+    `).run("task-5-dispatch", "接待流程质检", timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO jobs (
+        id, original_filename, source_path, status, total_records,
+        completed_records, failed_records, created_at, updated_at
+      ) VALUES (?, 'reception.xlsx', 'reception.xlsx', 'ready', 1, 0, 0, ?, ?)
+    `).run("task-5-dispatch-job", timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO records (
+        id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
+        image_path, status, review_status, review_note, created_at, updated_at
+      ) VALUES (?, ?, 'Sheet1', 2, '{}', '{}', ?, 'pending', 'pending', '', ?, ?)
+    `).run("task-5-dispatch-record", "task-5-dispatch-job", imagePath, timestamp, timestamp);
+
+    const insertField = db.prepare(`
+      INSERT INTO analysis_fields (
+        id, section_id, key, label, field_type, prompt, options_json,
+        is_required, image_enabled, depends_on_json, sort_order, execution_type,
+        export_enabled, candidate_limit, is_enabled, created_at, updated_at
+      ) VALUES (?, 'task-5-dispatch', ?, ?, ?, ?, '[]', 0, ?, ?, ?, ?, ?, 15, 1, ?, ?)
+    `);
+    insertField.run("reception-facts", "截图内容总结", "截图内容总结", "object", "只抽取事实", 1, "[]", 0, "ai", 0, timestamp, timestamp);
+    insertField.run("reception-quality", "统一质检分析", "统一质检分析", "object", "统一售前售后标准", 0, '["截图内容总结"]', 1, "reception_quality_analysis", 0, timestamp, timestamp);
+    for (const [index, key] of [
+      "问题点-售前",
+      "问题点-售后",
+      "有无违规-售后",
+      "客服问题识别问题并打标签",
+      "接待流程质检结果",
+      "优化建议-售前",
+    ].entries()) {
+      insertField.run(
+        `task-5-reception-derived-${index}`,
+        key,
+        key,
+        "string",
+        "",
+        0,
+        '["统一质检分析"]',
+        index + 2,
+        "reception_quality_derive",
+        1,
+        timestamp,
+        timestamp,
+      );
+    }
+    vi.mocked(callVisionModel)
+      .mockImplementationOnce(async () => ({
+        content: JSON.stringify({
+          截图内容总结: {
+            会话场景: "混合",
+            聊天内容总结: "客户先咨询尺寸，后申请退款。",
+            证据片段: ["客户：尺寸多大", "客户：我要退款"],
+          },
+        }),
+        raw: '{"facts":true}',
+        usage: {},
+      }))
+      .mockImplementationOnce(async () => ({
+        content: JSON.stringify({
+          scene: "混合",
+          preSaleIssues: [{
+            name: "答非所问",
+            evidence: "客服：请看详情页",
+            reason: "未回答客户尺寸问题",
+            deduction: 10,
+            forceD: false,
+            violationCount: 1,
+          }],
+          afterSaleIssues: [{
+            name: "漏回复",
+            evidence: "客户提出退款后无人工回复",
+            reason: "没有有效回应退款诉求",
+            deduction: 0,
+            forceD: false,
+            violationCount: 1,
+          }],
+          unverifiableItems: [],
+          suggestion: "先回答尺寸，再明确说明退款处理步骤",
+          confidence: 0.9,
+        }),
+        raw: '{"quality":true}',
+        usage: {},
+      }));
+
+    const progress = await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+
+    expect(progress).toEqual({
+      total: 8,
+      completed: 8,
+      failed: 0,
+      needsReview: 0,
+      skipped: 0,
+    });
+    expect(callVisionModel).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(getModelsForPurpose).mock.calls.map(([purpose]) => purpose)).toEqual(["vision", "text"]);
+    const runs = db.prepare(`
+      SELECT f.key, r.result_json, r.model_config_snapshot_json
+      FROM analysis_field_runs r
+      JOIN analysis_fields f ON f.id = r.field_id
+      WHERE r.record_id = ?
+    `).all("task-5-dispatch-record") as Array<{
+      key: string;
+      result_json: string;
+      model_config_snapshot_json: string;
+    }>;
+    const results = Object.fromEntries(runs.map((run) => [run.key, JSON.parse(run.result_json)]));
+    expect(results["接待流程质检结果"]).toEqual({ 接待流程质检结果: "B" });
+    expect(results["有无违规-售后"]).toEqual({ "有无违规-售后": "有违规" });
+    expect(results["客服问题识别问题并打标签"]).toEqual({
+      客服问题识别问题并打标签: "答非所问、漏回复",
+    });
+    expect(runs.filter((run) => JSON.parse(run.model_config_snapshot_json).strategy === "local_rules")).toHaveLength(6);
+  });
+
+  it("reuses a completed summary and recalculates descendants after an upstream retry", async () => {
+    const timestamp = "2026-09-15T00:00:00.000Z";
+    db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (?, NULL, ?, '', '[]', '[]', 99, 1, 1, ?, ?)
+    `).run("task-5-dispatch", "未成交分析", timestamp, timestamp);
+    const insertBase = db.prepare(`
+      INSERT INTO knowledge_bases (
+        id, section_id, name, original_filename, column_schema_json,
+        item_count, is_enabled, created_at, updated_at
+      ) VALUES (?, 'task-5-dispatch', ?, '系统初始化', ?, 1, 1, ?, ?)
+    `);
+    insertBase.run(
+      "lost-customer-base",
+      "客户未成交原因库",
+      JSON.stringify([{ name: "原因名称", roles: ["result", "search"] }]),
+      timestamp,
+      timestamp,
+    );
+    insertBase.run(
+      "lost-service-base",
+      "客服促单问题库",
+      JSON.stringify([{ name: "问题名称", roles: ["result", "search"] }]),
+      timestamp,
+      timestamp,
+    );
+    db.prepare(`
+      INSERT INTO knowledge_items (
+        id, knowledge_base_id, path_key, values_json, search_text,
+        is_enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(
+      "lost-customer-item",
+      "lost-customer-base",
+      JSON.stringify(["价格超出预算"]),
+      JSON.stringify({ 原因名称: "价格超出预算" }),
+      "价格超出预算",
+      timestamp,
+      timestamp,
+    );
+    db.prepare(`
+      INSERT INTO knowledge_items (
+        id, knowledge_base_id, path_key, values_json, search_text,
+        is_enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+    `).run(
+      "lost-service-item",
+      "lost-service-base",
+      JSON.stringify(["未处理客户顾虑"]),
+      JSON.stringify({ 问题名称: "未处理客户顾虑" }),
+      "未处理客户顾虑",
+      timestamp,
+      timestamp,
+    );
+    db.prepare(`
+      INSERT INTO jobs (
+        id, original_filename, source_path, status, total_records,
+        completed_records, failed_records, created_at, updated_at
+      ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
+    `).run("task-5-dispatch-job", timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO records (
+        id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
+        image_path, status, review_status, review_note, created_at, updated_at
+      ) VALUES (?, ?, 'Sheet1', 2, '{}', '{}', ?, 'pending', 'pending', '', ?, ?)
+    `).run("task-5-dispatch-record", "task-5-dispatch-job", imagePath, timestamp, timestamp);
+    const insertField = db.prepare(`
+      INSERT INTO analysis_fields (
+        id, section_id, key, label, field_type, prompt, options_json,
+        is_required, image_enabled, depends_on_json, sort_order, execution_type,
+        export_enabled, knowledge_base_id, candidate_limit, is_enabled, created_at, updated_at
+      ) VALUES (?, 'task-5-dispatch', ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, 15, 1, ?, ?)
+    `);
+    insertField.run("lost-summary", "截图内容总结", "图片 AI", "string", "图片 AI", "[]", 1, "[]", 0, "ai", 1, null, timestamp, timestamp);
+    insertField.run("lost-attribution", "未成交归因", "未成交归因", "object", "统一归因", JSON.stringify(["价格需求", "尺寸需求"]), 0, '["截图内容总结"]', 1, "lost_deal_attribution", 0, null, timestamp, timestamp);
+    insertField.run("lost-customer", "客户原因", "客户原因", "string", "", "[]", 0, '["未成交归因"]', 2, "lost_deal_derive", 1, null, timestamp, timestamp);
+    insertField.run("lost-service", "客服原因", "客服原因", "string", "", "[]", 0, '["未成交归因"]', 3, "lost_deal_derive", 1, null, timestamp, timestamp);
+    insertField.run("lost-demand", "客户产品需求", "客户产品需求", "string", "", "[]", 0, '["未成交归因"]', 4, "lost_deal_derive", 1, null, timestamp, timestamp);
+    insertField.run("lost-script", "话术逻辑优化建议", "话术逻辑优化建议", "string", "", "[]", 0, '["未成交归因"]', 5, "lost_deal_script", 1, null, timestamp, timestamp);
+    db.prepare("UPDATE analysis_fields SET knowledge_sync_enabled = 1 WHERE id = 'lost-attribution'").run();
+
+    const progress = await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+    const diagnostic = db.prepare("SELECT error_message FROM analysis_field_runs WHERE field_id = 'lost-attribution' ORDER BY rowid DESC LIMIT 1").get() as { error_message: string | null } | undefined;
+    expect(diagnostic?.error_message).toBeNull();
+
+    expect(progress).toEqual({
+      total: 6,
+      completed: 6,
+      failed: 0,
+      needsReview: 0,
+      skipped: 0,
+    });
+    expect(callVisionModel).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(callVisionModel).mock.calls.map((call) => call[2])).toEqual([
+      { attempts: 1 },
+      { attempts: 1 },
+    ]);
+    expect(vi.mocked(getModelsForPurpose).mock.calls.map(([purpose]) => purpose)).toEqual(["vision", "text"]);
+    const runs = db.prepare(`
+      SELECT f.key, r.result_json
+      FROM analysis_field_runs r
+      JOIN analysis_fields f ON f.id = r.field_id
+      WHERE r.record_id = ?
+    `).all("task-5-dispatch-record") as Array<{ key: string; result_json: string }>;
+    const results = Object.fromEntries(runs.map((run) => [run.key, JSON.parse(run.result_json)]));
+    expect(results["客户原因"]).toEqual({ 客户原因: "价格超出预算" });
+    expect(results["客服原因"]).toEqual({ 客服原因: "未处理客户顾虑" });
+    expect(results["客户产品需求"]).toEqual({ 客户产品需求: "希望优惠到100元" });
+    expect(results["话术逻辑优化建议"]["话术逻辑优化建议"]).toContain("预算");
+    const links = db.prepare("SELECT knowledge_item_id, reason_type FROM lost_deal_record_reasons WHERE record_id = ? ORDER BY reason_type").all("task-5-dispatch-record");
+    expect(links).toEqual([
+      { knowledge_item_id: "lost-customer-item", reason_type: "customer" },
+      { knowledge_item_id: "lost-service-item", reason_type: "service" },
+    ]);
+    expect(listKnowledgeItems("lost-customer-base").items[0].occurrenceCount).toBe(1);
+    const attributionResult = db.prepare(`
+      SELECT result_json FROM analysis_field_runs
+      WHERE record_id = ? AND field_id = 'lost-attribution'
+      ORDER BY rowid DESC LIMIT 1
+    `).get("task-5-dispatch-record") as { result_json: string };
+    createFieldRun({
+      recordId: "task-5-dispatch-record",
+      fieldId: "lost-attribution",
+      status: "needs_review",
+      result: JSON.parse(attributionResult.result_json),
+      errorMessage: "人工复核",
+    });
+    updateRecord("task-5-dispatch-record", { status: "needs_review", reviewStatus: "needs_review" });
+    await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+    expect(db.prepare("SELECT COUNT(*) count FROM lost_deal_record_reasons WHERE record_id = ?").get("task-5-dispatch-record").count).toBe(2);
+    expect(listKnowledgeItems("lost-customer-base").items[0].occurrenceCount).toBe(1);
+    expect(callVisionModel).toHaveBeenCalledTimes(3);
+
+    createFieldRun({
+      recordId: "task-5-dispatch-record",
+      fieldId: "lost-attribution",
+      status: "failed",
+      result: {},
+      errorMessage: "需求类型条目格式无效",
+    });
+    updateRecord("task-5-dispatch-record", { status: "failed", reviewStatus: "needs_review" });
+    await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+    expect(callVisionModel).toHaveBeenCalledTimes(4);
+
+    createFieldRun({
+      recordId: "task-5-dispatch-record",
+      fieldId: "lost-attribution",
+      status: "failed",
+      result: {},
+      errorMessage: "中断前归因失败",
+    });
+    updateRecord("task-5-dispatch-record", { status: "pending", reviewStatus: "pending" });
+    await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+    expect(callVisionModel).toHaveBeenCalledTimes(5);
+
+    vi.mocked(callVisionModel).mockImplementationOnce(async () => ({
+      content: JSON.stringify({
+        customerReasons: [{ knowledgeItemId: "lost-customer-item", evidence: "客户说预算只有100元", confidence: 0.9 }],
+        serviceReasons: [{ knowledgeItemId: "lost-service-item", evidence: "客户询问保障但客服未回应", confidence: 0.9 }],
+        demandTypes: ["价格需求"],
+        specificDemand: "希望优惠到100元",
+        specificDemandEvidence: "客户说预算只有100元",
+        evidence: ["客户说预算只有100元"],
+        confidence: 0.9,
+      }),
+      raw: '{"model":"string-demand"}',
+      usage: {},
+    }));
+    createFieldRun({
+      recordId: "task-5-dispatch-record",
+      fieldId: "lost-attribution",
+      status: "failed",
+      result: {},
+      errorMessage: "模型返回字符串数组",
+    });
+    updateRecord("task-5-dispatch-record", { status: "failed", reviewStatus: "needs_review" });
+    const reviewed = await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+    expect(reviewed).toMatchObject({ failed: 0, skipped: 0, needsReview: 5, completed: 1 });
+    expect(callVisionModel).toHaveBeenCalledTimes(6);
+
+    vi.mocked(callVisionModel).mockImplementationOnce(async () => ({
+      content: JSON.stringify({
+        customerReasons: [],
+        serviceReasons: [],
+        demandTypes: [42],
+        specificDemand: "",
+        specificDemandEvidence: "",
+        evidence: [],
+        confidence: 0.9,
+      }),
+      raw: '{"model":"malformed-demand"}',
+      usage: {},
+    }));
+    await analyzeField("task-5-dispatch-record", "task-5-dispatch", "未成交归因");
+    const failedRaw = db.prepare(`
+      SELECT status, raw_response FROM analysis_field_runs
+      WHERE record_id = ? AND field_id = 'lost-attribution'
+      ORDER BY rowid DESC LIMIT 1
+    `).get("task-5-dispatch-record") as { status: string; raw_response: string | null };
+    expect(failedRaw).toEqual({ status: "failed", raw_response: '{"model":"malformed-demand"}' });
+    expect(callVisionModel).toHaveBeenCalledTimes(7);
+
+    const descendantRunsBefore = (db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM analysis_field_runs
+      WHERE record_id = ? AND field_id IN ('lost-attribution', 'lost-customer', 'lost-service', 'lost-demand', 'lost-script')
+    `).get("task-5-dispatch-record") as { count: number }).count;
+    await analyzeField("task-5-dispatch-record", "task-5-dispatch", "截图内容总结");
+    const descendantRunsAfter = (db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM analysis_field_runs
+      WHERE record_id = ? AND field_id IN ('lost-attribution', 'lost-customer', 'lost-service', 'lost-demand', 'lost-script')
+    `).get("task-5-dispatch-record") as { count: number }).count;
+
+    expect(callVisionModel).toHaveBeenCalledTimes(9);
+    expect(descendantRunsAfter - descendantRunsBefore).toBe(5);
+  });
+
+  it("stops model fallback after a permanent authentication error", async () => {
+    const timestamp = "2026-09-15T00:00:00.000Z";
+    db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (?, NULL, ?, '', '[]', '[]', 99, 1, 0, ?, ?)
+    `).run("task-5-dispatch", "永久错误", timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO jobs (
+        id, original_filename, source_path, status, total_records,
+        completed_records, failed_records, created_at, updated_at
+      ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
+    `).run("task-5-dispatch-job", timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO records (
+        id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
+        image_path, status, review_status, review_note, created_at, updated_at
+      ) VALUES (?, ?, 'Sheet1', 2, '{}', '{}', '', 'pending', 'pending', '', ?, ?)
+    `).run("task-5-dispatch-record", "task-5-dispatch-job", timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO analysis_fields (
+        id, section_id, key, label, field_type, prompt, options_json,
+        is_required, image_enabled, depends_on_json, sort_order, execution_type,
+        export_enabled, candidate_limit, is_enabled, created_at, updated_at
+      ) VALUES (?, 'task-5-dispatch', 'textAi', '普通 AI', 'string', '普通 AI', '[]',
+        0, 0, '[]', 0, 'ai', 1, 15, 1, ?, ?)
+    `).run("task-5-text", timestamp, timestamp);
+    vi.mocked(getModelsForPurpose).mockReturnValue([
+      { id: "first", name: "first", baseUrl: "https://first.example/v1", apiKey: "x", maskedApiKey: "***", model: "first", purpose: "text", supportsVision: false, temperature: 0, maxTokens: 100, isDefault: false, isPurposeDefault: true, isEnabled: true },
+      { id: "second", name: "second", baseUrl: "https://second.example/v1", apiKey: "x", maskedApiKey: "***", model: "second", purpose: "text", supportsVision: false, temperature: 0, maxTokens: 100, isDefault: false, isPurposeDefault: false, isEnabled: true },
+    ]);
+    vi.mocked(callVisionModel).mockRejectedValue(new Error("401 unauthorized"));
+
+    await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+
+    expect(callVisionModel).toHaveBeenCalledTimes(1);
+  });
+
+  it("caps all model requests for one record at four", async () => {
+    const timestamp = "2026-09-15T00:00:00.000Z";
+    db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (?, NULL, ?, '', '[]', '[]', 99, 1, 0, ?, ?)
+    `).run("task-5-dispatch", "记录预算", timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO jobs (
+        id, original_filename, source_path, status, total_records,
+        completed_records, failed_records, created_at, updated_at
+      ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
+    `).run("task-5-dispatch-job", timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO records (
+        id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
+        image_path, status, review_status, review_note, created_at, updated_at
+      ) VALUES (?, ?, 'Sheet1', 2, '{}', '{}', '', 'pending', 'pending', '', ?, ?)
+    `).run("task-5-dispatch-record", "task-5-dispatch-job", timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO analysis_fields (
+        id, section_id, key, label, field_type, prompt, options_json,
+        is_required, image_enabled, depends_on_json, sort_order, execution_type,
+        export_enabled, candidate_limit, is_enabled, created_at, updated_at
+      ) VALUES (?, 'task-5-dispatch', 'textAi', '普通 AI', 'string', '普通 AI', '[]',
+        0, 0, '[]', 0, 'ai', 1, 15, 1, ?, ?)
+    `).run("task-5-text", timestamp, timestamp);
+    vi.mocked(getModelsForPurpose).mockReturnValue(Array.from({ length: 6 }, (_, index) => ({
+      id: `model-${index}`,
+      name: `model-${index}`,
+      baseUrl: "https://model.example/v1",
+      apiKey: "x",
+      maskedApiKey: "***",
+      model: `model-${index}`,
+      purpose: "text" as const,
+      supportsVision: false,
+      temperature: 0,
+      maxTokens: 100,
+      isDefault: false,
+      isPurposeDefault: index === 0,
+      isEnabled: true,
+    })));
+    vi.mocked(callVisionModel).mockImplementation(async () => {
+      const { currentModelBudget } = await import("../ai/model-budget");
+      currentModelBudget()?.consume();
+      throw new Error("network failure");
+    });
+
+    await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+
+    expect(callVisionModel).toHaveBeenCalledTimes(4);
   });
 
   it("records a failed field run when the field-specific model is unavailable", async () => {
@@ -378,6 +839,18 @@ describe("field analysis executor", () => {
       "task-5-context-record",
       ["sameKey"],
       "task-5-context-b",
-    )).toEqual({ sameKey: "B 的结果" });
+      )).toEqual({ sameKey: "B 的结果" });
+    createFieldRun({
+      recordId: "task-5-context-record",
+      fieldId: "task-5-context-field-a",
+      status: "failed",
+      result: {},
+      errorMessage: "最新运行失败",
+    });
+    expect(getFieldResultContext(
+      "task-5-context-record",
+      ["sameKey"],
+      "task-5-context-a",
+    )).toEqual({});
   });
 });

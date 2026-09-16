@@ -5,15 +5,16 @@ import { analyzeField, analyzeRecordFields } from "../field-analysis-service";
 import { captureHotTopicQuestions, parseHotTopicQuestions, setHotTopicKnowledgeSync } from "./hot-topic-service";
 import { getKnowledgeBase, listKnowledgeItems, upsertKnowledgeBase, upsertKnowledgeItem } from "./knowledge-repository";
 import { callVisionModel } from "../../ai/openai-compatible-client";
+import { getModelsForPurpose } from "../model-config-service";
 import { HOT_TOPIC_BASE_ID, HOT_TOPIC_PROMPT } from "../../../shared/hot-topic";
 import { withAnalysisCancellation, cancelAnalysis } from "../analysis-cancellation";
 import type { AnalysisField } from "../../../shared/types";
 
 vi.mock("../model-config-service", () => ({ getModelsForPurpose: vi.fn(() => [{ id: "test-text", name: "Text", model: "test-model" }]) }));
-vi.mock("../../ai/openai-compatible-client", () => ({
-  callVisionModel: vi.fn(),
-  classifyModelError: (error: Error) => ({ message: error.message }),
-}));
+vi.mock("../../ai/openai-compatible-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../ai/openai-compatible-client")>();
+  return { ...actual, callVisionModel: vi.fn() };
+});
 
 let field: AnalysisField;
 const evidence = "客户问什么时候寄出，能不能开票";
@@ -46,6 +47,17 @@ beforeEach(() => {
 });
 
 describe("hot-topic capture", () => {
+  it("does not try another model after a permanent authentication error", async () => {
+    vi.mocked(getModelsForPurpose).mockReturnValue([
+      { id: "first", name: "first", model: "first" },
+      { id: "second", name: "second", model: "second" },
+    ] as never);
+    vi.mocked(callVisionModel).mockRejectedValue(new Error("401 unauthorized"));
+
+    expect((await capture()).status).toBe("failed");
+    expect(callVisionModel).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["401 unauthorized", "CERT_HAS_EXPIRED", "network error", "429 rate limit", "invalid protocol"])("propagates %s as failed through record aggregation without new knowledge", async message => {
     vi.mocked(callVisionModel).mockRejectedValue(new Error(message));
     const result = await analyzeRecordFields("record-one", "hot-topic");

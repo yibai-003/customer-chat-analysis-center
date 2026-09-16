@@ -9,7 +9,7 @@ import type {
   KnowledgeMatchResult,
 } from "../../../shared/types";
 import { buildKnowledgeMatchMessages } from "../../ai/knowledge-match-prompt-builder";
-import { callVisionModel } from "../../ai/openai-compatible-client";
+import { callVisionModel, classifyModelError } from "../../ai/openai-compatible-client";
 import { getModelsForPurpose } from "../model-config-service";
 import { getKnowledgeBase } from "./knowledge-repository";
 import { searchKnowledge } from "./knowledge-search-service";
@@ -134,10 +134,11 @@ async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledg
     for (const model of models) {
       assertAnalysisActive(); checkModelBudget();
       try {
-        response = await callVisionModel(model, messages);
+        response = await callVisionModel(model, messages, { attempts: 1 });
         if (response) break;
       } catch (error) {
         lastError = error;
+        if (!classifyModelError(error).retryable) throw error;
       }
     }
     if (!response) throw lastError ?? new Error("模型请求失败");

@@ -17,6 +17,8 @@ export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, sourceFie
   const [expandedDependencies, setExpandedDependencies] = useState<Record<string, boolean>>({});
   const availableSourceFields = sourceFields.filter((sourceField) => !fields.some((field) => field.outputColumn === sourceField));
   const effectiveSectionId = sectionId ?? fields[0]?.sectionId;
+  const isLostDealAttribution = (field: AnalysisField) => field.sectionId === "lost-deal"
+    && field.key === "未成交归因" && field.executionType === "lost_deal_attribution";
   const changeExecutionType = (index: number, field: AnalysisField, executionType: AnalysisField["executionType"]) => {
     if (executionType === "knowledge_match") {
       onChange(index, { executionType, exportEnabled: false, outputColumn: "", ...(field.knowledgeSyncEnabled ? { knowledgeSyncEnabled: false } : {}) });
@@ -56,6 +58,13 @@ export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, sourceFie
           <p>已有词条与新增词条合计不超过上限；没有明确问题时留空。问题库需有一个结果列。同一记录重试不重复计数，语义不确定时标记复核。</p>
           <button type="button" className="hot-topic-prompt-button" onClick={() => onChange(index, { prompt: HOT_TOPIC_PROMPT, type: "string", required: false, imageEnabled: false, options: [] })}>使用问题提炼提示词</button>
         </div>}
+      </div>}
+      {isLostDealAttribution(field) && <div className="hot-topic-capture">
+        <div><strong>未成交原因知识沉淀</strong><p>将证据充分的标准客户原因和客服原因关联到当前记录，并在对应知识库累计频次。</p></div>
+        <label className="hot-topic-capture-toggle"><input aria-label="启用未成交原因知识沉淀" type="checkbox" checked={Boolean(field.knowledgeSyncEnabled)} onChange={(event) => onChange(index, { knowledgeSyncEnabled: event.target.checked })} />启用知识沉淀</label>
+        <div className="hot-topic-capture-options">
+          <p>知识库外分类和证据不足的归因只进入人工复核，不会自动扩充标准原因库；同一记录重试不会重复计数。</p>
+        </div>
       </div>}
       {field.executionType !== "knowledge_extract" && <PromptEditor value={field.prompt} onChange={(prompt) => onChange(index, { prompt })} />}
       {field.executionType !== "knowledge_extract" && <label>可选值<input aria-label="可选值" value={(field.options ?? []).join(", ")} placeholder="价格问题, 产品问题" onChange={(event) => onChange(index, { options: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} /></label>}

@@ -30,9 +30,10 @@ vi.mock("../model-config-service", () => ({
   }]),
 }));
 
-vi.mock("../../ai/openai-compatible-client", () => ({
-  callVisionModel: vi.fn(),
-}));
+vi.mock("../../ai/openai-compatible-client", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../ai/openai-compatible-client")>();
+  return { ...actual, callVisionModel: vi.fn() };
+});
 
 import { callVisionModel } from "../../ai/openai-compatible-client";
 import { getModelForPurpose } from "../model-config-service";
@@ -289,5 +290,29 @@ describe("knowledge match service", () => {
     });
 
     expect(callVisionModel).not.toHaveBeenCalled();
+  });
+
+  it("does not try another model after a permanent authentication error", async () => {
+    createKnowledge();
+    vi.mocked(searchKnowledge).mockReturnValue([{
+      itemId: "candidate-panel",
+      values: { 原因: "品质-面板故障" },
+      score: 52,
+      matchedText: "面板",
+    }]);
+    vi.mocked(getModelsForPurpose).mockReturnValue([
+      { id: "first", name: "first", model: "first" },
+      { id: "second", name: "second", model: "second" },
+    ] as never);
+    vi.mocked(callVisionModel).mockRejectedValue(new Error("401 unauthorized"));
+
+    await expect(matchKnowledgeItem({
+      recordId: "record-match",
+      field,
+      sectionName: "退货分析",
+      dependencies: { 聊天内容: "面板故障" },
+    })).rejects.toThrow();
+
+    expect(callVisionModel).toHaveBeenCalledTimes(1);
   });
 });

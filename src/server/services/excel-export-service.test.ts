@@ -19,7 +19,23 @@ describe("Excel export columns", () => {
       id: "reception", name: "接待流程质检", parentId: "chat", prompt: "",
       outputSchema: [], sortOrder: 1, isEnabled: true, imageEnabled: true,
     }]);
-    expect(columns.map((column) => column.header)).toContain("接待流程质检_质检结论");
+    expect(columns.map((column) => column.header)).toEqual(expect.arrayContaining([
+      "接待流程质检_问题点-售前",
+      "接待流程质检_问题点-售后",
+      "接待流程质检_接待流程质检结果",
+    ]));
+  });
+
+  it("preserves lost-deal public headers without exporting internal attribution", () => {
+    const columns = exportColumns([{
+      id: "lost-deal", name: "未成交分析", parentId: "chat", prompt: "",
+      outputSchema: [], sortOrder: 3, isEnabled: true, imageEnabled: true,
+    }]);
+    const headers = columns.map((column) => column.header);
+    for (const header of ["未成交分析_客户原因", "未成交分析_客服原因", "未成交分析_客户产品需求", "未成交分析_话术逻辑优化建议"]) {
+      expect(headers).toContain(header);
+    }
+    expect(headers).not.toContain("未成交分析_未成交归因");
   });
 
   it("omits fields disabled for export from column and output plans", () => {

@@ -150,6 +150,22 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .analysis-progress-stats{display:flex;flex-wrap:wrap;gap:12px;margin-top:11px;padding-top:9px;border-top:1px solid var(--pixel-line);color:#718078;font-size:9px}
 .analysis-progress-stats strong{margin-left:4px;color:var(--pixel-ink);font:10px "Cascadia Mono","Consolas",monospace}
 @media(max-width:700px){.analysis-progress{max-width:none}.analysis-progress-heading{grid-template-columns:1fr auto}.analysis-progress-heading b{grid-column:2;grid-row:1}.analysis-progress-stats{gap:8px 12px}}
+.lost-deal-attribution{margin:0 0 16px;border:2px solid var(--pixel-ink);background:#f1f7e9;box-shadow:3px 3px 0 var(--pixel-shadow)}
+.lost-deal-attribution-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border-bottom:1px solid var(--pixel-line);background:#e7f1dc}
+.lost-deal-attribution-head h4{margin:0;color:var(--pixel-ink);font-size:12px}
+.lost-deal-attribution-head span{padding:4px 6px;border:1px solid var(--pixel-ink);font:9px "Cascadia Mono","Consolas",monospace}
+.lost-deal-attribution-head .confidence-flag{background:var(--pixel-green);color:var(--pixel-ink)}
+.lost-deal-attribution-head .review-flag{background:var(--pixel-orange);color:#fff}
+.lost-deal-attribution-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;padding:10px 12px}
+.lost-deal-attribution-grid>div{min-width:0;padding:8px 0;border-bottom:1px dotted var(--pixel-line)}
+.lost-deal-attribution-grid small,.lost-deal-attribution-meta small{display:block;color:#718078;font:9px "Cascadia Mono","Consolas","Microsoft YaHei",monospace}
+.lost-deal-attribution-grid strong{display:block;margin-top:5px;color:var(--pixel-ink);font-size:11px;line-height:1.55;white-space:pre-line;overflow-wrap:anywhere}
+.lost-deal-attribution-meta{display:grid;grid-template-columns:1fr auto;gap:12px;padding:10px 12px;border-top:1px solid var(--pixel-line);background:#fff}
+.lost-deal-attribution-meta>div{min-width:0}
+.lost-deal-attribution-meta span{display:block;margin-top:5px;color:#53675c;font-size:10px;line-height:1.55;white-space:pre-line;overflow-wrap:anywhere}
+.lost-deal-attribution-meta b{display:block;margin-top:5px;color:var(--pixel-ink);font:15px "Cascadia Mono","Consolas",monospace}
+.lost-deal-attribution-warning{margin:0;padding:9px 12px;border-top:1px solid #ddb38e;background:#fbefe9;color:#8d513d;font-size:10px;line-height:1.5}
+@media(max-width:700px){.lost-deal-attribution-grid{grid-template-columns:1fr}.lost-deal-attribution-meta{grid-template-columns:1fr}}
 /* UI usability refinements: preserve pixel operations visual language */
 .button:focus-visible,.content-actions select:focus-visible,.section-group>button:focus-visible,.job:focus-visible,.record:focus-visible{outline:3px solid var(--pixel-orange);outline-offset:2px}
 .button:disabled{cursor:not-allowed;opacity:.5;transform:none;box-shadow:1px 1px 0 var(--pixel-shadow)}

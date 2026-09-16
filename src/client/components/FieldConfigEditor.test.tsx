@@ -156,6 +156,22 @@ describe("FieldConfigEditor knowledge modes", () => {
     await renderUi(<FieldConfigEditor fields={[{ ...hotField, sectionId: "refund" }]} onChange={onChange} onAdd={vi.fn()} onRemove={vi.fn()} />);
     expect(host.querySelector('[aria-label="启用高频问题知识沉淀"]')).toBeNull();
   });
+  it("configures standard-reason capture on the lost-deal attribution field", async () => {
+    const onChange = vi.fn();
+    const attribution = field({
+      sectionId: "lost-deal",
+      key: "未成交归因",
+      label: "未成交归因",
+      type: "object",
+      executionType: "lost_deal_attribution",
+      knowledgeSyncEnabled: true,
+    });
+    await renderUi(<FieldConfigEditor fields={[attribution]} onChange={onChange} onAdd={vi.fn()} onRemove={vi.fn()} />);
+    expect(host.textContent).toContain("未成交原因知识沉淀");
+    expect((control("启用未成交原因知识沉淀") as HTMLInputElement).checked).toBe(true);
+    await click(control("启用未成交原因知识沉淀"));
+    expect(onChange).toHaveBeenCalledWith(0, { knowledgeSyncEnabled: false });
+  });
   it("shows the existing prompt, image, required, and dependency controls for AI fields", async () => {
     const listBases = vi.spyOn(knowledgeApi, "listBases").mockResolvedValue([base]);
     await renderUi(<FieldConfigEditor
