@@ -61,4 +61,29 @@ describe("model configuration management", () => {
     setDefaultModel(primary.id, "vision");
     expect(getModelsForPurpose("vision")[0].id).toBe(primary.id);
   });
+
+  it("returns concrete pool metadata defaults for legacy model configurations", () => {
+    const created = createModelConfig({
+      name: "池元数据默认值",
+      baseUrl: "https://example.com/v1",
+      apiKey: "sk-pool-defaults",
+      model: "text-defaults",
+      purpose: "text",
+      supportsVision: false,
+    });
+
+    expect(created).toMatchObject({
+      poolEnabled: false,
+      billingMode: "paid",
+      qualityTier: "A",
+      priority: 100,
+      thinkingMode: false,
+      memberType: "general",
+      quotaUsedTokens: 0,
+      quotaSafetyRatio: 0.95,
+      consecutiveFailures: 0,
+      capabilityEligible: false,
+      quotaBlocked: false,
+    });
+  });
 });

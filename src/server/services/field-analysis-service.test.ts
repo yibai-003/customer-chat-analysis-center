@@ -9,6 +9,20 @@ import { createFieldRun, getFieldResultContext } from "./field-run-service";
 import { listKnowledgeItems } from "./knowledge/knowledge-repository";
 import type { AnalysisField } from "../../shared/types";
 
+const modelPoolDefaults = {
+  poolEnabled: false,
+  billingMode: "paid" as const,
+  qualityTier: "A" as const,
+  priority: 100,
+  thinkingMode: false,
+  memberType: "general" as const,
+  quotaUsedTokens: 0,
+  quotaSafetyRatio: 0.95,
+  consecutiveFailures: 0,
+  capabilityEligible: false,
+  quotaBlocked: false,
+};
+
 vi.mock("./model-config-service", () => ({
   getModelForPurpose: vi.fn((purpose: "vision" | "text") => ({
     id: `${purpose}-model`,
@@ -622,8 +636,8 @@ describe("field analysis executor", () => {
         0, 0, '[]', 0, 'ai', 1, 15, 1, ?, ?)
     `).run("task-5-text", timestamp, timestamp);
     vi.mocked(getModelsForPurpose).mockReturnValue([
-      { id: "first", name: "first", baseUrl: "https://first.example/v1", apiKey: "x", maskedApiKey: "***", model: "first", purpose: "text", supportsVision: false, temperature: 0, maxTokens: 100, isDefault: false, isPurposeDefault: true, isEnabled: true },
-      { id: "second", name: "second", baseUrl: "https://second.example/v1", apiKey: "x", maskedApiKey: "***", model: "second", purpose: "text", supportsVision: false, temperature: 0, maxTokens: 100, isDefault: false, isPurposeDefault: false, isEnabled: true },
+      { ...modelPoolDefaults, id: "first", name: "first", baseUrl: "https://first.example/v1", apiKey: "x", maskedApiKey: "***", model: "first", purpose: "text", supportsVision: false, temperature: 0, maxTokens: 100, isDefault: false, isPurposeDefault: true, isEnabled: true },
+      { ...modelPoolDefaults, id: "second", name: "second", baseUrl: "https://second.example/v1", apiKey: "x", maskedApiKey: "***", model: "second", purpose: "text", supportsVision: false, temperature: 0, maxTokens: 100, isDefault: false, isPurposeDefault: false, isEnabled: true },
     ]);
     vi.mocked(callVisionModel).mockRejectedValue(new Error("401 unauthorized"));
 
@@ -661,6 +675,7 @@ describe("field analysis executor", () => {
         0, 0, '[]', 0, 'ai', 1, 15, 1, ?, ?)
     `).run("task-5-text", timestamp, timestamp);
     vi.mocked(getModelsForPurpose).mockReturnValue(Array.from({ length: 6 }, (_, index) => ({
+      ...modelPoolDefaults,
       id: `model-${index}`,
       name: `model-${index}`,
       baseUrl: "https://model.example/v1",

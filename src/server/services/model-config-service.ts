@@ -21,6 +21,21 @@ const inputSchema = z.object({
 
 function mapRow(row: any): ModelConfig {
   const key = decryptSecret(row.api_key_ciphertext, config.encryptionKey);
+  const capabilityStatus = row.capability_json ? JSON.parse(row.capability_json) : undefined;
+  const capabilityCheckedAt = row.capability_checked_at
+    ? new Date(row.capability_checked_at).toISOString()
+    : undefined;
+  const capabilityTime = Date.parse(capabilityCheckedAt ?? "");
+  const capabilityFresh = Number.isFinite(capabilityTime)
+    && Date.now() >= capabilityTime
+    && Date.now() - capabilityTime < 86400000;
+  const capabilityPassed = capabilityStatus?.text === true
+    && capabilityStatus?.json === true
+    && (row.purpose !== "vision" || (Boolean(row.supports_vision) && capabilityStatus.vision === true));
+  const quotaUsedTokens = row.quota_used_tokens ?? 0;
+  const quotaSafetyRatio = row.quota_safety_ratio ?? 0.95;
+  const quotaBlocked = Boolean(row.quota_exhausted_at)
+    || (row.quota_total_tokens != null && quotaUsedTokens >= row.quota_total_tokens * quotaSafetyRatio);
   return {
     id: row.id, name: row.name, baseUrl: row.base_url, maskedApiKey: maskSecret(key),
     model: row.model, supportsVision: Boolean(row.supports_vision), temperature: row.temperature,
@@ -28,8 +43,28 @@ function mapRow(row: any): ModelConfig {
     purpose: row.purpose === "text" ? "text" : "vision",
     isPurposeDefault: Boolean(row.is_purpose_default ?? row.is_default),
     isEnabled: Boolean(row.is_enabled),
-    capabilityStatus: row.capability_json ? JSON.parse(row.capability_json) : undefined,
-    capabilityCheckedAt: row.capability_checked_at ? new Date(row.capability_checked_at).toISOString() : undefined,
+    capabilityStatus,
+    capabilityCheckedAt,
+    providerId: row.provider_id ?? undefined,
+    poolEnabled: Boolean(row.pool_enabled),
+    billingMode: row.billing_mode === "free" ? "free" : "paid",
+    qualityTier: row.quality_tier === "B" || row.quality_tier === "C" ? row.quality_tier : "A",
+    priority: row.priority ?? 100,
+    thinkingMode: Boolean(row.thinking_mode),
+    memberType: row.member_type === "ocr" ? "ocr" : "general",
+    quotaTotalTokens: row.quota_total_tokens ?? undefined,
+    quotaUsedTokens,
+    quotaExpiresAt: row.quota_expires_at ?? undefined,
+    quotaSafetyRatio,
+    quotaExhaustedAt: row.quota_exhausted_at ?? undefined,
+    cooldownUntil: row.cooldown_until ?? undefined,
+    consecutiveFailures: row.consecutive_failures ?? 0,
+    lastSuccessAt: row.last_success_at ?? undefined,
+    lastFailureAt: row.last_failure_at ?? undefined,
+    presetKey: row.preset_key ?? undefined,
+    presetVersion: row.preset_version ?? undefined,
+    capabilityEligible: capabilityFresh && capabilityPassed,
+    quotaBlocked,
   };
 }
 

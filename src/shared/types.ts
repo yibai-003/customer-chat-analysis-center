@@ -331,25 +331,25 @@ export interface ModelConfig {
   capabilityCheckedAt?: string;
   providerId?: string;
   providerName?: string;
-  poolEnabled?: boolean;
-  billingMode?: ModelBillingMode;
-  qualityTier?: ModelQualityTier;
-  priority?: number;
-  thinkingMode?: boolean;
-  memberType?: "general" | "ocr";
+  poolEnabled: boolean;
+  billingMode: ModelBillingMode;
+  qualityTier: ModelQualityTier;
+  priority: number;
+  thinkingMode: boolean;
+  memberType: "general" | "ocr";
   quotaTotalTokens?: number;
-  quotaUsedTokens?: number;
+  quotaUsedTokens: number;
   quotaExpiresAt?: string;
-  quotaSafetyRatio?: number;
+  quotaSafetyRatio: number;
   quotaExhaustedAt?: string;
   cooldownUntil?: string;
-  consecutiveFailures?: number;
+  consecutiveFailures: number;
   lastSuccessAt?: string;
   lastFailureAt?: string;
   presetKey?: string;
   presetVersion?: number;
-  capabilityEligible?: boolean;
-  quotaBlocked?: boolean;
+  capabilityEligible: boolean;
+  quotaBlocked: boolean;
 }
 
 export interface AnalysisRun {

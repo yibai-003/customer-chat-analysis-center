@@ -11,7 +11,11 @@ const api = async <T,>(url: string, options?: RequestInit): Promise<T> => {
   return body.data as T;
 };
 
-type ModelForm = Omit<ModelConfig, "id" | "maskedApiKey" | "isDefault"> & { apiKey: string };
+type ModelForm = Pick<
+  ModelConfig,
+  "name" | "baseUrl" | "model" | "supportsVision" | "purpose" | "isPurposeDefault"
+  | "temperature" | "maxTokens" | "isEnabled"
+> & { apiKey: string };
 const emptyForm = (): ModelForm => ({ name: "截图提取模型", baseUrl: "", apiKey: "", model: "", supportsVision: true, purpose: "vision", isPurposeDefault: false, temperature: 0.2, maxTokens: 1500, isEnabled: true });
 
 export function ModelConfigDialog({ models, close, saved }: { models: ModelConfig[]; close: () => void; saved: () => void }) {
