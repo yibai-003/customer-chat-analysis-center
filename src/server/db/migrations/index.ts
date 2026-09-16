@@ -14,6 +14,7 @@ import { applyUnifiedReceptionQuality } from "./010-unified-reception-quality";
 import { applyOptimizedReceptionQualityPrompts } from "./011-optimized-reception-quality-prompts";
 import { applyFusedReceptionQualityPrompts } from "./012-fused-reception-quality-prompts";
 import { applyReceptionExcelSchema } from "./013-reception-excel-schema";
+import { applyModelPools } from "./014-model-pools";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
@@ -29,8 +30,9 @@ export const migrations: Migration[] = [
   { version: 11, name: "optimized-reception-quality-prompts", up: applyOptimizedReceptionQualityPrompts },
   { version: 12, name: "fused-reception-quality-prompts", up: applyFusedReceptionQualityPrompts },
   { version: 13, name: "reception-excel-schema", up: applyReceptionExcelSchema },
+  { version: 14, name: "model-pools", up: applyModelPools },
 ];
-export const currentSchemaVersion = 13;
+export const currentSchemaVersion = 14;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();

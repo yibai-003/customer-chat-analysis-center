@@ -5,7 +5,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appliedMigrations, migrations, runMigrations } from "./index";
+import { appliedMigrations, currentSchemaVersion, migrations, runMigrations } from "./index";
 import { applyLegacyBaseline } from "./002-legacy-baseline";
 import { applyReceptionQualityConfiguration } from "./009-reception-quality-normalization";
 import { applyUnifiedReceptionQualityConfiguration } from "./010-unified-reception-quality";
@@ -22,7 +22,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -30,6 +30,46 @@ describe("versioned migrations", () => {
     runMigrations(db);
     expect(JSON.stringify(appliedMigrations(db))).toBe(before);
     expect(fs.readdirSync(path.join(dir, "backups/migrations"))).toHaveLength(1);
+  });
+  it("migrates legacy model configs into pool providers without rewriting credentials", () => {
+    applyLegacyBaseline(db);
+    const insert = db.prepare(`
+      INSERT INTO model_configs (
+        id, name, base_url, api_key_ciphertext, model, purpose, is_purpose_default,
+        supports_vision, temperature, max_tokens, is_default, is_enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0.2, 1500, ?, 1, '2026-09-16T00:00:00.000Z', '2026-09-16T00:00:00.000Z')
+    `);
+    insert.run("qwen-vision", "旧千问视觉", "https://dashscope.aliyuncs.com/compatible-mode/v1", "cipher-vision", "qwen-vl-max", "vision", 1, 1);
+    insert.run("qwen-text", "旧千问文本", "https://dashscope.aliyuncs.com/compatible-mode/v1", "cipher-text", "qwen-plus", "text", 1, 0);
+    insert.run("other", "其他模型", "https://example.com/v1", "cipher-other", "other-model", "text", 1, 0);
+    const originalCiphertextById = Object.fromEntries(
+      (db.prepare("SELECT id, api_key_ciphertext FROM model_configs").all() as Array<{ id: string; api_key_ciphertext: string }>)
+        .map((row) => [row.id, row.api_key_ciphertext]),
+    );
+
+    runMigrations(db);
+
+    expect(currentSchemaVersion).toBe(14);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    const qwenRows = db.prepare(`
+      SELECT provider_id, id, api_key_ciphertext
+      FROM model_configs
+      WHERE base_url LIKE '%dashscope.aliyuncs.com%'
+      ORDER BY id
+    `).all() as Array<{ provider_id: string; id: string; api_key_ciphertext: string }>;
+    expect(qwenRows).toHaveLength(2);
+    expect(qwenRows.every((row) => row.provider_id === qwenRows[0].provider_id)).toBe(true);
+    expect(qwenRows.every((row) => row.api_key_ciphertext === originalCiphertextById[row.id])).toBe(true);
+    expect(db.prepare("SELECT COUNT(*) count FROM model_pool_settings").get()).toEqual({ count: 1 });
+    expect(db.prepare("SELECT paid_daily_token_limit FROM model_pool_settings WHERE id='default'").get())
+      .toEqual({ paid_daily_token_limit: 0 });
+    expect(db.prepare("SELECT name FROM model_providers WHERE id = ?").get(qwenRows[0].provider_id))
+      .toEqual({ name: "千问百炼" });
+
+    runMigrations(db);
+
+    expect(db.prepare("SELECT COUNT(*) count FROM model_providers").get()).toEqual({ count: 2 });
+    expect(db.prepare("SELECT COUNT(*) count FROM model_pool_settings").get()).toEqual({ count: 1 });
   });
   it("replaces legacy reception prompts with compact structured protocols", () => {
     applyLegacyBaseline(db);
