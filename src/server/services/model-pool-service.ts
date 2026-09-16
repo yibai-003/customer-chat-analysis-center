@@ -6,6 +6,7 @@ import type {
 } from "../../shared/types";
 import {
   checkModelBudget,
+  currentModelBudget,
   currentPaidTokenBudget,
   paidTokensRemaining,
   withModelBudget,
@@ -121,7 +122,7 @@ function usageDetails(usage: Usage) {
   return {
     input,
     output,
-    known: input !== undefined || output !== undefined,
+    known: input !== undefined && output !== undefined,
     total: (input ?? 0) + (output ?? 0),
   };
 }
@@ -316,13 +317,11 @@ function markSuccess(
   usage: Usage,
   accountedTokens: number,
   durationMs: number,
-  unknownPaidUsage: boolean,
-  paidReservation?: PaidReservation,
+  unknownUsage: boolean,
 ) {
   const details = usageDetails(usage);
   const now = new Date().toISOString();
   db.transaction(() => {
-    if (paidReservation) releasePersistedPaidAllowance(paidReservation);
     if (member.billingMode === "free" && details.known) {
       db.prepare(`UPDATE model_configs SET quota_used_tokens=quota_used_tokens+?,
         consecutive_failures=0,cooldown_until=NULL,last_success_at=?,updated_at=? WHERE id=?`)
@@ -334,10 +333,10 @@ function markSuccess(
     insertEvent(member, options, {
       type: "success",
       usage,
-      accountedTokens: unknownPaidUsage ? 0 : accountedTokens,
+      accountedTokens: unknownUsage ? 0 : accountedTokens,
       durationMs,
     });
-    if (unknownPaidUsage) {
+    if (unknownUsage) {
       insertEvent(member, options, {
         type: "usage_unknown",
         accountedTokens,
@@ -355,7 +354,7 @@ function markFailure(
   durationMs: number,
   usage: Usage = {},
   accountedTokens = 0,
-  unknownPaidUsage = false,
+  unknownUsage = false,
 ) {
   db.transaction(() => {
     db.prepare("UPDATE model_configs SET last_failure_at=?,updated_at=? WHERE id=?")
@@ -363,12 +362,12 @@ function markFailure(
     insertEvent(member, options, {
       type: "failure",
       usage,
-      accountedTokens: unknownPaidUsage ? 0 : accountedTokens,
+      accountedTokens: unknownUsage ? 0 : accountedTokens,
       errorCode: code,
       errorMessage: message,
       durationMs,
     });
-    if (unknownPaidUsage) {
+    if (unknownUsage) {
       insertEvent(member, options, {
         type: "usage_unknown",
         accountedTokens,
@@ -389,9 +388,20 @@ function assertRunnable(options: ModelPoolCallOptions, attempts: ModelRouteAttem
   }
 }
 
+function assertNotCancelled(options: ModelPoolCallOptions, attempts: ModelRouteAttempt[]) {
+  try {
+    options.signal?.throwIfAborted();
+    currentModelBudget()?.signal.throwIfAborted();
+  } catch (error) {
+    const classified = classifyModelError(error);
+    throw new ModelPoolError(classified.code, classified.message, attempts);
+  }
+}
+
 async function transportCall(member: ResolvedPoolMember, messages: unknown[], options: ModelPoolCallOptions) {
   let reserved = 0;
   let paidReservation: PaidReservation | undefined;
+  let settled = false;
   const paidBudget = currentPaidTokenBudget();
   if (member.billingMode === "paid") {
     if (!paidBudget) throw new ModelPoolError("budget", "当前批次未启用付费 Token 预算");
@@ -412,15 +422,27 @@ async function transportCall(member: ResolvedPoolMember, messages: unknown[], op
   try {
     const response = await callVisionModel(member, messages, { attempts: 1, signal: options.signal });
     const usage = usageDetails(response.usage);
-    if (member.billingMode === "paid" && usage.known) {
-      paidBudget!.settlePaidTokens(reserved, usage.total);
-    }
+    const settle = (actualTokens: number) => {
+      if (settled) return;
+      settled = true;
+      if (!reserved) return;
+      try {
+        paidBudget!.settlePaidTokens(reserved, actualTokens);
+      } catch (error) {
+        paidBudget!.settlePaidTokens(reserved, 0);
+        throw error;
+      } finally {
+        if (paidReservation) releasePersistedPaidAllowance(paidReservation);
+      }
+    };
     return {
       ...response,
       usage: response.usage as Usage,
-      accountedTokens: member.billingMode === "paid" && !usage.known ? reserved : usage.total,
-      unknownPaidUsage: member.billingMode === "paid" && !usage.known,
-      paidReservation,
+      accountedTokens: usage.known
+        ? usage.total
+        : member.billingMode === "paid" ? reserved : 0,
+      unknownUsage: !usage.known,
+      settle,
     };
   } catch (error) {
     if (reserved) paidBudget!.settlePaidTokens(reserved, 0);
@@ -490,19 +512,22 @@ async function routeModelPool(
     while (retry < 2) {
       assertRunnable(options, attempts);
       const started = Date.now();
+      let response: Awaited<ReturnType<typeof transportCall>> | undefined;
       try {
-        const response = await transportCall(candidate, messages, options);
+        response = await transportCall(candidate, messages, options);
         const durationMs = Date.now() - started;
+        assertNotCancelled(options, attempts);
         const validated = validateContent(response.content, options.validate);
+        assertNotCancelled(options, attempts);
         if (validated.valid) {
+          response.settle(response.accountedTokens);
           markSuccess(
             candidate,
             options,
             response.usage,
             response.accountedTokens,
             durationMs,
-            response.unknownPaidUsage,
-            response.paidReservation,
+            response.unknownUsage,
           );
           attempts.push({
             modelConfigId: candidate.id,
@@ -519,6 +544,7 @@ async function routeModelPool(
           };
         }
 
+        response.settle(response.accountedTokens);
         markFailure(
           candidate,
           options,
@@ -527,7 +553,7 @@ async function routeModelPool(
           durationMs,
           response.usage,
           response.accountedTokens,
-          response.unknownPaidUsage,
+          response.unknownUsage,
         );
         attempts.push({
           modelConfigId: candidate.id,
@@ -552,6 +578,13 @@ async function routeModelPool(
         break;
       } catch (error) {
         if (error instanceof ModelPoolError) {
+          if (response) {
+            response.settle(
+              error.code === "cancelled" || error.code === "budget"
+                ? 0
+                : response.accountedTokens,
+            );
+          }
           if (error.code === "budget") {
             insertEvent(candidate, options, {
               type: "paid_blocked",
@@ -559,9 +592,27 @@ async function routeModelPool(
               errorMessage: error.message,
             });
           }
+          if (error.code === "cancelled") {
+            const durationMs = Date.now() - started;
+            attempts.push({
+              modelConfigId: candidate.id,
+              model: candidate.model,
+              status: "failed",
+              errorCode: error.code,
+              durationMs,
+            });
+            markFailure(candidate, options, error.code, error.message, durationMs);
+          }
           throw new ModelPoolError(error.code, error.message, attempts);
         }
         const classified = sanitizeError(candidate, classifyModelError(error));
+        if (response) {
+          response.settle(
+            classified.code === "cancelled" || classified.code === "budget"
+              ? 0
+              : response.accountedTokens,
+          );
+        }
         const durationMs = Date.now() - started;
         attempts.push({
           modelConfigId: candidate.id,

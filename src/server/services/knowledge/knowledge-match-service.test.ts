@@ -229,14 +229,25 @@ describe("knowledge match service", () => {
       status: "completed",
       result: { reasonMatch: "candidate-panel" },
       snapshotId: expect.any(String),
+      route: expect.objectContaining({
+        raw: '{"choices":[{"message":{"content":"selected"}}]}',
+        model: expect.objectContaining({ id: "text-model" }),
+        attempts: [{
+          modelConfigId: "text-model",
+          model: "text-model",
+          status: "success",
+          durationMs: 7,
+        }],
+      }),
     });
     expect(callModelPool).toHaveBeenCalledTimes(1);
-    expect(callModelPool).toHaveBeenCalledWith(expect.any(Array), {
+    expect(callModelPool).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({
       purpose: "text",
       recordId: "record-match",
       fieldId: field.id,
       operation: "knowledge_match",
-    });
+      validate: expect.any(Function),
+    }));
     expect(callVisionModel).not.toHaveBeenCalled();
 
     const modelMessages = vi.mocked(callModelPool).mock.calls[0][0];
@@ -262,7 +273,7 @@ describe("knowledge match service", () => {
     expect(snapshot.model_response).toContain("choices");
   });
 
-  it("rejects an ID outside the supplied candidate set for review", async () => {
+  it("passes JSON and candidate ID validation to the model pool", async () => {
     createKnowledge();
     vi.mocked(searchKnowledge).mockReturnValue([{
       itemId: "candidate-panel",
@@ -270,19 +281,27 @@ describe("knowledge match service", () => {
       score: 52,
       matchedText: "面板",
     }]);
-    mockModelResponse('{"knowledgeItemId":"unknown-item"}', "unknown-item");
+    vi.mocked(callModelPool).mockImplementationOnce(async (_messages, options) => {
+      expect(options.validate?.("not-json")).toEqual({ valid: false });
+      expect(options.validate?.('{"knowledgeItemId":42}')).toEqual({ valid: false });
+      expect(options.validate?.('{"knowledgeItemId":"unknown-item"}')).toEqual({ valid: false });
+      expect(options.validate?.('{"knowledgeItemId":""}')).toEqual({ valid: true });
+      expect(options.validate?.('{"knowledgeItemId":"candidate-panel"}')).toEqual({ valid: true });
+      return routedResponse('{"knowledgeItemId":"candidate-panel"}', "selected");
+    });
 
     await expect(matchKnowledgeItem({
       recordId: "record-match",
       field,
       sectionName: "退货分析",
-      dependencies: { 聊天内容: "面板故障" },
+      dependencies: { 聊天内容: "面板故障-单次路由" },
     })).resolves.toMatchObject({
-      status: "needs_review",
-      result: { reasonMatch: "" },
+      status: "completed",
+      result: { reasonMatch: "candidate-panel" },
     });
-    expect(db.prepare("SELECT COUNT(*) AS count FROM knowledge_match_snapshots").get())
-      .toEqual({ count: 0 });
+    expect(callModelPool).toHaveBeenCalledWith(expect.any(Array), expect.objectContaining({
+      validate: expect.any(Function),
+    }));
   });
 
   it("treats an empty candidate ID as a valid unmatched result requiring review", async () => {
@@ -300,10 +319,47 @@ describe("knowledge match service", () => {
       field,
       sectionName: "退货分析",
       dependencies: { 聊天内容: "无法识别的情况" },
-    })).resolves.toEqual({
+    })).resolves.toMatchObject({
       status: "needs_review",
       result: { reasonMatch: "" },
+      route: expect.objectContaining({
+        raw: "empty",
+        model: expect.objectContaining({ id: "text-model" }),
+      }),
     });
+  });
+
+  it("keeps cached matches without routing or duplicating model usage metadata", async () => {
+    const item = createKnowledge();
+    vi.mocked(searchKnowledge).mockReturnValue([{
+      itemId: item.id,
+      values: item.values,
+      score: 52,
+      matchedText: "缓存候选",
+    }]);
+    mockModelResponse('{"knowledgeItemId":"candidate-panel"}', "first-route");
+    const input = {
+      recordId: "record-match",
+      field,
+      sectionName: "退货分析",
+      dependencies: { 聊天内容: "缓存回归-唯一查询" },
+    };
+
+    const first = await matchKnowledgeItem(input);
+    const second = await matchKnowledgeItem(input);
+
+    expect(first).toMatchObject({
+      status: "completed",
+      route: expect.objectContaining({ raw: "first-route" }),
+    });
+    expect(second).toMatchObject({
+      status: "completed",
+      cached: true,
+    });
+    expect(second).not.toHaveProperty("route");
+    expect(callModelPool).toHaveBeenCalledTimes(1);
+    expect(db.prepare("SELECT COUNT(*) count FROM knowledge_match_snapshots").get())
+      .toEqual({ count: 2 });
   });
 
   it("does not call the text model when local retrieval returns no candidates", async () => {

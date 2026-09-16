@@ -189,8 +189,9 @@ async function runKnowledgeMatch(
 ) {
   const dependencies = dependencyValues(field, record.sourceFields, context);
   const started = Date.now();
+  let matched: Awaited<ReturnType<typeof matchKnowledgeItem>> | undefined;
   try {
-    const matched = await matchKnowledgeItem({
+    matched = await matchKnowledgeItem({
       recordId,
       field,
       sectionName,
@@ -204,9 +205,13 @@ async function runKnowledgeMatch(
       dependencies,
       promptSnapshot: field.prompt,
       fieldSnapshot: field,
-      modelConfigSnapshot: { purpose: "text" },
+      modelConfigSnapshot: matched.route
+        ? routedModelSnapshot(matched.route)
+        : matched.cached ? { purpose: "text", cached: true } : { purpose: "text" },
+      rawResponse: matched.route?.raw,
       errorMessage: matched.errorMessage,
       durationMs: Date.now() - started,
+      usage: matched.route?.usage,
     });
     return {
       result: matched.result,
@@ -225,7 +230,7 @@ async function runKnowledgeMatch(
       dependencies,
       promptSnapshot: field.prompt,
       fieldSnapshot: field,
-      modelConfigSnapshot: { purpose: "text" },
+      modelConfigSnapshot: failedRouteSnapshot(error),
       errorMessage: message,
       durationMs: Date.now() - started,
     });

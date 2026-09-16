@@ -68,6 +68,15 @@ function resetPoolData() {
     paidMonthlyTokenLimit: 0,
     capabilityTtlMs: 86_400_000,
   });
+  const settingsColumns = new Set(
+    (db.prepare("PRAGMA table_info(model_pool_settings)").all() as Array<{ name: string }>)
+      .map((column) => column.name),
+  );
+  if (settingsColumns.has("paid_daily_reserved_tokens")) {
+    db.prepare(`UPDATE model_pool_settings SET
+      paid_daily_reserved_tokens=0, paid_monthly_reserved_tokens=0
+      WHERE id='default'`).run();
+  }
 }
 
 function createPoolMember(options: {
@@ -126,6 +135,11 @@ function success(content = '{"ok":true}', usage: Record<string, number> = DEFAUL
 function events() {
   return db.prepare(`SELECT model_config_id, event_type, accounted_tokens, error_code
     FROM model_usage_events ORDER BY created_at, rowid`).all() as Array<Record<string, unknown>>;
+}
+
+function paidReservations() {
+  return db.prepare(`SELECT paid_daily_reserved_tokens daily, paid_monthly_reserved_tokens monthly
+    FROM model_pool_settings WHERE id='default'`).get() as { daily: number; monthly: number };
 }
 
 describe("pool candidate ranking", () => {
@@ -413,6 +427,38 @@ describe("model pool routing", () => {
     ]));
   });
 
+  it("releases every paid reservation after invalid output retries and switching", async () => {
+    const { withPaidTokenBudget } = await import("../ai/model-budget");
+    createPoolMember({
+      model: "paid-invalid-first",
+      billingMode: "paid",
+      priority: 1,
+      maxTokens: 100,
+    });
+    createPoolMember({
+      model: "paid-valid-second",
+      billingMode: "paid",
+      priority: 2,
+      maxTokens: 100,
+    });
+    updateModelPoolSettings({ paidDailyTokenLimit: 1000, paidMonthlyTokenLimit: 1000 });
+    vi.mocked(callVisionModel)
+      .mockResolvedValueOnce(success("bad-one"))
+      .mockResolvedValueOnce(success("bad-two"))
+      .mockResolvedValueOnce(success('{"ok":true}'));
+
+    await withPaidTokenBudget(
+      () => callModelPool([], {
+        purpose: "text",
+        operation: "paid-invalid-switch",
+        validate: (content) => ({ valid: content === '{"ok":true}' }),
+      }),
+      { maxPaidTokens: 300 },
+    );
+
+    expect(paidReservations()).toEqual({ daily: 0, monthly: 0 });
+  });
+
   it("stops cancellation without switching", async () => {
     createPoolMember({ model: "cancel-first", priority: 1 });
     createPoolMember({ model: "cancel-second", priority: 2 });
@@ -431,6 +477,42 @@ describe("model pool routing", () => {
     expect(events().some((event) => event.event_type === "switch")).toBe(false);
   });
 
+  it("treats a transport success as cancelled before success accounting", async () => {
+    const { paidTokensUsed, withPaidTokenBudget } = await import("../ai/model-budget");
+    createPoolMember({
+      model: "paid-late-cancel",
+      billingMode: "paid",
+      maxTokens: 100,
+    });
+    updateModelPoolSettings({ paidDailyTokenLimit: 1000, paidMonthlyTokenLimit: 1000 });
+    const controller = new AbortController();
+    vi.mocked(callVisionModel).mockImplementationOnce(async () => {
+      controller.abort(new DOMException("任务已取消", "AbortError"));
+      return success();
+    });
+    let used = -1;
+
+    await expect(withPaidTokenBudget(async () => {
+      try {
+        await callModelPool([], {
+          purpose: "text",
+          operation: "late-cancel",
+          signal: controller.signal,
+        });
+      } finally {
+        used = paidTokensUsed();
+      }
+    }, { maxPaidTokens: 100 })).rejects.toMatchObject({ code: "cancelled" });
+
+    expect(used).toBe(0);
+    expect(paidReservations()).toEqual({ daily: 0, monthly: 0 });
+    expect(events().some((event) => event.event_type === "success")).toBe(false);
+    expect(events().some((event) => event.event_type === "usage_unknown")).toBe(false);
+    expect(events()).toEqual([
+      expect.objectContaining({ event_type: "failure", error_code: "cancelled" }),
+    ]);
+  });
+
   it("does not decrement free quota when usage is unknown", async () => {
     const id = createPoolMember({ model: "free-unknown" });
     vi.mocked(callVisionModel).mockResolvedValue(success("ok", {}));
@@ -441,6 +523,21 @@ describe("model pool routing", () => {
       .toEqual({ quota_used_tokens: 0 });
     expect(events()).toEqual([
       expect.objectContaining({ event_type: "success", accounted_tokens: 0 }),
+      expect.objectContaining({ event_type: "usage_unknown", accounted_tokens: 0 }),
+    ]);
+  });
+
+  it("treats free usage as unknown when only prompt tokens are valid", async () => {
+    const id = createPoolMember({ model: "free-partial-usage" });
+    vi.mocked(callVisionModel).mockResolvedValue(success("ok", { prompt_tokens: 12 }));
+
+    await callModelPool([], { purpose: "text", operation: "free-partial-usage" });
+
+    expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(id))
+      .toEqual({ quota_used_tokens: 0 });
+    expect(events()).toEqual([
+      expect.objectContaining({ event_type: "success", accounted_tokens: 0 }),
+      expect.objectContaining({ event_type: "usage_unknown", accounted_tokens: 0 }),
     ]);
   });
 
@@ -457,6 +554,34 @@ describe("model pool routing", () => {
     }, { maxPaidTokens: 100 });
 
     expect(used).toBe(100);
+    expect(events()).toEqual([
+      expect.objectContaining({ model_config_id: id, event_type: "success", accounted_tokens: 0 }),
+      expect.objectContaining({ model_config_id: id, event_type: "usage_unknown", accounted_tokens: 100 }),
+    ]);
+  });
+
+  it.each([
+    ["missing completion", { prompt_tokens: 12 }],
+    ["fractional completion", { prompt_tokens: 12, completion_tokens: 1.5 }],
+    ["negative prompt", { prompt_tokens: -1, completion_tokens: 8 }],
+  ])("accounts paid %s usage as unknown at the reserved amount", async (_case, usage) => {
+    const { paidTokensUsed, withPaidTokenBudget } = await import("../ai/model-budget");
+    const id = createPoolMember({
+      model: "paid-invalid-usage",
+      billingMode: "paid",
+      maxTokens: 100,
+    });
+    updateModelPoolSettings({ paidDailyTokenLimit: 1000, paidMonthlyTokenLimit: 1000 });
+    vi.mocked(callVisionModel).mockResolvedValue(success("ok", usage));
+    let used = 0;
+
+    await withPaidTokenBudget(async () => {
+      await callModelPool([], { purpose: "text", operation: `paid-${_case}` });
+      used = paidTokensUsed();
+    }, { maxPaidTokens: 100 });
+
+    expect(used).toBe(100);
+    expect(paidReservations()).toEqual({ daily: 0, monthly: 0 });
     expect(events()).toEqual([
       expect.objectContaining({ model_config_id: id, event_type: "success", accounted_tokens: 0 }),
       expect.objectContaining({ model_config_id: id, event_type: "usage_unknown", accounted_tokens: 100 }),

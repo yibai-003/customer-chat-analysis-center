@@ -15,11 +15,7 @@ vi.mock("./model-pool-service", async (importOriginal) => {
 });
 
 vi.mock("./knowledge/knowledge-match-service", () => ({
-  matchKnowledgeItem: vi.fn(async (input: { field: AnalysisField }) => ({
-    status: "completed",
-    result: { [input.field.key]: "knowledge-item-1" },
-    snapshotId: "task-5-dispatch-snapshot",
-  })),
+  matchKnowledgeItem: vi.fn(),
 }));
 
 import { matchKnowledgeItem } from "./knowledge/knowledge-match-service";
@@ -138,6 +134,18 @@ describe("field analysis executor", () => {
     vi.clearAllMocks();
     vi.mocked(callModelPool).mockReset();
     vi.mocked(callModelPool).mockImplementation(defaultModelCall);
+    vi.mocked(matchKnowledgeItem).mockReset();
+    vi.mocked(matchKnowledgeItem).mockImplementation(async (input: { field: AnalysisField }) => ({
+      status: "completed",
+      result: { [input.field.key]: "knowledge-item-1" },
+      snapshotId: "task-5-dispatch-snapshot",
+      route: routedResponse(
+        "text",
+        '{"knowledgeItemId":"knowledge-item-1"}',
+        '{"knowledgeRoute":true}',
+        { prompt_tokens: 11, completion_tokens: 4 },
+      ),
+    }));
     db.exec(`
       DELETE FROM knowledge_match_snapshots;
       DELETE FROM analysis_field_runs;
@@ -293,6 +301,33 @@ describe("field analysis executor", () => {
       raw_response: '{"purpose":"vision"}',
       input_tokens: 3,
       output_tokens: 2,
+    });
+    const matchRun = db.prepare(`
+      SELECT model_config_snapshot_json, raw_response, input_tokens, output_tokens
+      FROM analysis_field_runs
+      WHERE field_id = 'task-5-match'
+    `).get() as {
+      model_config_snapshot_json: string;
+      raw_response: string;
+      input_tokens: number;
+      output_tokens: number;
+    };
+    expect(JSON.parse(matchRun.model_config_snapshot_json)).toEqual({
+      id: "text-model-id",
+      name: "text model",
+      model: "text-model",
+      purpose: "text",
+      attempts: [{
+        modelConfigId: "text-model-id",
+        model: "text-model",
+        status: "success",
+        durationMs: 7,
+      }],
+    });
+    expect(matchRun).toMatchObject({
+      raw_response: '{"knowledgeRoute":true}',
+      input_tokens: 11,
+      output_tokens: 4,
     });
     const extractRun = db.prepare(`
       SELECT result_json, model_config_snapshot_json
