@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { initDb } from "../db/client";
 import { createModelConfig, deleteModelConfig, getModelsForPurpose, listModelConfigs, setDefaultModel, updateModelConfig } from "./model-config-service";
+import { listModelProviders, resolveModelMember } from "./model-provider-service";
 
 describe("model configuration management", () => {
   beforeAll(() => initDb());
@@ -84,6 +85,59 @@ describe("model configuration management", () => {
       consecutiveFailures: 0,
       capabilityEligible: false,
       quotaBlocked: false,
+    });
+  });
+
+  it("reuses a provider only when base URL and decrypted key both match", () => {
+    const first = createModelConfig({
+      name: "共享供应商一",
+      baseUrl: "https://provider-reuse.example/v1",
+      apiKey: "same-provider-secret",
+      model: "shared-model-a",
+      purpose: "text",
+    });
+    const second = createModelConfig({
+      name: "共享供应商二",
+      baseUrl: "https://provider-reuse.example/v1",
+      apiKey: "same-provider-secret",
+      model: "shared-model-b",
+      purpose: "text",
+    });
+    const differentKey = createModelConfig({
+      name: "不同密钥供应商",
+      baseUrl: "https://provider-reuse.example/v1",
+      apiKey: "different-provider-secret",
+      model: "shared-model-c",
+      purpose: "text",
+    });
+
+    expect(second.providerId).toBe(first.providerId);
+    expect(differentKey.providerId).not.toBe(first.providerId);
+    expect(listModelProviders().filter((provider) => provider.baseUrl === "https://provider-reuse.example/v1")).toHaveLength(2);
+  });
+
+  it("updates linked provider credentials only when legacy credential fields are explicit", () => {
+    const created = createModelConfig({
+      name: "显式凭据更新",
+      baseUrl: "https://explicit-provider.example/v1",
+      apiKey: "explicit-old-secret",
+      model: "explicit-model",
+      purpose: "text",
+    });
+
+    updateModelConfig(created.id, { name: "仅改名称" });
+    expect(resolveModelMember(created.id)).toMatchObject({
+      apiKey: "explicit-old-secret",
+      baseUrl: "https://explicit-provider.example/v1",
+    });
+
+    updateModelConfig(created.id, {
+      baseUrl: "https://explicit-provider-new.example/v1",
+      apiKey: "explicit-new-secret",
+    });
+    expect(resolveModelMember(created.id)).toMatchObject({
+      apiKey: "explicit-new-secret",
+      baseUrl: "https://explicit-provider-new.example/v1",
     });
   });
 });

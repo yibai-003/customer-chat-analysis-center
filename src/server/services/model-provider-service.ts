@@ -1,0 +1,272 @@
+import crypto from "node:crypto";
+import { z } from "zod";
+import type { ModelConfig, ModelProvider, ModelPurpose } from "../../shared/types";
+import { requestModel } from "../ai/model-transport";
+import { buildChatCompletionsUrl } from "../ai/openai-compatible-client";
+import { config } from "../config";
+import { db } from "../db/client";
+import { decryptSecret, encryptSecret, maskSecret } from "../security/secrets";
+
+export interface ResolvedPoolMember extends ModelConfig {
+  apiKey: string;
+  baseUrl: string;
+  providerId?: string;
+  providerEnabled: boolean;
+}
+
+export const safeBaseUrlSchema = z.string().max(2048).url().refine((value) => {
+  const url = new URL(value);
+  return ["http:", "https:"].includes(url.protocol)
+    && !url.username
+    && !url.password
+    && !url.search
+    && !url.hash;
+}, "Base URL 必须为无账号、查询参数或片段的 HTTP(S) 地址");
+
+const providerInputSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  baseUrl: safeBaseUrlSchema,
+  apiKey: z.string().max(4096).optional(),
+  isEnabled: z.boolean().default(true),
+});
+
+function providerMask(value: string) {
+  return "*".repeat(Math.max(8, Math.min(16, value.length)));
+}
+
+function redactSecret(value: string, secret: string) {
+  return secret ? value.replaceAll(secret, providerMask(secret)) : value;
+}
+
+function mapProviderRow(row: any): ModelProvider {
+  return {
+    id: row.id,
+    name: row.name,
+    baseUrl: row.base_url,
+    maskedApiKey: providerMask(decryptSecret(row.api_key_ciphertext, config.encryptionKey)),
+    isEnabled: Boolean(row.is_enabled),
+    lastTestedAt: row.last_tested_at ?? undefined,
+    lastError: row.last_error ?? undefined,
+  };
+}
+
+export function mapModelConfigRow(row: any): ModelConfig {
+  const ciphertext = row.provider_id && row.provider_api_key
+    ? row.provider_api_key
+    : row.api_key_ciphertext;
+  const key = decryptSecret(ciphertext, config.encryptionKey);
+  const capabilityStatus = row.capability_json ? JSON.parse(row.capability_json) : undefined;
+  const capabilityCheckedAt = row.capability_checked_at
+    ? new Date(row.capability_checked_at).toISOString()
+    : undefined;
+  const capabilityTime = Date.parse(capabilityCheckedAt ?? "");
+  const capabilityFresh = Number.isFinite(capabilityTime)
+    && Date.now() >= capabilityTime
+    && Date.now() - capabilityTime < 86400000;
+  const capabilityPassed = capabilityStatus?.text === true
+    && capabilityStatus?.json === true
+    && (row.purpose !== "vision" || (Boolean(row.supports_vision) && capabilityStatus.vision === true));
+  const quotaUsedTokens = row.quota_used_tokens ?? 0;
+  const quotaSafetyRatio = row.quota_safety_ratio ?? 0.95;
+  const quotaBlocked = Boolean(row.quota_exhausted_at)
+    || (row.quota_total_tokens != null && quotaUsedTokens >= row.quota_total_tokens * quotaSafetyRatio);
+  return {
+    id: row.id,
+    name: row.name,
+    baseUrl: row.provider_id && row.provider_base_url ? row.provider_base_url : row.base_url,
+    maskedApiKey: maskSecret(key),
+    model: row.model,
+    supportsVision: Boolean(row.supports_vision),
+    temperature: row.temperature,
+    maxTokens: row.max_tokens,
+    isDefault: Boolean(row.is_default),
+    purpose: row.purpose === "text" ? "text" : "vision",
+    isPurposeDefault: Boolean(row.is_purpose_default ?? row.is_default),
+    isEnabled: Boolean(row.is_enabled),
+    capabilityStatus,
+    capabilityCheckedAt,
+    providerId: row.provider_id ?? undefined,
+    providerName: row.provider_name ?? undefined,
+    poolEnabled: Boolean(row.pool_enabled),
+    billingMode: row.billing_mode === "free" ? "free" : "paid",
+    qualityTier: row.quality_tier === "B" || row.quality_tier === "C" ? row.quality_tier : "A",
+    priority: row.priority ?? 100,
+    thinkingMode: Boolean(row.thinking_mode),
+    memberType: row.member_type === "ocr" ? "ocr" : "general",
+    quotaTotalTokens: row.quota_total_tokens ?? undefined,
+    quotaUsedTokens,
+    quotaExpiresAt: row.quota_expires_at ?? undefined,
+    quotaSafetyRatio,
+    quotaExhaustedAt: row.quota_exhausted_at ?? undefined,
+    cooldownUntil: row.cooldown_until ?? undefined,
+    consecutiveFailures: row.consecutive_failures ?? 0,
+    lastSuccessAt: row.last_success_at ?? undefined,
+    lastFailureAt: row.last_failure_at ?? undefined,
+    presetKey: row.preset_key ?? undefined,
+    presetVersion: row.preset_version ?? undefined,
+    capabilityEligible: capabilityFresh && capabilityPassed,
+    quotaBlocked,
+  };
+}
+
+const modelWithProviderSql = `
+  SELECT m.*, p.name provider_name, p.base_url provider_base_url,
+         p.api_key_ciphertext provider_api_key, p.is_enabled provider_enabled
+  FROM model_configs m
+  LEFT JOIN model_providers p ON p.id = m.provider_id
+`;
+
+export function listModelProviders() {
+  return (db.prepare("SELECT * FROM model_providers ORDER BY created_at DESC").all() as any[])
+    .map(mapProviderRow);
+}
+
+export function createModelProvider(raw: unknown) {
+  const input = providerInputSchema.parse(raw);
+  if (!input.apiKey) throw new Error("API Key is required");
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO model_providers
+    (id,name,base_url,api_key_ciphertext,is_enabled,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?)`).run(
+    id,
+    input.name,
+    input.baseUrl,
+    encryptSecret(input.apiKey, config.encryptionKey),
+    input.isEnabled ? 1 : 0,
+    now,
+    now,
+  );
+  return mapProviderRow(db.prepare("SELECT * FROM model_providers WHERE id=?").get(id));
+}
+
+export function updateModelProvider(id: string, raw: unknown) {
+  const current = db.prepare("SELECT * FROM model_providers WHERE id=?").get(id) as any;
+  if (!current) throw new Error("模型供应商不存在");
+  const patch = raw as Record<string, unknown>;
+  const input = providerInputSchema.parse({
+    name: current.name,
+    baseUrl: current.base_url,
+    isEnabled: Boolean(current.is_enabled),
+    ...patch,
+  });
+  const ciphertext = Object.hasOwn(patch, "apiKey")
+    ? encryptSecret(input.apiKey || decryptSecret(current.api_key_ciphertext, config.encryptionKey), config.encryptionKey)
+    : current.api_key_ciphertext;
+  db.prepare(`UPDATE model_providers
+    SET name=?,base_url=?,api_key_ciphertext=?,is_enabled=?,updated_at=?
+    WHERE id=?`).run(
+    input.name,
+    input.baseUrl,
+    ciphertext,
+    input.isEnabled ? 1 : 0,
+    new Date().toISOString(),
+    id,
+  );
+  return mapProviderRow(db.prepare("SELECT * FROM model_providers WHERE id=?").get(id));
+}
+
+export function disableModelProvider(id: string, reason: string) {
+  const result = db.prepare(`UPDATE model_providers
+    SET is_enabled=0,last_error=?,updated_at=? WHERE id=?`).run(
+    reason.slice(0, 1000),
+    new Date().toISOString(),
+    id,
+  );
+  if (!result.changes) throw new Error("模型供应商不存在");
+  return mapProviderRow(db.prepare("SELECT * FROM model_providers WHERE id=?").get(id));
+}
+
+export function resolveModelMember(id: string): ResolvedPoolMember {
+  const row = db.prepare(`${modelWithProviderSql} WHERE m.id = ?`).get(id) as any;
+  if (!row) throw new Error("模型配置不存在");
+  const usesProvider = Boolean(row.provider_id);
+  if (usesProvider && !row.provider_api_key) throw new Error("模型供应商不存在");
+  return {
+    ...mapModelConfigRow(row),
+    apiKey: decryptSecret(
+      usesProvider ? row.provider_api_key : row.api_key_ciphertext,
+      config.encryptionKey,
+    ),
+    baseUrl: usesProvider ? row.provider_base_url : row.base_url,
+    providerEnabled: usesProvider ? Boolean(row.provider_enabled) : true,
+  };
+}
+
+export function resolvePoolMembers(purpose: ModelPurpose): ResolvedPoolMember[] {
+  const rows = db.prepare(`${modelWithProviderSql}
+    WHERE m.purpose=? AND m.pool_enabled=1 AND m.is_enabled=1
+      AND (m.provider_id IS NULL OR p.is_enabled=1)
+    ORDER BY m.is_purpose_default DESC, m.priority ASC, m.created_at DESC`).all(purpose) as any[];
+  return rows.map((row) => ({
+    ...mapModelConfigRow(row),
+    apiKey: decryptSecret(
+      row.provider_id ? row.provider_api_key : row.api_key_ciphertext,
+      config.encryptionKey,
+    ),
+    baseUrl: row.provider_id ? row.provider_base_url : row.base_url,
+    providerEnabled: row.provider_id ? Boolean(row.provider_enabled) : true,
+  }));
+}
+
+export function findOrCreateModelProvider(name: string, baseUrl: string, apiKey: string) {
+  const candidates = db.prepare("SELECT * FROM model_providers WHERE base_url=?").all(baseUrl) as any[];
+  const existing = candidates.find((row) =>
+    decryptSecret(row.api_key_ciphertext, config.encryptionKey) === apiKey
+  );
+  if (existing) return existing.id as string;
+  return createModelProvider({ name, baseUrl, apiKey, isEnabled: true }).id;
+}
+
+export async function testModelProvider(id: string) {
+  const row = db.prepare(`SELECT p.*, m.model
+    FROM model_providers p
+    LEFT JOIN model_configs m ON m.provider_id=p.id AND m.is_enabled=1
+    WHERE p.id=?
+    ORDER BY m.is_purpose_default DESC, m.created_at DESC
+    LIMIT 1`).get(id) as any;
+  if (!row) throw new Error("模型供应商不存在");
+  if (!row.model) throw new Error("请先为供应商配置并启用模型");
+  const started = Date.now();
+  const testedAt = new Date().toISOString();
+  const apiKey = decryptSecret(row.api_key_ciphertext, config.encryptionKey);
+  try {
+    const { response, rawText } = await requestModel(buildChatCompletionsUrl(row.base_url), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: row.model,
+        temperature: 0,
+        max_tokens: 32,
+        messages: [{ role: "user", content: "只返回 OK" }],
+      }),
+    }, { attempts: 1, timeoutMs: 30000 });
+    if (!response.ok) {
+      let message = `连接失败 (${response.status})`;
+      try {
+        const body = JSON.parse(rawText);
+        if (typeof body?.error?.message === "string") message = body.error.message.slice(0, 1000);
+      } catch {
+        // Provider returned a non-JSON error.
+      }
+      message = redactSecret(message, apiKey);
+      db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
+        .run(testedAt, message, testedAt, id);
+      throw new Error(message);
+    }
+    db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=NULL,updated_at=? WHERE id=?")
+      .run(testedAt, testedAt, id);
+    return { success: true, latencyMs: Date.now() - started };
+  } catch (error) {
+    const saved = db.prepare("SELECT last_tested_at FROM model_providers WHERE id=?").get(id) as any;
+    if (saved?.last_tested_at !== testedAt) {
+      db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
+        .run(testedAt, "连接请求失败", testedAt, id);
+    }
+    if (error instanceof Error) throw new Error(redactSecret(error.message, apiKey));
+    throw error;
+  }
+}

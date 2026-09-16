@@ -3,14 +3,22 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { db } from "../db/client";
 import { config } from "../config";
-import { decryptSecret, encryptSecret, maskSecret } from "../security/secrets";
+import { encryptSecret } from "../security/secrets";
 import { buildChatCompletionsUrl, extractResponseContent } from "../ai/openai-compatible-client";
 import type { ModelConfig } from "../../shared/types";
+import {
+  findOrCreateModelProvider,
+  mapModelConfigRow,
+  resolveModelMember,
+  safeBaseUrlSchema,
+  updateModelProvider,
+} from "./model-provider-service";
 
 const inputSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  baseUrl: z.string().max(2048).url().refine(value => { const url = new URL(value); return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash; }, "Base URL 必须为无账号、查询参数或片段的 HTTP(S) 地址"),
+  baseUrl: safeBaseUrlSchema,
   apiKey: z.string().max(4096).optional(),
+  providerId: z.string().trim().min(1).max(200).optional(),
   model: z.string().trim().min(1).max(200),
   supportsVision: z.boolean().default(true),
   temperature: z.number().min(0).max(2).default(0.2),
@@ -19,69 +27,43 @@ const inputSchema = z.object({
   purpose: z.enum(["vision", "text"]).default("vision"),
 });
 
-function mapRow(row: any): ModelConfig {
-  const key = decryptSecret(row.api_key_ciphertext, config.encryptionKey);
-  const capabilityStatus = row.capability_json ? JSON.parse(row.capability_json) : undefined;
-  const capabilityCheckedAt = row.capability_checked_at
-    ? new Date(row.capability_checked_at).toISOString()
-    : undefined;
-  const capabilityTime = Date.parse(capabilityCheckedAt ?? "");
-  const capabilityFresh = Number.isFinite(capabilityTime)
-    && Date.now() >= capabilityTime
-    && Date.now() - capabilityTime < 86400000;
-  const capabilityPassed = capabilityStatus?.text === true
-    && capabilityStatus?.json === true
-    && (row.purpose !== "vision" || (Boolean(row.supports_vision) && capabilityStatus.vision === true));
-  const quotaUsedTokens = row.quota_used_tokens ?? 0;
-  const quotaSafetyRatio = row.quota_safety_ratio ?? 0.95;
-  const quotaBlocked = Boolean(row.quota_exhausted_at)
-    || (row.quota_total_tokens != null && quotaUsedTokens >= row.quota_total_tokens * quotaSafetyRatio);
-  return {
-    id: row.id, name: row.name, baseUrl: row.base_url, maskedApiKey: maskSecret(key),
-    model: row.model, supportsVision: Boolean(row.supports_vision), temperature: row.temperature,
-    maxTokens: row.max_tokens, isDefault: Boolean(row.is_default),
-    purpose: row.purpose === "text" ? "text" : "vision",
-    isPurposeDefault: Boolean(row.is_purpose_default ?? row.is_default),
-    isEnabled: Boolean(row.is_enabled),
-    capabilityStatus,
-    capabilityCheckedAt,
-    providerId: row.provider_id ?? undefined,
-    poolEnabled: Boolean(row.pool_enabled),
-    billingMode: row.billing_mode === "free" ? "free" : "paid",
-    qualityTier: row.quality_tier === "B" || row.quality_tier === "C" ? row.quality_tier : "A",
-    priority: row.priority ?? 100,
-    thinkingMode: Boolean(row.thinking_mode),
-    memberType: row.member_type === "ocr" ? "ocr" : "general",
-    quotaTotalTokens: row.quota_total_tokens ?? undefined,
-    quotaUsedTokens,
-    quotaExpiresAt: row.quota_expires_at ?? undefined,
-    quotaSafetyRatio,
-    quotaExhaustedAt: row.quota_exhausted_at ?? undefined,
-    cooldownUntil: row.cooldown_until ?? undefined,
-    consecutiveFailures: row.consecutive_failures ?? 0,
-    lastSuccessAt: row.last_success_at ?? undefined,
-    lastFailureAt: row.last_failure_at ?? undefined,
-    presetKey: row.preset_key ?? undefined,
-    presetVersion: row.preset_version ?? undefined,
-    capabilityEligible: capabilityFresh && capabilityPassed,
-    quotaBlocked,
-  };
-}
+const modelWithProviderSql = `
+  SELECT m.*, p.name provider_name, p.base_url provider_base_url,
+         p.api_key_ciphertext provider_api_key, p.is_enabled provider_enabled
+  FROM model_configs m
+  LEFT JOIN model_providers p ON p.id = m.provider_id
+`;
 
 export function listModelConfigs() {
-  return (db.prepare("SELECT * FROM model_configs ORDER BY is_purpose_default DESC, created_at DESC").all() as any[]).map(mapRow);
+  return (db.prepare(`${modelWithProviderSql}
+    ORDER BY m.is_purpose_default DESC, m.created_at DESC`).all() as any[]).map(mapModelConfigRow);
 }
 
 export function createModelConfig(raw: unknown) {
   const input = inputSchema.parse(raw);
-  if (!input.apiKey) throw new Error("API Key is required");
+  let providerId = input.providerId;
+  let legacyBaseUrl = input.baseUrl;
+  let legacyCiphertext: string;
+  if (providerId) {
+    const provider = db.prepare("SELECT * FROM model_providers WHERE id=?").get(providerId) as any;
+    if (!provider) throw new Error("模型供应商不存在");
+    legacyBaseUrl = provider.base_url;
+    legacyCiphertext = provider.api_key_ciphertext;
+  } else {
+    if (!input.apiKey) throw new Error("API Key is required");
+    providerId = findOrCreateModelProvider(input.name, input.baseUrl, input.apiKey);
+    legacyCiphertext = encryptSecret(input.apiKey, config.encryptionKey);
+  }
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   db.prepare(`INSERT INTO model_configs
-    (id,name,base_url,api_key_ciphertext,model,purpose,is_purpose_default,supports_vision,temperature,max_tokens,is_default,is_enabled,created_at,updated_at)
-    VALUES (?,?,?,?,?,?,0,?,?,?,?,?,?,?)`).run(id, input.name, input.baseUrl, encryptSecret(input.apiKey, config.encryptionKey),
-    input.model, input.purpose, input.supportsVision ? 1 : 0, input.temperature, input.maxTokens, 0, input.isEnabled ? 1 : 0, now, now);
-  return mapRow(db.prepare("SELECT * FROM model_configs WHERE id = ?").get(id));
+    (id,name,base_url,api_key_ciphertext,provider_id,model,purpose,is_purpose_default,supports_vision,temperature,max_tokens,is_default,is_enabled,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,0,?,?,?,?,?,?,?)`).run(
+    id, input.name, legacyBaseUrl, legacyCiphertext, providerId,
+    input.model, input.purpose, input.supportsVision ? 1 : 0, input.temperature,
+    input.maxTokens, 0, input.isEnabled ? 1 : 0, now, now,
+  );
+  return mapModelConfigRow(db.prepare(`${modelWithProviderSql} WHERE m.id=?`).get(id));
 }
 
 export function setDefaultModel(id: string, purpose?: "vision" | "text") {
@@ -99,25 +81,49 @@ export function setDefaultModel(id: string, purpose?: "vision" | "text") {
 export function updateModelConfig(id: string, raw: unknown) {
   const current = db.prepare("SELECT * FROM model_configs WHERE id = ?").get(id) as any;
   if (!current) throw new Error("模型配置不存在");
+  const currentResolved = resolveModelMember(id);
+  const patch = raw as Record<string, unknown>;
   const input = inputSchema.parse({
     name: current.name,
-    baseUrl: current.base_url,
+    baseUrl: currentResolved.baseUrl,
     model: current.model,
     purpose: current.purpose === "text" ? "text" : "vision",
     supportsVision: Boolean(current.supports_vision),
     temperature: current.temperature,
     maxTokens: current.max_tokens,
     isEnabled: Boolean(current.is_enabled),
-    ...(raw as Record<string, unknown>),
+    providerId: current.provider_id ?? undefined,
+    ...patch,
   });
-  const apiKey = input.apiKey || decryptSecret(current.api_key_ciphertext, config.encryptionKey);
+  let providerId = input.providerId;
+  if (providerId && !db.prepare("SELECT id FROM model_providers WHERE id=?").get(providerId)) {
+    throw new Error("模型供应商不存在");
+  }
+  const hasBaseUrl = Object.hasOwn(patch, "baseUrl");
+  const hasApiKey = Object.hasOwn(patch, "apiKey");
+  if (providerId && (hasBaseUrl || hasApiKey)) {
+    updateModelProvider(providerId, {
+      ...(hasBaseUrl ? { baseUrl: input.baseUrl } : {}),
+      ...(hasApiKey ? { apiKey: input.apiKey } : {}),
+    });
+  } else if (!providerId && (hasBaseUrl || hasApiKey)) {
+    const apiKey = input.apiKey || currentResolved.apiKey;
+    providerId = findOrCreateModelProvider(input.name, input.baseUrl, apiKey);
+  }
   const now = new Date().toISOString();
-  db.prepare(`UPDATE model_configs SET name=?,base_url=?,api_key_ciphertext=?,model=?,purpose=?,supports_vision=?,
-    temperature=?,max_tokens=?,is_enabled=?,updated_at=?,capability_json=NULL,capability_checked_at=NULL WHERE id=?`).run(
-    input.name, input.baseUrl, encryptSecret(apiKey, config.encryptionKey), input.model,
-    input.purpose, input.supportsVision ? 1 : 0, input.temperature, input.maxTokens, input.isEnabled ? 1 : 0, now, id,
+  const capabilityChanged = input.model !== current.model
+    || input.purpose !== current.purpose
+    || Number(input.supportsVision) !== current.supports_vision;
+  db.prepare(`UPDATE model_configs SET name=?,provider_id=?,model=?,purpose=?,supports_vision=?,
+    temperature=?,max_tokens=?,is_enabled=?,updated_at=?,
+    capability_json=CASE WHEN ? THEN NULL ELSE capability_json END,
+    capability_checked_at=CASE WHEN ? THEN NULL ELSE capability_checked_at END
+    WHERE id=?`).run(
+    input.name, providerId, input.model, input.purpose, input.supportsVision ? 1 : 0,
+    input.temperature, input.maxTokens, input.isEnabled ? 1 : 0, now,
+    capabilityChanged ? 1 : 0, capabilityChanged ? 1 : 0, id,
   );
-  return mapRow(db.prepare("SELECT * FROM model_configs WHERE id = ?").get(id));
+  return mapModelConfigRow(db.prepare(`${modelWithProviderSql} WHERE m.id=?`).get(id));
 }
 
 export function deleteModelConfig(id: string) {
@@ -139,15 +145,14 @@ export function getModelForPurpose(purpose: "vision" | "text") {
   return models[0];
 }
 
-export function getModelsForPurpose(purpose: "vision" | "text") {
-  const rows = db.prepare(`SELECT * FROM model_configs
-    WHERE purpose = ? AND is_enabled = 1
-    ORDER BY is_purpose_default DESC, created_at DESC`).all(purpose) as any[];
-  return rows.map((row) => ({
-    ...mapRow(row),
-    apiKey: decryptSecret(row.api_key_ciphertext, config.encryptionKey),
-    baseUrl: row.base_url,
-  }));
+export function getModelsForPurpose(
+  purpose: "vision" | "text",
+): Array<ModelConfig & { apiKey: string; baseUrl: string }> {
+  const rows = db.prepare(`${modelWithProviderSql}
+    WHERE m.purpose = ? AND m.is_enabled = 1
+      AND (m.provider_id IS NULL OR p.is_enabled=1)
+    ORDER BY m.is_purpose_default DESC, m.created_at DESC`).all(purpose) as any[];
+  return rows.map((row) => resolveModelMember(row.id));
 }
 
 export function getDefaultModel() {
@@ -155,12 +160,11 @@ export function getDefaultModel() {
 }
 
 export async function testModelConnection(id: string) {
-  const row = db.prepare("SELECT * FROM model_configs WHERE id = ?").get(id) as any;
-  if (!row) throw new Error("模型配置不存在");
+  const row = resolveModelMember(id);
   const started = Date.now();
-  const { response, rawText } = await requestModel(buildChatCompletionsUrl(row.base_url), {
+  const { response, rawText } = await requestModel(buildChatCompletionsUrl(row.baseUrl), {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${decryptSecret(row.api_key_ciphertext, config.encryptionKey)}` },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${row.apiKey}` },
     body: JSON.stringify({
       model: row.model,
       temperature: 0,
@@ -187,13 +191,18 @@ export function testModelCapabilities(id: string) {
 
 const redTestImage = "iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAb0lEQVR4nO3PAQkAAAyEwO9feoshgnABdLep8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3I8QUNyPEFDcjxBQ3IPanc8OLDQitxAAAAAElFTkSuQmCC";
 async function runCapabilityCheck(id: string) {
-  const row = db.prepare("SELECT * FROM model_configs WHERE id = ? AND is_enabled = 1").get(id) as any;
+  const row = db.prepare(`${modelWithProviderSql}
+    WHERE m.id = ? AND m.is_enabled = 1
+      AND (m.provider_id IS NULL OR p.is_enabled=1)`).get(id) as any;
   if (!row) throw new Error("模型配置不存在或未启用");
+  const resolved = resolveModelMember(id);
+  const credentialCiphertext = row.provider_id ? row.provider_api_key : row.api_key_ciphertext;
+  const credentialBaseUrl = row.provider_id ? row.provider_base_url : row.base_url;
   const result: NonNullable<ModelConfig["capabilityStatus"]> = { text: false, json: false, vision: false, errors: {} };
   const probe = async (kind: "text" | "json" | "vision", content: unknown, structured = false) => {
     try {
-      const { response, rawText } = await requestModel(buildChatCompletionsUrl(row.base_url), {
-        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${decryptSecret(row.api_key_ciphertext, config.encryptionKey)}` },
+      const { response, rawText } = await requestModel(buildChatCompletionsUrl(resolved.baseUrl), {
+        method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${resolved.apiKey}` },
         body: JSON.stringify({ model: row.model, temperature: 0, max_tokens: 100,
           messages: [{ role: "user", content }], ...(structured ? { response_format: { type: "json_object" } } : {}) }),
       }, { attempts: 1, timeoutMs: 30000 });
@@ -214,10 +223,23 @@ async function runCapabilityCheck(id: string) {
   if (row.supports_vision || row.purpose === "vision") {
     await probe("vision", [{ type: "text", text: "What is the dominant color in this image? Reply with one color word only." }, { type: "image_url", image_url: { url: `data:image/png;base64,${redTestImage}` } }]);
   }
+  const current = db.prepare(`${modelWithProviderSql} WHERE m.id=?`).get(id) as any;
+  const currentCredential = current?.provider_id ? current.provider_api_key : current?.api_key_ciphertext;
+  const currentBaseUrl = current?.provider_id ? current.provider_base_url : current?.base_url;
+  if (!current
+    || currentCredential !== credentialCiphertext
+    || currentBaseUrl !== credentialBaseUrl
+    || current.model !== row.model
+    || current.purpose !== row.purpose
+    || current.supports_vision !== row.supports_vision
+    || current.is_enabled !== 1
+    || (current.provider_id && current.provider_enabled !== 1)) {
+    throw new Error("检测期间配置已变更，请重新检测");
+  }
   const checkedAt = Date.now();
   const updated = db.prepare(`UPDATE model_configs SET capability_json=?, capability_checked_at=?
-    WHERE id=? AND api_key_ciphertext=? AND base_url=? AND model=? AND purpose=? AND supports_vision=? AND is_enabled=1`)
-    .run(JSON.stringify(result), checkedAt, id, row.api_key_ciphertext, row.base_url, row.model, row.purpose, row.supports_vision);
+    WHERE id=? AND model=? AND purpose=? AND supports_vision=? AND is_enabled=1`)
+    .run(JSON.stringify(result), checkedAt, id, row.model, row.purpose, row.supports_vision);
   if (!updated.changes) throw new Error("检测期间配置已变更，请重新检测");
   return { model: row.model, purpose: row.purpose, capabilities: result, checkedAt: new Date(checkedAt).toISOString() };
 }
