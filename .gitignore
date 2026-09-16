@@ -8,6 +8,7 @@ data
 
 # Local agent notes and sample workbooks may contain private data.
 .superpowers/
+.worktrees/
 *.xlsx
 knowledge/*.tmp
 install*.out
