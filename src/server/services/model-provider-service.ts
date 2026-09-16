@@ -34,7 +34,7 @@ function providerMask(value: string) {
   return "*".repeat(Math.max(8, Math.min(16, value.length)));
 }
 
-function redactSecret(value: string, secret: string) {
+export function redactCredential(value: string, secret: string) {
   return secret ? value.replaceAll(secret, providerMask(secret)) : value;
 }
 
@@ -153,23 +153,35 @@ export function updateModelProvider(id: string, raw: unknown) {
   const ciphertext = Object.hasOwn(patch, "apiKey")
     ? encryptSecret(input.apiKey || decryptSecret(current.api_key_ciphertext, config.encryptionKey), config.encryptionKey)
     : current.api_key_ciphertext;
-  db.prepare(`UPDATE model_providers
-    SET name=?,base_url=?,api_key_ciphertext=?,is_enabled=?,updated_at=?
-    WHERE id=?`).run(
-    input.name,
-    input.baseUrl,
-    ciphertext,
-    input.isEnabled ? 1 : 0,
-    new Date().toISOString(),
-    id,
-  );
+  const endpointChanged = input.baseUrl !== current.base_url;
+  const now = new Date().toISOString();
+  db.transaction(() => {
+    db.prepare(`UPDATE model_providers
+      SET name=?,base_url=?,api_key_ciphertext=?,is_enabled=?,updated_at=?
+      WHERE id=?`).run(
+      input.name,
+      input.baseUrl,
+      ciphertext,
+      input.isEnabled ? 1 : 0,
+      now,
+      id,
+    );
+    if (endpointChanged) {
+      db.prepare(`UPDATE model_configs
+        SET capability_json=NULL,capability_checked_at=NULL,updated_at=?
+        WHERE provider_id=?`).run(now, id);
+    }
+  })();
   return mapProviderRow(db.prepare("SELECT * FROM model_providers WHERE id=?").get(id));
 }
 
 export function disableModelProvider(id: string, reason: string) {
+  const current = db.prepare("SELECT api_key_ciphertext FROM model_providers WHERE id=?").get(id) as any;
+  if (!current) throw new Error("模型供应商不存在");
+  const apiKey = decryptSecret(current.api_key_ciphertext, config.encryptionKey);
   const result = db.prepare(`UPDATE model_providers
     SET is_enabled=0,last_error=?,updated_at=? WHERE id=?`).run(
-    reason.slice(0, 1000),
+    redactCredential(reason, apiKey).slice(0, 1000),
     new Date().toISOString(),
     id,
   );
@@ -252,7 +264,7 @@ export async function testModelProvider(id: string) {
       } catch {
         // Provider returned a non-JSON error.
       }
-      message = redactSecret(message, apiKey);
+      message = redactCredential(message, apiKey);
       db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
         .run(testedAt, message, testedAt, id);
       throw new Error(message);
@@ -266,7 +278,7 @@ export async function testModelProvider(id: string) {
       db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
         .run(testedAt, "连接请求失败", testedAt, id);
     }
-    if (error instanceof Error) throw new Error(redactSecret(error.message, apiKey));
+    if (error instanceof Error) throw new Error(redactCredential(error.message, apiKey));
     throw error;
   }
 }

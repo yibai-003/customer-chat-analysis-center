@@ -9,6 +9,7 @@ import type { ModelConfig } from "../../shared/types";
 import {
   findOrCreateModelProvider,
   mapModelConfigRow,
+  redactCredential,
   resolveModelMember,
   safeBaseUrlSchema,
   updateModelProvider,
@@ -113,7 +114,8 @@ export function updateModelConfig(id: string, raw: unknown) {
   const now = new Date().toISOString();
   const capabilityChanged = input.model !== current.model
     || input.purpose !== current.purpose
-    || Number(input.supportsVision) !== current.supports_vision;
+    || Number(input.supportsVision) !== current.supports_vision
+    || providerId !== (current.provider_id ?? undefined);
   db.prepare(`UPDATE model_configs SET name=?,provider_id=?,model=?,purpose=?,supports_vision=?,
     temperature=?,max_tokens=?,is_enabled=?,updated_at=?,
     capability_json=CASE WHEN ? THEN NULL ELSE capability_json END,
@@ -175,7 +177,8 @@ export async function testModelConnection(id: string) {
   if (!response.ok) {
     let body: any = {};
     try { body = JSON.parse(rawText); } catch { /* non-JSON provider error */ }
-    throw new Error(body?.error?.message || `连接失败 (${response.status})`);
+    const message = body?.error?.message || `连接失败 (${response.status})`;
+    throw new Error(redactCredential(message, row.apiKey));
   }
   return { success: true, latencyMs: Date.now() - started };
 }

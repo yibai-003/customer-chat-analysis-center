@@ -1,7 +1,12 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../db/client";
 import { requestModel } from "../ai/model-transport";
-import { createModelConfig, listModelConfigs, updateModelConfig } from "./model-config-service";
+import {
+  createModelConfig,
+  listModelConfigs,
+  testModelConnection,
+  updateModelConfig,
+} from "./model-config-service";
 import {
   createModelProvider,
   disableModelProvider,
@@ -55,6 +60,54 @@ describe("model provider credentials", () => {
       json: true,
     });
     expect(resolveModelMember(model.id).apiKey).toBe("provider-new-secret");
+  });
+
+  it("clears member capability data when the linked provider changes", () => {
+    const firstProvider = createModelProvider({
+      name: "原供应商",
+      baseUrl: "https://provider-first.example/v1",
+      apiKey: "provider-first-secret",
+    });
+    const replacementProvider = createModelProvider({
+      name: "替换供应商",
+      baseUrl: "https://provider-replacement.example/v1",
+      apiKey: "provider-replacement-secret",
+    });
+    const model = createModelConfig({
+      name: "供应商切换成员",
+      providerId: firstProvider.id,
+      baseUrl: "https://unused-reassignment.example/v1",
+      model: "provider-reassignment-model",
+      purpose: "text",
+    });
+    db.prepare("UPDATE model_configs SET capability_json=?, capability_checked_at=? WHERE id=?")
+      .run(JSON.stringify({ text: true, json: true, vision: false }), Date.now(), model.id);
+
+    updateModelConfig(model.id, { providerId: replacementProvider.id });
+
+    const updated = listModelConfigs().find((item) => item.id === model.id)!;
+    expect(updated.providerId).toBe(replacementProvider.id);
+    expect(updated.capabilityStatus).toBeUndefined();
+    expect(updated.capabilityCheckedAt).toBeUndefined();
+  });
+
+  it("clears linked member capability data when a provider endpoint changes", () => {
+    const model = createModelConfig({
+      name: "供应商端点变更成员",
+      baseUrl: "https://provider-endpoint-old.example/v1",
+      apiKey: "provider-endpoint-secret",
+      model: "provider-endpoint-model",
+      purpose: "text",
+    });
+    db.prepare("UPDATE model_configs SET capability_json=?, capability_checked_at=? WHERE id=?")
+      .run(JSON.stringify({ text: true, json: true, vision: false }), Date.now(), model.id);
+
+    updateModelProvider(model.providerId!, { baseUrl: "https://provider-endpoint-new.example/v1" });
+
+    const updated = listModelConfigs().find((item) => item.id === model.id)!;
+    expect(updated.baseUrl).toBe("https://provider-endpoint-new.example/v1");
+    expect(updated.capabilityStatus).toBeUndefined();
+    expect(updated.capabilityCheckedAt).toBeUndefined();
   });
 
   it("clears member capability data when the model identifier changes", () => {
@@ -162,6 +215,48 @@ describe("model provider credentials", () => {
     expect(returnedMessage).not.toContain("echoed-provider-secret");
     expect(JSON.stringify(listModelProviders().find((item) => item.id === provider.id))).not.toContain(
       "echoed-provider-secret",
+    );
+  });
+
+  it("redacts an echoed API key from legacy model connection errors", async () => {
+    const model = createModelConfig({
+      name: "旧连接测试脱敏",
+      baseUrl: "https://legacy-error.example/v1",
+      apiKey: "legacy-echoed-secret",
+      model: "legacy-error-model",
+      purpose: "text",
+    });
+    vi.mocked(requestModel).mockResolvedValueOnce({
+      response: new Response("", { status: 401 }),
+      rawText: JSON.stringify({ error: { message: "invalid key legacy-echoed-secret" } }),
+      attemptsUsed: 1,
+    });
+
+    let returnedMessage = "";
+    try {
+      await testModelConnection(model.id);
+    } catch (error) {
+      returnedMessage = error instanceof Error ? error.message : String(error);
+    }
+
+    expect(returnedMessage).not.toContain("legacy-echoed-secret");
+  });
+
+  it("redacts the provider API key from a persisted disable reason", () => {
+    const provider = createModelProvider({
+      name: "停用原因脱敏",
+      baseUrl: "https://disable-reason.example/v1",
+      apiKey: "disable-reason-secret",
+    });
+
+    const disabled = disableModelProvider(
+      provider.id,
+      "manual disable after key disable-reason-secret was rejected",
+    );
+
+    expect(disabled.lastError).not.toContain("disable-reason-secret");
+    expect(JSON.stringify(listModelProviders().find((item) => item.id === provider.id))).not.toContain(
+      "disable-reason-secret",
     );
   });
 });
