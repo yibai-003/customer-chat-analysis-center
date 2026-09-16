@@ -331,7 +331,7 @@ export async function verifyPoolMembers(
         const capabilities = checked.capabilities;
         const passed = capabilities.text && capabilities.json
           && (member.purpose === "text" || capabilities.vision);
-        if (!passed) {
+        if (!passed || member.memberType === "ocr") {
           db.prepare("UPDATE model_configs SET pool_enabled=0, updated_at=? WHERE id=?")
             .run(new Date().toISOString(), id);
         } else if (options.enablePassed) {

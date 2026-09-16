@@ -199,6 +199,36 @@ describe("model pool administration", () => {
     expect(listPoolMembers().find((member) => member.id === id)?.poolEnabled).toBe(false);
   });
 
+  it("keeps verified OCR preset members disabled for general vision routing", async () => {
+    createDashScopeProvider();
+    installQianwenFreePool();
+    const ocrIds = listPoolMembers("vision")
+      .filter((member) => member.memberType === "ocr")
+      .map((member) => member.id);
+    vi.mocked(testModelCapabilities).mockImplementation(async (id) => {
+      const capabilities = { text: true, json: true, vision: true, errors: {} };
+      db.prepare("UPDATE model_configs SET capability_json=?, capability_checked_at=? WHERE id=?")
+        .run(JSON.stringify(capabilities), Date.now(), id);
+      const member = listPoolMembers("vision").find((item) => item.id === id)!;
+      return {
+        model: member.model,
+        purpose: member.purpose,
+        capabilities,
+        checkedAt: "2026-09-16T00:00:00.000Z",
+      };
+    });
+
+    await expect(verifyPoolMembers(ocrIds, { enablePassed: true })).resolves.toEqual([
+      expect.objectContaining({ passed: true }),
+      expect.objectContaining({ passed: true }),
+    ]);
+    expect(db.prepare(`SELECT id, pool_enabled, capability_json FROM model_configs
+      WHERE id IN (?, ?) ORDER BY model`).all(...ocrIds)).toEqual([
+      expect.objectContaining({ pool_enabled: 0, capability_json: expect.stringContaining('"vision":true') }),
+      expect.objectContaining({ pool_enabled: 0, capability_json: expect.stringContaining('"vision":true') }),
+    ]);
+  });
+
   it("reads summaries, validates settings, and filters newest usage events", () => {
     const provider = createDashScopeProvider();
     const [id] = installQianwenFreePool().created;
