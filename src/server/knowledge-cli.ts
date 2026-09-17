@@ -12,7 +12,7 @@ try {
   if (action === "restore") {
     initDb({ preserveConfiguration: true });
     console.log(new KnowledgeSync().restore());
-    console.log("知识库已从仓库快照恢复，旧数据库备份位于 data/backups。请重启正在运行的服务。");
+    console.log("知识库已从仓库快照恢复：将覆盖本地知识库、字段与板块配置（模型配置、API Key、任务与解析结果不受影响）。旧数据库备份位于 data/backups。请重启正在运行的服务。");
   } else {
     const sync = initializeKnowledgeSync();
     console.log(sync.export());

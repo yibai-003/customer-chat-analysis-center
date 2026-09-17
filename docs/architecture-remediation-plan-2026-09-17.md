@@ -65,10 +65,10 @@
 
 **实施顺序**
 
-- [ ] 新增 `src/server/db/migrations/migrations-immutability.test.ts`：对 006 至 014 源文件计算 sha256 并与仓库内基线文件比对；基线文件初始记录当前哈希，后续新增迁移必须在同一提交中追加基线。
-- [ ] 在 `docs/database-migrations-and-recovery.md` 与 `docs/knowledge-sync-recovery.md` 写明：结构变更只能走“新增迁移”；`knowledge/catalog.json` 定位为导出快照与恢复源，禁止手工编辑已提交快照。
-- [ ] `npm run knowledge:restore` 输出补充提示：将覆盖本地知识配置、备份位置与适用场景。
-- [ ] 在临时库验证：手工改快照后启动应按既有冲突流程拦截，不静默覆盖。
+- [x] 新增 `src/server/db/migrations/migrations-immutability.test.ts`：对 006 至 014 源文件计算 sha256 并与仓库内基线文件比对；基线文件初始记录当前哈希，后续新增迁移必须在同一提交中追加基线。
+- [x] 在 `docs/database-migrations-and-recovery.md` 与 `docs/knowledge-sync-recovery.md` 写明：结构变更只能走“新增迁移”；`knowledge/catalog.json` 定位为导出快照与恢复源，禁止手工编辑已提交快照。
+- [x] `npm run knowledge:restore` 输出补充提示：将覆盖本地知识配置、备份位置与适用场景。
+- [x] 在临时库验证：手工改快照后启动应按既有冲突流程拦截，不静默覆盖。
 
 **验收标准**
 
