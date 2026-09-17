@@ -2,14 +2,14 @@
 
 **计划：** `docs/architecture-remediation-plan-2026-09-17.md`
 
-**最后更新：** 2026-09-17（T4 已完成）
+**最后更新：** 2026-09-17（T5 进行中）
 
 ## 恢复入口
 
-- 当前任务：无
-- 当前步骤：无
-- 下一步：T5（前端工作区分层）
-- 工作区状态：T4 已提交
+- 当前任务：T5（前端工作区分层）
+- 当前步骤：梳理 `useWorkspaceController.ts` 的状态、请求与操作边界
+- 下一步：拆分 `useJobSelection` / `useSectionCatalog` / `useRecordPaging` / `useAnalysisActions`
+- 工作区状态：T4 已提交；T5 未开始编码
 - 恢复方法：读本入口 → 打开计划文档查看该任务未勾选步骤 → 继续执行，无需通读项目
 
 ## 任务计划表
@@ -22,7 +22,7 @@
 | T2 模型池首启可行动 | 已完成 | - | - | 555 项测试通过；新增服务端 actions 与前端一键验证（点击前无请求、失败保留入口）；`typecheck`、`build`、`db:check`（14/14）通过 | - |
 | T3 执行类型注册表 | 已完成 | - | - | `field-analysis-service.ts` 706 → 178 行；新增 `execution/` 9 个文件与 3 项注册表测试；558 项测试通过；`typecheck`、`build`、`db:check` 通过 | - |
 | T4 结构化对象字段抽象 | 已完成 | - | - | 新增 `structured.ts` 工厂与探针测试；未成交/接待 5 个 handler 收敛为 3 个 definition；现有断言不改全部通过（559 项）；前台新增 `StructuredResultView` 且 DOM 不变 | - |
-| T5 前端工作区分层 | 未开始 | - | - | - | - |
+| T5 前端工作区分层 | 进行中 | 梳理控制器状态与请求边界 | 拆分 4 个子 hook | - | - |
 | T6 质量闸门 | 未开始 | - | - | - | - |
 | T7 文档治理 | 未开始 | - | - | - | - |
 | T8 实例锁与平台健壮性 | 未开始 | - | - | - | - |
