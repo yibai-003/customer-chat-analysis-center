@@ -80,9 +80,9 @@
 
 **实施顺序**
 
-- [ ] `/api/ready` 在 503 时基于 `modelChecks` 附加 `actions` 字段（待验证成员 ID 列表与建议动作），不新增接口。
-- [ ] 前端就绪提示旁增加“验证默认模型”按钮，复用 `POST /api/model-pools/qianwen-free/verify`（`enablePassed: true`），显示逐个结果；验证必须由用户点击触发，不自动调用模型。
-- [ ] 模型池控制台在存在“已配置凭据但未入池”的成员时显示一次引导说明。
+- [x] `/api/ready` 在 503 时基于 `modelChecks` 附加 `actions` 字段（待验证成员 ID 列表与建议动作），不新增接口。
+- [x] 前端就绪提示旁增加“验证默认模型”按钮，复用 `POST /api/model-pools/qianwen-free/verify`（`enablePassed: true`），显示逐个结果；验证必须由用户点击触发，不自动调用模型。
+- [x] 模型池控制台在存在“已配置凭据但未入池”的成员时显示一次引导说明。
 
 **验收标准**
 

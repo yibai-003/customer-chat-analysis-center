@@ -192,6 +192,8 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .model-console-command:disabled,.model-console-panel button:disabled{cursor:not-allowed;opacity:.5}
 .model-console-error,.model-console-message{margin:12px 0 0;padding:9px 11px;border-left:4px solid var(--pixel-orange);background:#fbefe9;color:#8d513d;font-size:10px;line-height:1.5}
 .model-console-message{border-left-color:#789f43;background:#eef6e5;color:#536b42}
+.pool-readiness{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:12px 0 0;padding:9px 11px;border-left:4px solid var(--pixel-orange);background:#fbefe9;color:#8d513d;font-size:10px;line-height:1.5}
+.pool-readiness span{max-width:72ch}
 .model-console-empty{padding:34px 12px!important;text-align:center;color:#87948d;font-size:11px}
 .provider-list{border-top:2px solid var(--pixel-ink)}
 .provider-row{display:grid;grid-template-columns:minmax(190px,1.4fr) minmax(110px,.7fr) 76px minmax(150px,1fr) auto;gap:14px;align-items:center;padding:12px 8px;border-bottom:1px solid var(--pixel-line)}

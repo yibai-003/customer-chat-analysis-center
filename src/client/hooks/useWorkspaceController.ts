@@ -311,7 +311,7 @@ export function useWorkspaceController() {
   const requestBatchAnalysis = async () => {
     if (!job || !currentSection) return;
     if (!modelReadiness.ready) {
-      setNotice("请先在模型配置中设置并启用对应的视觉模型和文本模型");
+      setNotice("请先在模型配置中验证并启用对应的视觉模型和文本模型");
       setDialog("model");
       return;
     }

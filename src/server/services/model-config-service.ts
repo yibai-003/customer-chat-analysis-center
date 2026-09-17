@@ -311,3 +311,39 @@ export function getModelReadinessChecks(now = Date.now()) {
     text: getModelReadinessForPurpose("text", now),
   };
 }
+
+function modelMemberActionable(
+  member: ModelConfig & { apiKey: string; baseUrl: string },
+  now: number,
+) {
+  if (member.memberType !== "general") return false;
+  if (modelVerification(member, now).verified && member.poolEnabled) return false;
+  if (member.quotaBlocked) return false;
+  if (member.cooldownUntil && Date.parse(member.cooldownUntil) > now) return false;
+  if (member.billingMode === "free" && member.quotaExpiresAt) {
+    const expiresAt = Date.parse(member.quotaExpiresAt);
+    if (!Number.isFinite(expiresAt) || expiresAt <= now) return false;
+  }
+  return true;
+}
+
+export function getModelReadinessActions(now = Date.now()) {
+  const pending: string[] = [];
+  for (const purpose of ["vision", "text"] as const) {
+    const pooled = listPoolMemberStatuses(purpose);
+    if (pooled.some((member) => poolMemberSchedulable(
+      member,
+      modelVerification(member, now).verified,
+      now,
+    ))) {
+      continue;
+    }
+    const configured = getModelsForPurpose(purpose);
+    const defaults = configured.filter((member) => member.isPurposeDefault);
+    for (const member of defaults.length ? defaults : configured.slice(0, 1)) {
+      if (!modelMemberActionable(member, now)) continue;
+      pending.push(member.id);
+    }
+  }
+  return { verifyPoolMemberIds: [...new Set(pending)].slice(0, 10) };
+}

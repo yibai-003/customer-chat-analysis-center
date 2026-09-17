@@ -430,6 +430,97 @@ describe("ModelConfigDialog", () => {
     expect(screen.getByText("可调用")).toBeTruthy();
   });
 
+  it("verifies blocked default members from the pool readiness action", async () => {
+    const pendingVision = member({
+      id: "pending-default",
+      name: "待验证视觉",
+      isPurposeDefault: true,
+      poolEnabled: false,
+      capabilityEligible: false,
+      capabilityCheckedAt: undefined,
+      capabilityStatus: undefined,
+    });
+    const readyText = member({
+      id: "ready-text-default",
+      name: "文本默认",
+      model: "qwen-plus",
+      purpose: "text",
+      supportsVision: false,
+      isPurposeDefault: true,
+      capabilityStatus: { text: true, json: true, vision: false },
+    });
+    responseFor = (url) => {
+      if (url === "/api/model-pools/qianwen-free/verify") {
+        return [{
+          id: "pending-default",
+          model: "qwen3-vl-plus",
+          purpose: "vision",
+          passed: true,
+          capabilities: { text: true, json: true, vision: true },
+          checkedAt: "2026-09-16T04:00:00.000Z",
+        }];
+      }
+      if (url === "/api/model-pools") {
+        return {
+          members: [pendingVision, readyText],
+          summary: {
+            total: 2,
+            vision: { total: 1, enabled: 0, verified: 0, blocked: 0 },
+            text: { total: 1, enabled: 1, verified: 1, blocked: 0 },
+          },
+        };
+      }
+      return defaultData(url);
+    };
+    await renderDialog([pendingVision, readyText]);
+    expect(requests.some((request) => request.url === "/api/model-pools/qianwen-free/verify")).toBe(false);
+
+    fireEvent.click(await screen.findByRole("button", { name: "验证默认模型" }));
+
+    await waitFor(() => expect(
+      requests.filter((request) => request.url === "/api/model-pools/qianwen-free/verify"),
+    ).toHaveLength(1));
+    const verifyRequest = requests.find((request) => request.url === "/api/model-pools/qianwen-free/verify")!;
+    expect(JSON.parse(String(verifyRequest.init?.body))).toEqual({
+      ids: ["pending-default"],
+      enablePassed: true,
+    });
+    await screen.findByText("默认模型验证完成：通过 1/1");
+  });
+
+  it("reports default model verification failures and keeps the action available", async () => {
+    const pendingVision = member({
+      id: "failing-default",
+      name: "验证失败视觉",
+      isPurposeDefault: true,
+      poolEnabled: false,
+      capabilityEligible: false,
+      capabilityCheckedAt: undefined,
+      capabilityStatus: undefined,
+    });
+    responseFor = (url) => {
+      if (url === "/api/model-pools/qianwen-free/verify") return failure("验证服务不可用");
+      if (url === "/api/model-pools") {
+        return {
+          members: [pendingVision],
+          summary: {
+            total: 1,
+            vision: { total: 1, enabled: 0, verified: 0, blocked: 0 },
+            text: { total: 0, enabled: 0, verified: 0, blocked: 0 },
+          },
+        };
+      }
+      return defaultData(url);
+    };
+    await renderDialog([pendingVision]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "验证默认模型" }));
+
+    await screen.findAllByText("验证服务不可用");
+    expect(screen.getByRole("button", { name: "验证默认模型" })).toBeTruthy();
+    expect(requests.filter((request) => request.url === "/api/model-pools/qianwen-free/verify")).toHaveLength(1);
+  });
+
   it("classifies capability snapshots with the configured TTL and server time semantics", async () => {
     vi.setSystemTime(new Date("2026-09-16T06:00:00.000Z"));
     const capabilityMembers = [

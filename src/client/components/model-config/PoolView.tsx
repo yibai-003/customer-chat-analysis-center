@@ -133,6 +133,7 @@ export function PoolView({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [installing, setInstalling] = useState(false);
+  const [verifyingDefaults, setVerifyingDefaults] = useState(false);
   const [message, setMessage] = useState("");
   const [settingsForm, setSettingsForm] = useState(settings);
 
@@ -143,6 +144,14 @@ export function PoolView({
     [pool.members, purpose],
   );
   const summary = pool.summary[purpose];
+  const pendingDefaults = useMemo(() => pool.members.filter((model) => (
+    model.isPurposeDefault
+    && model.isEnabled
+    && model.memberType === "general"
+    && (!model.capabilityEligible || !model.poolEnabled)
+    && !model.quotaBlocked
+    && !model.cooldownUntil
+  )), [pool.members]);
 
   const beginEdit = (model: ModelConfig) => {
     setEditingId(model.id);
@@ -234,6 +243,42 @@ export function PoolView({
       await refreshPool();
     } catch (error) {
       reportError(`千问免费池已变更，但列表刷新失败：${
+        error instanceof Error ? error.message : "刷新失败"
+      }`);
+    }
+  };
+
+  const verifyDefaults = async () => {
+    const ids = pendingDefaults.map((model) => model.id);
+    if (!ids.length) return;
+    setVerifyingDefaults(true);
+    setMessage("正在验证默认模型...");
+    let mutated = false;
+    try {
+      const results = await api<Array<{ id: string; passed: boolean; error?: string }>>(
+        "/api/model-pools/qianwen-free/verify",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids, enablePassed: true }),
+        },
+      );
+      mutated = true;
+      markDirty();
+      const passed = results.filter((result) => result.passed).length;
+      setMessage(`默认模型验证完成：通过 ${passed}/${results.length}`);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "默认模型验证失败";
+      setMessage(text);
+      reportError(text);
+    } finally {
+      setVerifyingDefaults(false);
+    }
+    if (!mutated) return;
+    try {
+      await refreshPool();
+    } catch (error) {
+      reportError(`默认模型状态已变更，但列表刷新失败：${
         error instanceof Error ? error.message : "刷新失败"
       }`);
     }
@@ -333,6 +378,24 @@ export function PoolView({
           文本模型
         </button>
       </div>
+
+      {pendingDefaults.length > 0 && (
+        <div className="pool-readiness" role="alert">
+          <span>
+            默认模型尚未验证或未入池：
+            {pendingDefaults.map((model) => model.name).join("、")}
+            。验证通过后将自动入池。
+          </span>
+          <button
+            className="model-console-command"
+            type="button"
+            disabled={verifyingDefaults}
+            onClick={() => void verifyDefaults()}
+          >
+            {verifyingDefaults ? "验证中…" : "验证默认模型"}
+          </button>
+        </div>
+      )}
 
       {message && <div className="model-console-message" role="status">{message}</div>}
 

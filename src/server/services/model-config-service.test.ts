@@ -7,6 +7,7 @@ import { db, initDb } from "../db/client";
 import {
   createModelConfig,
   deleteModelConfig,
+  getModelReadinessActions,
   getModelReadinessChecks,
   getModelsForPurpose,
   listModelConfigs,
@@ -265,6 +266,44 @@ describe("model configuration management", () => {
         vision: { configured: true, verified: true },
         text: { configured: true, verified: false },
       });
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => error ? reject(error) : resolve())
+      );
+    }
+  });
+
+  it("lists the default members that still need verification or pooling for /api/ready", async () => {
+    const vision = createReadyModel("pending-vision", "vision", false);
+    const text = createReadyModel("pending-text", "text", false);
+    setDefaultModel(vision.id, "vision");
+    setDefaultModel(text.id, "text");
+    db.prepare("UPDATE model_configs SET capability_checked_at=NULL, capability_json='{}' WHERE id=?").run(text.id);
+    vi.spyOn(fs, "statfsSync").mockReturnValue({
+      bavail: config.minFreeDiskMb * 1024 * 1024 + 1,
+      bsize: 1,
+    } as ReturnType<typeof fs.statfsSync>);
+    const server: Server = createApp().listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+
+    try {
+      const address = server.address();
+      if (!address || typeof address === "string") throw new Error("测试服务器地址无效");
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/ready`);
+      const body = await response.json() as any;
+
+      expect(getModelReadinessActions()).toEqual({ verifyPoolMemberIds: [vision.id, text.id] });
+      expect(response.status).toBe(503);
+      expect(body.data.actions).toEqual({ verifyPoolMemberIds: [vision.id, text.id] });
+
+      db.prepare(`UPDATE model_configs SET pool_enabled=1, capability_checked_at=?, capability_json=?
+        WHERE id IN (?,?)`).run(
+        Date.now(),
+        JSON.stringify({ text: true, json: true, vision: true }),
+        vision.id,
+        text.id,
+      );
+      expect(getModelReadinessActions()).toEqual({ verifyPoolMemberIds: [] });
     } finally {
       await new Promise<void>((resolve, reject) =>
         server.close((error) => error ? reject(error) : resolve())
