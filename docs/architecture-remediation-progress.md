@@ -2,14 +2,14 @@
 
 **计划：** `docs/architecture-remediation-plan-2026-09-17.md`
 
-**最后更新：** 2026-09-17（T8 已完成；T1–T5、T7、T8 完成；仅 T6 eslint 待网络恢复）
+**最后更新：** 2026-09-17（T1–T8 全部完成）
 
 ## 恢复入口
 
 - 当前任务：无
 - 当前步骤：无
-- 下一步：npm 证书/网络恢复后安装 eslint 并补齐 T6 规则集；随后做整体收尾校验
-- 工作区状态：T8 已提交
+- 下一步：最终收尾（推送全部提交并总结）
+- 工作区状态：T6/T8 待提交
 - 恢复方法：读本入口 → 打开计划文档查看该任务未勾选步骤 → 继续执行，无需通读项目
 
 ## 任务计划表
@@ -23,7 +23,7 @@
 | T3 执行类型注册表 | 已完成 | - | - | `field-analysis-service.ts` 706 → 178 行；新增 `execution/` 9 个文件与 3 项注册表测试；558 项测试通过；`typecheck`、`build`、`db:check` 通过 | - |
 | T4 结构化对象字段抽象 | 已完成 | - | - | 新增 `structured.ts` 工厂与探针测试；未成交/接待 5 个 handler 收敛为 3 个 definition；现有断言不改全部通过（559 项）；前台新增 `StructuredResultView` 且 DOM 不变 | - |
 | T5 前端工作区分层 | 已完成 | - | - | `useWorkspaceController.ts` 484 → 117 行；新增 `useJobSelection`（273 行）、`useAnalysisActions`（174 行）、`useSectionCatalog`（22 行）；App 与 hook 测试断言不改全部通过；全量 559 项通过 | - |
-| T6 质量闸门 | 阻塞 | 冒烟脚本完成；eslint 依赖安装失败 | 网络恢复后安装 eslint 并补规则集 | `npm run smoke` 通过（3 秒，可复跑，`ready:false` 符合空库预期） | npm 证书错误 `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`，不绕过证书 |
+| T6 质量闸门 | 已完成 | - | - | `npm run lint`（oxlint）0 error 且违规即红；修复 1 处条件 Hook；`npm run smoke` 3 秒可复跑；全量 561 项与 `typecheck`/`build`/`db:check` 通过 | 工具替换与 CA 处理见决策日志 |
 | T7 文档治理 | 已完成 | - | - | 根目录 25 → 4 篇；14 篇指南移入 `guides/`，12 份一次性记录移入 `archive/`；新增 `docs/README.md` 八主题索引；README 15 处链接更新；73 份 markdown 0 失效链接 | - |
 | T8 实例锁与平台健壮性 | 已完成 | - | - | `describePortOwner` 在 Windows 下解析占用进程名与 PID；错误信息含端口与处置提示；启动指南新增排查步骤；新增 2 项测试；全量 561 项通过 | - |
 
@@ -31,6 +31,7 @@
 
 按时间倒序追加，每条格式：日期 / 任务 / 事件 / 证据。
 
+- 2026-09-17 / T6 / 完成静态 lint 闸门（oxlint）与收尾 / `npm run lint` 0 error、违规注入即报错退出 1；修复 `SectionConfigDialog` 条件 Hook；`npm run smoke` 保持 3 秒可复跑；全量 561 项、`typecheck`、`build`、`db:check` 通过
 - 2026-09-17 / T8 / 完成实例锁占用诊断 / `describePortOwner` 在 Windows 下解析占用进程名与 PID，冲突错误信息含端口与处置提示，锁语义与确定性端口不变；启动指南新增确认与处置步骤；新增 2 项测试；全量 561 项通过；`typecheck`、`build`、`db:check` 通过
 - 2026-09-17 / T7 / 完成文档治理 / 根目录文档 25 → 4（索引、实施计划、进度账本、开发流程）；`guides/` 收纳 14 篇长期指南，`archive/` 收纳 12 份一次性记录（含 5 份根目录 task 报告）；新增 `docs/README.md` 八主题索引并更新 README 15 处链接；链接检查 73 份 markdown、0 失效
 - 2026-09-17 / T6 / 冒烟脚本完成，eslint 阻塞 / 新增 `scripts/smoke-local.mjs` 与 `npm run smoke`：临时数据目录启动子进程，校验 health/静态页/ready/knowledge-sync，3 秒通过且可复跑；eslint 安装因 npm 证书错误失败，未绕过校验
@@ -45,6 +46,8 @@
 
 | 日期 | 任务 | 决策 | 原因 | 影响 |
 | --- | --- | --- | --- | --- |
+| 2026-09-17 | T6 | 改用 `oxlint` 替代 eslint + typescript-eslint | `typescript-eslint`（含 canary）peer 均为 `typescript <6.1`，项目使用 TypeScript 7.0.2；`--legacy-peer-deps` 会破坏可复现安装 | 计划文档同步工具替换；最小 error 规则仍为 react-hooks，跑不过则闸门失败 |
+| 2026-09-17 | T6 | npm 安装使用“公司 CA + Node 公共根”合并信任文件 | 用户级 `cafile` 只含公司 CA，而 `registry.npmjs.org` 直连证书链为公共 CA；合并后两类目标都可验证 | `strict-ssl` 始终为 true，未放宽校验；临时文件用后即删 |
 | 2026-09-17 | T7 | 长期指南移入 `docs/guides/` 子目录，而不是压缩篇数 | 安全主题本身有 4 篇长期指南，强行合并会丢失细节；根目录只留索引与活跃文档更清晰 | 计划验收改为“根目录 ≤10 篇（当前 4 篇）”，索引按 8 主题覆盖 guides 与 archive |
 | 2026-09-17 | T6 | npm 安装失败时不绕过证书校验 | 项目已明确禁止放宽 TLS/证书来获得依赖 | eslint 任务保持阻塞，等待网络/证书恢复后重试 |
 | 2026-09-17 | T5 | 分页/筛选/详情复用既有 `useRecordWorkspace`，不新建 `useRecordPaging` | 该 hook 已独立承担列表查询与详情请求，重命名只会制造无谓 diff | 计划文档已同步为“复用既有 hook” |

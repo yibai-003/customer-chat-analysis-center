@@ -54,6 +54,18 @@ export function SectionConfigDialog({ sections, close, saved }: { sections: Anal
     return () => controller.abort();
   }, [section?.id]);
 
+  const updateFieldError = useCallback((fieldId: string, validationError: string) => {
+    setFieldErrors((current) => {
+      if (validationError) {
+        if (current[fieldId] === validationError) return current;
+        return { ...current, [fieldId]: validationError };
+      }
+      if (!(fieldId in current)) return current;
+      const next = { ...current };
+      delete next[fieldId];
+      return next;
+    });
+  }, []);
   if (!section) return null;
   const updateField = (index: number, patch: Partial<AnalysisField>) => {
     setFields((current) => current.map((field, fieldIndex) => fieldIndex === index ? { ...field, ...patch } : field));
@@ -67,18 +79,6 @@ export function SectionConfigDialog({ sections, close, saved }: { sections: Anal
       });
     }
   };
-  const updateFieldError = useCallback((fieldId: string, validationError: string) => {
-    setFieldErrors((current) => {
-      if (validationError) {
-        if (current[fieldId] === validationError) return current;
-        return { ...current, [fieldId]: validationError };
-      }
-      if (!(fieldId in current)) return current;
-      const next = { ...current };
-      delete next[fieldId];
-      return next;
-    });
-  }, []);
   const save = async () => {
     setError("");
     try {

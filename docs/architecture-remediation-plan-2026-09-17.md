@@ -137,12 +137,16 @@
 
 ### T6 质量闸门
 
-- [ ] 增加 eslint（typescript-eslint + react-hooks）最小规则集与 `npm run lint`；规则只启用 error 级最小集合，历史告警保持 warn；lock 变更单独提交。
+- [x] 增加静态 lint 闸门与 `npm run lint`：`typescript-eslint` 全系列 peer 均要求 `typescript <6.1`，项目使用 TypeScript 7，改用 `oxlint`（原生支持 TS 与 react-hooks）；最小 error 规则为 `react-hooks/rules-of-hooks`，其余历史告警保持 warn；lock 变更单独提交。
 - [x] 新增 `scripts/smoke-local.mjs`：用临时 `DATA_DIR` / `DATABASE_PATH` 启动服务子进程，验证 `/api/health`、静态页面与 `/api/ready` 的预期状态；不调用任何模型；纳入发布流程文档。
 
-**阻塞（2026-09-17）**
+**结果（2026-09-17）**
 
-`npm install -D eslint typescript-eslint eslint-plugin-react-hooks` 失败：`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`（随后重试为连接超时）。按项目规则不绕过证书校验，待 npm 网络/证书恢复后重新安装，再补 lint 配置与脚本。
+- 安装依赖时 npm 报证书失败；确认 `registry.npmjs.org` 为直连且证书链为公共 CA 后，用“公司 CA + Node 公共根证书”合并信任文件完成安装，`strict-ssl` 始终保持开启，未放宽校验。
+- `npm run lint`：0 error；历史告警保留为 warn，未批量修改业务代码。
+- lint 暴露 1 处真实问题并修复：`SectionConfigDialog` 在提前 `return null` 之后调用 `useCallback`（条件 Hook），已把回调移到 return 之前；相关页面测试断言不变通过。
+- 闸门有效性验证：临时注入条件 Hook 后 lint 报错并以退出码 1 失败，移除后恢复 0。
+- 冒烟脚本 3 秒通过且可复跑，不调用模型。
 
 **验收标准**
 
