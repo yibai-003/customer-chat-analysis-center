@@ -31,7 +31,7 @@
 
 按时间倒序追加，每条格式：日期 / 任务 / 事件 / 证据。
 
-- 2026-09-17 / T2 / 完成模型池首启引导 / `/api/ready` 增加 `actions.verifyPoolMemberIds`；模型池控制台显示待验证默认模型与“验证默认模型”按钮（`enablePassed: true`）；拦截提示改为“验证并启用”；新增 3 项测试；全量 555 项通过
+- 2026-09-17 / T2 / 完成模型池首启引导 / `/api/ready` 增加 `actions.verifyPoolMemberIds`；模型池控制台显示待验证默认模型与“验证默认模型”按钮（`enablePassed: true`）；拦截提示改为“验证并启用”；新增 3 项测试；全量 555 项通过；重启服务后实机 `/api/ready` 200 且 `actions.verifyPoolMemberIds` 为空
 - 2026-09-17 / T1 / 完成迁移冻结与 catalog 单一真相源 / 新增 `migrations-immutability.test.ts` 与 `migrations.lock.json`（13 个迁移）；篡改 006 后测试失败、恢复后通过；聚焦 28 项、全量 552 项测试通过；文档补充冻结规则与恢复提示
 - 2026-09-17 / 计划 / 建立账本与任务计划表 / 本文件
 
