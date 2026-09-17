@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { ANALYSIS_EXECUTION_TYPES } from "../../shared/types";
 
 const safeName = z.string().min(1).max(120).refine(value => Boolean(value.trim()) && !["__proto__", "prototype", "constructor"].includes(value) && !/[\u0000-\u001f]/.test(value), "名称包含保留字或控制字符");
 const id = z.string().min(1).max(200);
@@ -10,16 +11,7 @@ export const fieldInput = z.object({
   prompt: z.string().max(20000).optional(), options: options.optional(), outputColumn: z.string().max(120).optional(),
   required: z.boolean().optional(), imageEnabled: z.boolean().optional(), isEnabled: z.boolean().optional(), exportEnabled: z.boolean().optional(),
   dependsOn: z.array(safeName).max(50).optional(), sortOrder: z.number().int().min(0).max(100000).optional(),
-  executionType: z.enum([
-    "ai",
-    "knowledge_match",
-    "knowledge_extract",
-    "lost_deal_attribution",
-    "lost_deal_derive",
-    "lost_deal_script",
-    "reception_quality_analysis",
-    "reception_quality_derive",
-  ]).optional(),
+  executionType: z.enum(ANALYSIS_EXECUTION_TYPES).optional(),
   knowledgeBaseId: z.string().max(200).optional(), matchFieldKey: z.string().max(120).optional(), knowledgeColumn: z.string().max(120).optional(),
   candidateLimit: z.number().int().min(5).max(30).optional(), knowledgeSyncEnabled: z.boolean().optional(),
   knowledgeCaptureLimit: z.union([z.literal(1), z.literal(2)]).optional(),

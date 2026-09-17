@@ -6,6 +6,7 @@ import { db, initDb } from "../../db/client";
 import { config } from "../../config";
 import { buildKnowledgePathKey, buildKnowledgeSearchText } from "./knowledge-repository";
 import type { KnowledgeColumn } from "../../../shared/types";
+import { ANALYSIS_EXECUTION_TYPES } from "../../../shared/types";
 
 const text = z.string();
 const id = text.min(1);
@@ -29,16 +30,7 @@ const schemas = {
     id, section_id: id, key: id, label: text, field_type: text, prompt: text,
     options_json: json(z.array(z.unknown())), output_column: text.nullable(), is_required: flag,
     image_enabled: flag, depends_on_json: json(z.array(text)), sort_order: integer,
-    execution_type: z.enum([
-      "ai",
-      "knowledge_match",
-      "knowledge_extract",
-      "lost_deal_attribution",
-      "lost_deal_derive",
-      "lost_deal_script",
-      "reception_quality_analysis",
-      "reception_quality_derive",
-    ]), export_enabled: flag,
+    execution_type: z.enum(ANALYSIS_EXECUTION_TYPES), export_enabled: flag,
     knowledge_base_id: id.nullable(), candidate_limit: integer, match_field_key: text.nullable(),
     knowledge_column: text.nullable(), knowledge_sync_enabled: flag.optional().default(0), knowledge_capture_limit: z.union([z.literal(1), z.literal(2)]).optional().default(2), is_enabled: flag,
   }).strict(),

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { AnalysisField, AnalysisExecutionType, KnowledgeBase } from "../../shared/types";
+import type { AnalysisField, KnowledgeBase } from "../../shared/types";
 import { knowledgeApi } from "../api/knowledge-api";
+import { executionSetting } from "./execution-registry";
 
 export function KnowledgeFieldSettings({
   field,
@@ -19,7 +20,7 @@ export function KnowledgeFieldSettings({
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectionNotice, setSelectionNotice] = useState("");
-  const isKnowledgeMode = field.executionType === "knowledge_match" || field.executionType === "knowledge_extract";
+  const isKnowledgeMode = executionSetting(field.executionType).knowledgeMode;
 
   useEffect(() => {
     if (!isKnowledgeMode) return;
@@ -106,8 +107,4 @@ export function KnowledgeFieldSettings({
     {error && <div className="form-error">知识库加载失败：{error}</div>}
     {configurationError && <div className="form-error">{configurationError}</div>}
   </div>;
-}
-
-export function executionTypeLabel(type: AnalysisExecutionType | undefined): string {
-  return type === "knowledge_match" ? "知识库匹配" : type === "knowledge_extract" ? "知识结果提取" : "AI 解析";
 }

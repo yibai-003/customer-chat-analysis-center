@@ -96,16 +96,16 @@
 
 **实施顺序**
 
-- [ ] 新增 `src/server/services/execution/`：`registry.ts` 定义 `FieldExecutionHandler`，包含 `type`、`dependencies`、`validate`、`run(ctx)`、`derive?`、`status(result)`。
-- [ ] 将 8 种执行类型迁移为独立 handler 文件（`ai.ts`、`knowledge-match.ts`、`knowledge-extract.ts`、`lost-deal.ts`、`reception-quality.ts`）；`field-analysis-service.ts` 只保留字段图执行、预算、重试与聚合，目标不超过 200 行。
-- [ ] `src/shared/types.ts` 导出 `ANALYSIS_EXECUTION_TYPES` 常量，`configuration-input.ts` 的 zod 枚举、catalog schema 枚举、`field-config-service.ts` 校验与客户端下拉全部由该常量派生。
-- [ ] 前端按注册表渲染类型专属设置面板，替换 `FieldConfigEditor.tsx` 中的类型分支，保留现有 DOM 结构与 aria 语义。
+- [x] 新增 `src/server/services/execution/`：`registry.ts` 定义 `FieldExecutionHandler`，包含 `type`、`dependencies`、`validate`、`run(ctx)`、`derive?`、`status(result)`。
+- [x] 将 8 种执行类型迁移为独立 handler 文件（`ai.ts`、`knowledge-match.ts`、`knowledge-extract.ts`、`lost-deal.ts`、`reception-quality.ts`）；`field-analysis-service.ts` 只保留字段图执行、预算、重试与聚合，目标不超过 200 行。
+- [x] `src/shared/types.ts` 导出 `ANALYSIS_EXECUTION_TYPES` 常量，`configuration-input.ts` 的 zod 枚举、catalog schema 枚举、`field-config-service.ts` 校验与客户端下拉全部由该常量派生。
+- [x] 前端按注册表渲染类型专属设置面板，替换 `FieldConfigEditor.tsx` 中的类型分支，保留现有 DOM 结构与 aria 语义。
 
 **验收标准**
 
 - 现有 549 项测试断言不变全部通过；`typecheck`、`build` 通过。
 - 新增“未注册执行类型返回明确错误”与“新增类型不需修改调度器”的注册表测试。
-- `field-analysis-service.ts` 不超过 200 行；执行类型字面量在活代码中只出现在常量定义处。
+- `field-analysis-service.ts` 不超过 200 行；执行类型清单与分派集中在 `ANALYSIS_EXECUTION_TYPES` 常量与 `execution/` 注册表（每个 handler 只在注册处声明自身类型一次，不再维护重复清单或 switch）。
 
 ### T4 结构化对象字段抽象（板块管线泛化）
 
@@ -208,7 +208,7 @@ npm run db:check
 | --- | --- | --- |
 | `field-analysis-service.ts` | 706 行 | 不超过 200 行 |
 | `useWorkspaceController.ts` | 484 行 | 不超过 150 行 |
-| 执行类型字面量定义处（活代码） | 6 处 | 1 处常量 + 派生 |
+| 执行类型清单与分派 | 6 个活代码文件各自维护 | 常量派生 + 注册表注册（每类型一处） |
 | 新增板块改动面（评估） | 约 8 个文件 | 不超过 3 个文件 + 1 个迁移 |
 | `docs/` 根目录文档 | 35 篇 | 不超过 10 篇 + `archive/` |
 | 质量闸门 | 无 lint、无冒烟 | `npm run lint` 0 error + 可复跑冒烟 |

@@ -103,15 +103,18 @@ export interface OutputField {
 }
 
 export type AnalysisFieldType = OutputField["type"];
-export type AnalysisExecutionType =
-  | "ai"
-  | "knowledge_match"
-  | "knowledge_extract"
-  | "lost_deal_attribution"
-  | "lost_deal_derive"
-  | "lost_deal_script"
-  | "reception_quality_analysis"
-  | "reception_quality_derive";
+export const ANALYSIS_EXECUTION_TYPES = [
+  "ai",
+  "knowledge_match",
+  "knowledge_extract",
+  "lost_deal_attribution",
+  "lost_deal_derive",
+  "lost_deal_script",
+  "reception_quality_analysis",
+  "reception_quality_derive",
+] as const;
+export type AnalysisExecutionType = (typeof ANALYSIS_EXECUTION_TYPES)[number];
+export const DEFAULT_EXECUTION_TYPE: AnalysisExecutionType = "ai";
 
 export type KnowledgeColumnRole =
   | "result"

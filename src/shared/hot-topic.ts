@@ -1,4 +1,4 @@
-import type { AnalysisField } from "./types";
+import { DEFAULT_EXECUTION_TYPE, type AnalysisField } from "./types";
 
 export const HOT_TOPIC_SECTION_ID = "hot-topic";
 export const HOT_TOPIC_BASE_ID = "hot-topic-auto-questions";
@@ -7,7 +7,7 @@ export const HOT_TOPIC_QUESTION_COLUMN = "标准问题";
 
 export function isHotTopicField(field: Pick<AnalysisField, "sectionId" | "key" | "label" | "executionType">) {
   return field.sectionId === HOT_TOPIC_SECTION_ID
-    && (field.executionType ?? "ai") === "ai"
+    && (field.executionType ?? DEFAULT_EXECUTION_TYPE) === DEFAULT_EXECUTION_TYPE
     && (field.key === "高频问题" || field.label === "高频问题");
 }
 

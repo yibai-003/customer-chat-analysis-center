@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { fieldInput, parseConfiguration } from "../security/configuration-input";
 import { db } from "../db/client";
 import type { AnalysisField, AnalysisFieldInput, AnalysisFieldType } from "../../shared/types";
+import { DEFAULT_EXECUTION_TYPE } from "../../shared/types";
 import { isHotTopicField } from "../../shared/hot-topic";
 
 function isLostDealCaptureField(field: Pick<AnalysisField, "key" | "executionType" | "type">) {
@@ -47,7 +48,7 @@ function mapField(row: any): AnalysisField {
     dependsOn: JSON.parse(row.depends_on_json || "[]"),
     sortOrder: row.sort_order,
     isEnabled: Boolean(row.is_enabled),
-    executionType: row.execution_type ?? "ai",
+    executionType: row.execution_type ?? DEFAULT_EXECUTION_TYPE,
     exportEnabled: row.export_enabled === undefined ? true : Boolean(row.export_enabled),
     knowledgeBaseId: row.knowledge_base_id ?? undefined,
     candidateLimit: row.candidate_limit ?? 15,
@@ -148,7 +149,7 @@ export function upsertField(input: AnalysisFieldInput): AnalysisField {
   if (!section) throw new Error("板块不存在");
   const existing = input.id ? getField(input.id) : undefined;
   if (existing && existing.sectionId !== input.sectionId) throw new Error("字段不能移动到其他板块");
-  const executionType = input.executionType ?? existing?.executionType ?? "ai";
+  const executionType = input.executionType ?? existing?.executionType ?? DEFAULT_EXECUTION_TYPE;
   if (input.knowledgeSyncEnabled && !supportsKnowledgeCapture({ ...input, executionType })) {
     throw new Error("知识沉淀仅支持高频问题或未成交归因字段");
   }
