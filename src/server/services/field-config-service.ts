@@ -4,6 +4,15 @@ import { db } from "../db/client";
 import type { AnalysisField, AnalysisFieldInput, AnalysisFieldType } from "../../shared/types";
 import { isHotTopicField } from "../../shared/hot-topic";
 
+function isLostDealCaptureField(field: Pick<AnalysisField, "key" | "executionType" | "type">) {
+  return field.key === "未成交归因"
+    && field.executionType === "lost_deal_attribution" && field.type === "object";
+}
+
+function supportsKnowledgeCapture(field: Pick<AnalysisField, "sectionId" | "key" | "label" | "executionType" | "type">) {
+  return (isHotTopicField(field) && field.type === "string") || isLostDealCaptureField(field);
+}
+
 export type AnalysisFieldLike = Pick<
   AnalysisField,
   "id" | "sectionId" | "key" | "label" | "type" | "prompt" | "required" | "imageEnabled" | "dependsOn"
@@ -66,8 +75,8 @@ export function validateFieldGraph(fields: AnalysisFieldLike[], sourceFields: st
     keys.add(field.key);
   }
   for (const field of fields) {
-    if (field.knowledgeSyncEnabled && (!isHotTopicField(field) || field.type !== "string")) {
-      errors.push(`知识沉淀仅支持热点话题板块的高频问题文本字段：${field.key}`);
+    if (field.knowledgeSyncEnabled && !supportsKnowledgeCapture(field)) {
+      errors.push(`知识沉淀仅支持高频问题或未成交归因字段：${field.key}`);
     }
     if (field.knowledgeSyncEnabled && !field.dependsOn.length) errors.push(`知识沉淀必须依赖截图解析或客户问题：${field.key}`);
     if (field.knowledgeCaptureLimit !== undefined && ![1, 2].includes(field.knowledgeCaptureLimit)) {
@@ -140,8 +149,8 @@ export function upsertField(input: AnalysisFieldInput): AnalysisField {
   const existing = input.id ? getField(input.id) : undefined;
   if (existing && existing.sectionId !== input.sectionId) throw new Error("字段不能移动到其他板块");
   const executionType = input.executionType ?? existing?.executionType ?? "ai";
-  if (input.knowledgeSyncEnabled && !isHotTopicField({ ...input, executionType })) {
-    throw new Error("知识沉淀仅支持热点话题板块的高频问题 AI 字段");
+  if (input.knowledgeSyncEnabled && !supportsKnowledgeCapture({ ...input, executionType })) {
+    throw new Error("知识沉淀仅支持高频问题或未成交归因字段");
   }
   const requestedMatchFieldKey = input.matchFieldKey ?? existing?.matchFieldKey;
   const matchFieldKey = executionType === "knowledge_extract" ? requestedMatchFieldKey : undefined;
@@ -177,7 +186,8 @@ export function upsertField(input: AnalysisFieldInput): AnalysisField {
     candidateLimit: input.candidateLimit ?? existing?.candidateLimit ?? 15,
     matchFieldKey: applicableMatchFieldKey,
     knowledgeColumn: applicableKnowledgeColumn,
-    knowledgeSyncEnabled: isHotTopicField({ ...input, executionType }) && (input.knowledgeSyncEnabled ?? existing?.knowledgeSyncEnabled ?? false),
+    knowledgeSyncEnabled: supportsKnowledgeCapture({ ...input, executionType })
+      && (input.knowledgeSyncEnabled ?? existing?.knowledgeSyncEnabled ?? false),
     knowledgeCaptureLimit: (input.knowledgeCaptureLimit ?? existing?.knowledgeCaptureLimit ?? 2) as 1 | 2,
   };
   const errors = validateFieldGraph(

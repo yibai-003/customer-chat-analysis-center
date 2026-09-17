@@ -412,7 +412,7 @@ describe("job repository", () => {
       WHERE id = 'legacy-reception-conclusion'
     `).get()).toEqual({
       execution_type: "ai",
-      export_enabled: 1,
+      export_enabled: 0,
       candidate_limit: 15,
     });
   });

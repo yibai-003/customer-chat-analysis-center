@@ -103,7 +103,15 @@ export interface OutputField {
 }
 
 export type AnalysisFieldType = OutputField["type"];
-export type AnalysisExecutionType = "ai" | "knowledge_match" | "knowledge_extract";
+export type AnalysisExecutionType =
+  | "ai"
+  | "knowledge_match"
+  | "knowledge_extract"
+  | "lost_deal_attribution"
+  | "lost_deal_derive"
+  | "lost_deal_script"
+  | "reception_quality_analysis"
+  | "reception_quality_derive";
 
 export type KnowledgeColumnRole =
   | "result"

@@ -1,8 +1,18 @@
 import crypto from "node:crypto";
+import { applyLostDealAnalysisConfiguration } from "./migrations/006-lost-deal-analysis";
+import { applyReceptionQualityConfiguration } from "./migrations/009-reception-quality-normalization";
+import { applyUnifiedReceptionQualityConfiguration } from "./migrations/010-unified-reception-quality";
+import { applyOptimizedReceptionQualityConfiguration } from "./migrations/011-optimized-reception-quality-prompts";
+import { applyReceptionExcelSchemaConfiguration } from "./migrations/013-reception-excel-schema";
 export function seedNewDatabase(db: any) {
   seedSections(db);
   migrateLegacyFields(db);
   migrateRefundAnalysisFields(db);
+  applyLostDealAnalysisConfiguration(db);
+  applyReceptionQualityConfiguration(db);
+  applyUnifiedReceptionQualityConfiguration(db);
+  applyOptimizedReceptionQualityConfiguration(db);
+  applyReceptionExcelSchemaConfiguration(db);
 }
 function seedSections(db: any) {
   const count = db.prepare("SELECT COUNT(*) as count FROM analysis_sections").get().count as number;

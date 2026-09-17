@@ -77,11 +77,17 @@ export function getFieldResultContext(
 ): Record<string, unknown> {
   if (!fieldKeys.length) return {};
   const placeholders = fieldKeys.map(() => "?").join(",");
-  const rows = db.prepare(`SELECT r.result_json, f.key FROM analysis_field_runs r
+  const rows = db.prepare(`WITH ranked AS (
+    SELECT r.result_json, r.status, f.key,
+      ROW_NUMBER() OVER (PARTITION BY f.id ORDER BY r.created_at DESC, r.rowid DESC) AS position
+    FROM analysis_field_runs r
     JOIN analysis_fields f ON f.id = r.field_id
     WHERE r.record_id = ? ${sectionId ? "AND f.section_id = ?" : ""}
-      AND f.key IN (${placeholders}) AND r.status IN ('completed','needs_review')
-    ORDER BY r.created_at DESC`).all(...(sectionId ? [recordId, sectionId, ...fieldKeys] : [recordId, ...fieldKeys])) as any[];
+      AND f.key IN (${placeholders})
+  )
+  SELECT result_json, key FROM ranked
+  WHERE position = 1 AND status IN ('completed','needs_review')`)
+    .all(...(sectionId ? [recordId, sectionId, ...fieldKeys] : [recordId, ...fieldKeys])) as any[];
   const result: Record<string, unknown> = {};
   for (const row of rows) if (result[row.key] === undefined) {
     const parsed = JSON.parse(row.result_json || "{}");
@@ -95,8 +101,8 @@ export function aggregateFieldResults(recordId: string, sectionId: string): Reco
   const latest = listFieldRuns(recordId, sectionId);
   const result: Record<string, unknown> = {};
   for (const field of fields) {
-    const run = latest.find((item) => item.fieldId === field.id && (item.status === "completed" || item.status === "needs_review"));
-    if (run) Object.assign(result, run.result);
+    const run = latest.find((item) => item.fieldId === field.id);
+    if (run && (run.status === "completed" || run.status === "needs_review")) Object.assign(result, run.result);
   }
   return result;
 }

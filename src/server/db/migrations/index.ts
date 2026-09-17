@@ -6,6 +6,14 @@ import { applyLegacyBaseline } from "./002-legacy-baseline";
 import { applyRunLifecycle } from "./003-run-lifecycle";
 import { applyModelCapabilities } from "./004-model-capabilities";
 import { applyKnowledgeOutbox } from "./005-knowledge-outbox";
+import { applyLostDealAnalysis } from "./006-lost-deal-analysis";
+import { applyLostDealKnowledgeMetadata } from "./007-lost-deal-knowledge-metadata";
+import { applyLostDealCapture } from "./008-lost-deal-capture";
+import { applyReceptionQualityNormalization } from "./009-reception-quality-normalization";
+import { applyUnifiedReceptionQuality } from "./010-unified-reception-quality";
+import { applyOptimizedReceptionQualityPrompts } from "./011-optimized-reception-quality-prompts";
+import { applyFusedReceptionQualityPrompts } from "./012-fused-reception-quality-prompts";
+import { applyReceptionExcelSchema } from "./013-reception-excel-schema";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
@@ -13,8 +21,16 @@ export const migrations: Migration[] = [
   { version: 3, name: "run-lifecycle", up: applyRunLifecycle },
   { version: 4, name: "model-capabilities", up: applyModelCapabilities },
   { version: 5, name: "knowledge-outbox", up: applyKnowledgeOutbox },
+  { version: 6, name: "lost-deal-analysis", up: applyLostDealAnalysis },
+  { version: 7, name: "lost-deal-knowledge-metadata", up: applyLostDealKnowledgeMetadata },
+  { version: 8, name: "lost-deal-capture", up: applyLostDealCapture },
+  { version: 9, name: "reception-quality-normalization", up: applyReceptionQualityNormalization },
+  { version: 10, name: "unified-reception-quality", up: applyUnifiedReceptionQuality },
+  { version: 11, name: "optimized-reception-quality-prompts", up: applyOptimizedReceptionQualityPrompts },
+  { version: 12, name: "fused-reception-quality-prompts", up: applyFusedReceptionQualityPrompts },
+  { version: 13, name: "reception-excel-schema", up: applyReceptionExcelSchema },
 ];
-export const currentSchemaVersion = 5;
+export const currentSchemaVersion = 13;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();

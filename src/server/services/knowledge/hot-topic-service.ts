@@ -3,7 +3,7 @@ import { assertAnalysisActive, analysisSignal } from "../analysis-cancellation";
 import { assertRecordOwnership } from "../run-ownership";
 import { withModelBudget, checkModelBudget, currentModelBudget } from "../../ai/model-budget";
 import { db } from "../../db/client";
-import { callVisionModel } from "../../ai/openai-compatible-client";
+import { callVisionModel, classifyModelError } from "../../ai/openai-compatible-client";
 import { getModelsForPurpose } from "../model-config-service";
 import { createFieldRun } from "../field-run-service";
 import { getField } from "../field-config-service";
@@ -138,13 +138,16 @@ function captureHotTopicWithinBudget(input: Parameters<typeof captureHotTopicQue
           const response = await callVisionModel(model, [
             { role: "system", content: system },
             { role: "user", content: JSON.stringify(data) },
-          ]);
+          ], { attempts: 1 });
           transcript.push({ request: data, response: response.raw });
           modelsUsed.push({ name: model.name, model: model.model });
           inputTokens += response.usage?.prompt_tokens ?? 0;
           outputTokens += response.usage?.completion_tokens ?? 0;
           return response.content;
-        } catch (error) { lastError = error; }
+        } catch (error) {
+          lastError = error;
+          if (!classifyModelError(error).retryable) throw error;
+        }
       }
       throw lastError ?? new Error("问题分析模型请求失败");
     };

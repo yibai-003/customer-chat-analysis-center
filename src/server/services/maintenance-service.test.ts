@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { runMigrations } from "../db/migrations";
+import { currentSchemaVersion, runMigrations } from "../db/migrations";
 import { acquireInstanceLock } from "../instance-lock";
 import { maintainFiles } from "./maintenance-service";
 
@@ -93,7 +93,7 @@ describe("offline reference-aware maintenance", () => {
   it("does not create missing databases or migrate old ones", async () => {
     await expect(maintainFiles({ ...options, databasePath: path.join(root, "missing/app.db") })).rejects.toThrow("不存在");
     expect(fs.existsSync(path.join(root, "missing"))).toBe(false);
-    database.exec("DELETE FROM schema_migrations WHERE version=5");
+    database.prepare("DELETE FROM schema_migrations WHERE version=?").run(currentSchemaVersion);
     const before = fs.readFileSync(options.databasePath);
     await expect(maintainFiles(options)).rejects.toThrow("版本");
     expect(fs.readFileSync(options.databasePath)).toEqual(before);

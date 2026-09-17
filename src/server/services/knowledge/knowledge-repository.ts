@@ -179,8 +179,15 @@ export function listKnowledgeItems(
     WHERE ${whereSql}
   `).get(...parameters) as { count: number }).count;
   const rows = db.prepare(`
-    SELECT *, (SELECT COUNT(DISTINCT record_id) FROM hot_topic_record_questions
-      WHERE knowledge_item_id = knowledge_items.id) AS occurrence_count
+    SELECT *, (
+      SELECT COUNT(DISTINCT record_id)
+      FROM (
+        SELECT record_id, knowledge_item_id FROM hot_topic_record_questions
+        UNION ALL
+        SELECT record_id, knowledge_item_id FROM lost_deal_record_reasons
+      ) AS knowledge_record_links
+      WHERE knowledge_record_links.knowledge_item_id = knowledge_items.id
+    ) AS occurrence_count
     FROM knowledge_items
     WHERE ${whereSql}
     ORDER BY updated_at DESC, id
