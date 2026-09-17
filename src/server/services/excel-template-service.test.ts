@@ -31,4 +31,17 @@ describe("Excel template field mapping", () => {
     expect(mergeTemplateHeaders(["售后问题类型", "商品信息"], ["店铺名称", "商品信息", "截图解析"]))
       .toEqual(["售后问题类型", "商品信息", "店铺名称", "截图解析"]);
   });
+
+  it("matches output columns after trimming accidental header whitespace", () => {
+    expect(buildOutputPlan(
+      ["平台", "接待流程质检结果 ", "优化建议-售前"],
+      [
+        { key: "quality", label: "接待流程质检结果", outputColumn: "接待流程质检结果" },
+        { key: "suggestion", label: "优化建议-售前", outputColumn: "优化建议-售前" },
+      ],
+    )).toEqual([
+      { key: "quality", column: 2, header: "接待流程质检结果" },
+      { key: "suggestion", column: 3, header: "优化建议-售前" },
+    ]);
+  });
 });

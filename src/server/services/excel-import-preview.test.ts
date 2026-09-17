@@ -37,4 +37,27 @@ describe("Excel workbook preview", () => {
       imageRows: [2],
     });
   });
+
+  it("normalizes leading and trailing whitespace in workbook headers", async () => {
+    const file = path.join(os.tmpdir(), `preview-headers-${Date.now()}.xlsx`);
+    files.push(file);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("质检");
+    sheet.addRow(["平台", "接待流程质检结果 ", "聊天截图"]);
+    sheet.addRow(["京东", "", ""]);
+    sheet.addImage(workbook.addImage({ base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", extension: "png" }), {
+      tl: { col: 2, row: 1 },
+      ext: { width: 20, height: 20 },
+    });
+    await workbook.xlsx.writeFile(file);
+
+    const preview = await previewWorkbook(file, "质检.xlsx", {
+      id: "reception",
+      name: "接待流程质检",
+      sourceFields: ["平台", "接待流程质检结果", "聊天截图"],
+    });
+
+    expect(preview.missingHeaders).toEqual([]);
+    expect(preview.sheets[0].headers).toEqual(["平台", "接待流程质检结果", "聊天截图"]);
+  });
 });

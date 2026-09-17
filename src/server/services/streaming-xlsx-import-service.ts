@@ -10,6 +10,7 @@ import { config } from "../config";
 import { normalizeUploadedFilename } from "../utils/encoding";
 import { normalizeImageAnchor } from "./excel-import-service";
 import { diskReservations, reservedFileWriter } from "../security/disk-reservations";
+import { normalizeExcelHeader } from "./excel-template-service";
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", isArray: (name) => ["sheet", "Relationship", "row", "c", "si", "r", "oneCellAnchor", "twoCellAnchor"].includes(name) });
 type StreamingAnchor = { row: number; column: number; embed: string; mediaPath?: string };
@@ -32,11 +33,19 @@ function columnNumber(ref: string) {
   return [...letters].reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0);
 }
 
+function xmlText(value: unknown) {
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (!value || typeof value !== "object") return "";
+  const text = (value as Record<string, unknown>)["#text"];
+  return typeof text === "string" || typeof text === "number" ? String(text) : "";
+}
+
 function sharedStringValues(xml: string) {
   const parsed = parser.parse(xml)?.sst?.si ?? [];
   return asArray(parsed).map((item: any) => {
-    if (typeof item.t === "string") return item.t;
-    return asArray(item.r).map((run: any) => typeof run.t === "string" ? run.t : "").join("");
+    const directText = xmlText(item.t);
+    if (directText) return directText;
+    return asArray(item.r).map((run: any) => xmlText(run.t)).join("");
   });
 }
 
@@ -112,7 +121,7 @@ export async function previewWorkbookStreaming(
     }
     summaries.push({
       name,
-      headers: Object.values(rows.get(1) ?? {}),
+      headers: Object.values(rows.get(1) ?? {}).map(normalizeExcelHeader).filter(Boolean),
       imageCount: imageRows.length,
       imageRows,
     });
@@ -194,7 +203,8 @@ export async function importWorkbookStreaming(
     onProgress?.({ totalImages: allImages.length, processedImages: 0, currentSheet: "", currentRow: 0 });
     const imported: Array<{ sheetName: string; rowNumber: number; anchor: unknown; sourceFields: Record<string, string>; imagePath: string }> = [];
     if (section) {
-      const importedHeaders = [...new Set(sheetData.flatMap((sheet) => Object.values(sheet.rows.get(1) ?? {})))];
+      const importedHeaders = [...new Set(sheetData.flatMap((sheet) =>
+        Object.values(sheet.rows.get(1) ?? {}).map(normalizeExcelHeader).filter(Boolean)))];
       mergeSectionSourceFields(section.id, importedHeaders);
     }
     for (const sheet of sheetData) {
@@ -203,7 +213,7 @@ export async function importWorkbookStreaming(
         const sourceFields: Record<string, string> = {};
         const row = sheet.rows.get(image.row) ?? {};
         for (const [column, value] of Object.entries(row)) {
-          const header = headers[Number(column)];
+          const header = normalizeExcelHeader(headers[Number(column)]);
           if (header) sourceFields[header] = value;
         }
         const extension = path.extname(image.mediaPath ?? "").toLowerCase() || ".png";

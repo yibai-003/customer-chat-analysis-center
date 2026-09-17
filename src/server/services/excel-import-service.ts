@@ -9,6 +9,7 @@ import { diskReservations, reservedFileWriter } from "../security/disk-reservati
 import { createJob, addRecords, deleteJob, mergeSectionSourceFields, updateJobSourcePath } from "../db/repositories";
 import { config } from "../config";
 import { normalizeUploadedFilename } from "../utils/encoding";
+import { normalizeExcelHeader } from "./excel-template-service";
 
 export function normalizeImageAnchor(range: any) {
   const startRow = Number(range?.tl?.nativeRow ?? range?.tl?.row ?? 0) + 1;
@@ -23,7 +24,7 @@ export async function previewWorkbook(filePath: string, originalFilename: string
   await workbook.xlsx.readFile(filePath);
   const sheets = workbook.worksheets.map((worksheet) => {
     const headers: string[] = [];
-    worksheet.getRow(1).eachCell((cell, index) => { headers[index - 1] = String(cell.value ?? `字段${index}`); });
+    worksheet.getRow(1).eachCell((cell, index) => { headers[index - 1] = normalizeExcelHeader(cell.value ?? `字段${index}`); });
     const images = (worksheet.getImages?.() ?? []) as any[];
     return {
       name: worksheet.name,
@@ -57,7 +58,7 @@ export async function importWorkbook(filePath: string, originalFilename: string,
     if (section) {
       const importedHeaders = [...new Set(workbook.worksheets.flatMap((worksheet) => {
         const headers: string[] = [];
-        worksheet.getRow(1).eachCell((cell, index) => { headers[index - 1] = String(cell.value ?? ""); });
+        worksheet.getRow(1).eachCell((cell, index) => { headers[index - 1] = normalizeExcelHeader(cell.value); });
         return headers;
       }))];
       mergeSectionSourceFields(section.id, importedHeaders);
@@ -68,7 +69,7 @@ export async function importWorkbook(filePath: string, originalFilename: string,
     onProgress?.({ totalImages, processedImages: 0, currentSheet: "", currentRow: 0 });
     for (const worksheet of workbook.worksheets) {
       const headers: string[] = [];
-      worksheet.getRow(1).eachCell((cell, index) => { headers[index] = String(cell.value ?? `字段${index}`); });
+      worksheet.getRow(1).eachCell((cell, index) => { headers[index] = normalizeExcelHeader(cell.value ?? `字段${index}`); });
       const images = (worksheet.getImages?.() ?? []) as any[];
       for (const image of images) {
         const range = image.range;
