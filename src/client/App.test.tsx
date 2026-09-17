@@ -2,7 +2,7 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AnalysisCapacity, AnalysisSection, Job, RecordDetail, RecordPage, RecordSummary } from "../shared/types";
+import type { AnalysisCapacity, AnalysisField, AnalysisSection, Job, RecordDetail, RecordPage, RecordSummary } from "../shared/types";
 import App from "./App";
 import { Detail, formatFieldResult } from "./App";
 
@@ -19,8 +19,166 @@ describe("field result formatting", () => {
     expect(host.querySelector<HTMLTextAreaElement>(".detail-block .result-field textarea")?.value).toBe("");
     expect(host.textContent).toContain("问题语义匹配需要复核，未写入知识库");
   });
+
+  it("does not fall back to an old successful value after the latest run failed", async () => {
+    const recordDetail = detail(record("page-1", 1));
+    const common = { recordId: recordDetail.id, fieldId: "field-one", sectionId: section.id, fieldKey: "question", dependencies: {} };
+    recordDetail.fieldRuns = [
+      { ...common, id: "new-run", status: "failed", result: {}, errorMessage: "最新重试失败", createdAt: "2026-09-15T06:00:00.000Z" },
+      { ...common, id: "old-run", status: "completed", result: { question: "不应继续显示的旧值" }, createdAt: "2026-09-15T05:00:00.000Z" },
+    ];
+
+    await act(async () => root.render(<Detail record={recordDetail} section={{ ...section, outputSchema: [{ key: "question", label: "问题", type: "string" }] }}
+      fields={[]} setRecord={vi.fn()} onAnalyze={vi.fn()} onRetry={vi.fn()} onSave={vi.fn()} busy={false} />));
+
+    expect(host.querySelector<HTMLTextAreaElement>(".detail-block .result-field textarea")?.value).toBe("");
+    expect(host.textContent).not.toContain("不应继续显示的旧值");
+  });
+
+  it("does not show an old attribution summary after the latest attribution run was skipped", async () => {
+    const recordDetail = detail(record("page-1", 1));
+    const common = { recordId: recordDetail.id, fieldId: "attribution-field", sectionId: "lost-deal", fieldKey: "未成交归因", dependencies: {} };
+    recordDetail.fieldRuns = [
+      { ...common, id: "new-run", status: "skipped", result: {}, errorMessage: "上游解析失败", createdAt: "2026-09-15T06:00:00.000Z" },
+      {
+        ...common,
+        id: "old-run",
+        status: "completed",
+        result: {
+          未成交归因: {
+            customerReasons: [{ name: "旧客户原因", evidence: "旧证据", confidence: 0.9 }],
+            serviceReasons: [],
+            demandTypes: [],
+            specificDemand: "",
+            specificDemandEvidence: "",
+            evidence: ["旧证据"],
+            confidence: 0.9,
+            reviewRequired: false,
+          },
+        },
+        createdAt: "2026-09-15T05:00:00.000Z",
+      },
+    ];
+    const lostDealSection: AnalysisSection = {
+      ...section,
+      id: "lost-deal",
+      name: "未成交分析",
+      outputSchema: [{ key: "未成交归因", label: "未成交归因", type: "object" }],
+    };
+
+    await act(async () => root.render(<Detail record={recordDetail} section={lostDealSection}
+      fields={[]} setRecord={vi.fn()} onAnalyze={vi.fn()} onRetry={vi.fn()} onSave={vi.fn()} busy={false} />));
+
+    expect(host.textContent).not.toContain("未成交归因摘要");
+    expect(host.textContent).not.toContain("旧客户原因");
+  });
+
   it("renders structured results as readable JSON", () => {
     expect(formatFieldResult({ 问题现象: "未说明" })).toBe('{\n  "问题现象": "未说明"\n}');
+  });
+
+  it("renders lost-deal attribution evidence without exposing the internal field as an editable output", async () => {
+    const recordDetail = detail(record("page-1", 1));
+    recordDetail.fieldRuns = [
+      {
+        id: "script-run",
+        recordId: recordDetail.id,
+        fieldId: "script-field",
+        sectionId: "lost-deal",
+        fieldKey: "话术逻辑优化建议",
+        status: "completed",
+        result: { 话术逻辑优化建议: "先确认预算，再说明优惠。" },
+        evidence: "客户说预算有限",
+        dependencies: { 未成交归因: {} },
+        promptSnapshot: "",
+        modelConfigSnapshot: { strategy: "local_rules" },
+        createdAt: "2026-09-15T05:00:00.000Z",
+      },
+      {
+        id: "customer-run",
+        recordId: recordDetail.id,
+        fieldId: "customer-field",
+        sectionId: "lost-deal",
+        fieldKey: "客户原因",
+        status: "completed",
+        result: { 客户原因: "价格超出预算\n尺寸不合适" },
+        evidence: "客户说预算有限\n客户说放不下",
+        dependencies: { 未成交归因: {} },
+        promptSnapshot: "",
+        modelConfigSnapshot: {},
+        createdAt: "2026-09-15T05:00:00.000Z",
+      },
+      {
+        id: "attribution-run",
+        recordId: recordDetail.id,
+        fieldId: "attribution-field",
+        sectionId: "lost-deal",
+        fieldKey: "未成交归因",
+        status: "needs_review",
+        result: {
+          未成交归因: {
+            customerReasons: [
+              { name: "价格超出预算", evidence: "客户说预算有限", confidence: 0.82 },
+            ],
+            serviceReasons: [
+              { name: "待复核", evidence: "", confidence: 0.2 },
+            ],
+            demandTypes: [
+              { name: "价格需求", evidence: "客户询问优惠", confidence: 0.8 },
+            ],
+            specificDemand: "希望优惠到100元",
+            evidence: ["客户说预算有限", "客户询问优惠"],
+            confidence: 0.42,
+            reviewRequired: true,
+          },
+        },
+        evidence: "客户说预算有限\n客户询问优惠",
+        dependencies: { 截图内容总结: "客户询问价格并表示预算有限" },
+        promptSnapshot: "",
+        modelConfigSnapshot: {},
+        createdAt: "2026-09-15T05:00:00.000Z",
+        errorMessage: "归因证据不足或置信度偏低，请人工复核",
+      },
+    ];
+    const lostDealSection: AnalysisSection = {
+      id: "lost-deal",
+      parentId: "chat",
+      name: "未成交分析",
+      prompt: "",
+      outputSchema: [
+        { key: "客户原因", label: "客户原因", type: "string" },
+        { key: "客户产品需求", label: "客户产品需求", type: "string" },
+        { key: "话术逻辑优化建议", label: "话术逻辑优化建议", type: "string" },
+        { key: "未成交归因", label: "未成交归因", type: "object" },
+      ],
+      sortOrder: 3,
+      isEnabled: true,
+    };
+    const fields: AnalysisField[] = [
+      { id: "customer-field", sectionId: "lost-deal", key: "客户原因", label: "客户原因", type: "string", prompt: "", required: false, imageEnabled: false, dependsOn: ["未成交归因"], sortOrder: 1, isEnabled: true, exportEnabled: true },
+      { id: "demand-field", sectionId: "lost-deal", key: "客户产品需求", label: "客户产品需求", type: "string", prompt: "", required: false, imageEnabled: false, dependsOn: ["未成交归因"], sortOrder: 2, isEnabled: true, exportEnabled: true },
+      { id: "script-field", sectionId: "lost-deal", key: "话术逻辑优化建议", label: "话术逻辑优化建议", type: "string", prompt: "", required: false, imageEnabled: false, dependsOn: ["未成交归因"], sortOrder: 3, isEnabled: true, exportEnabled: true },
+      { id: "attribution-field", sectionId: "lost-deal", key: "未成交归因", label: "未成交归因", type: "object", prompt: "", required: false, imageEnabled: false, dependsOn: ["截图内容总结"], sortOrder: 0, isEnabled: true, exportEnabled: false },
+    ];
+
+    await act(async () => root.render(
+      <Detail
+        record={recordDetail}
+        section={lostDealSection}
+        fields={fields}
+        setRecord={vi.fn()}
+        onAnalyze={vi.fn()}
+        onRetry={vi.fn()}
+        onSave={vi.fn()}
+        busy={false}
+      />,
+    ));
+
+    expect(host.textContent).toContain("客户说预算有限");
+    expect(host.textContent).toContain("整体置信度");
+    expect(host.textContent).toContain("待复核");
+    expect(host.textContent).not.toContain("未成交归因归因");
+    expect(host.querySelector<HTMLTextAreaElement>(".result-field textarea")?.value).toContain("价格超出预算\n尺寸不合适");
   });
 });
 

@@ -256,7 +256,7 @@ export function KnowledgeItemList({
               onChange={(event) => setSelectedIds(event.target.checked ? page.items.map((entry) => entry.id) : [])}
             /></th>
             {base.columns.map((column) => <th key={column.name}>{column.name}</th>)}
-            {base.sectionId === "hot-topic" && <th title="按当前关联的不同记录计数；同一记录重试不重复计数">关联记录数</th>}
+            {["hot-topic", "lost-deal"].includes(base.sectionId) && <th title="按当前关联的不同记录计数；同一记录重试不重复计数">关联记录数</th>}
             <th>状态</th><th>来源行</th><th>操作</th>
           </tr></thead>
           <tbody>{page.items.map((item) => <tr
@@ -272,7 +272,7 @@ export function KnowledgeItemList({
               onChange={() => toggleSelected(item.id)}
             /></td>
             {base.columns.map((column) => <td key={column.name}>{item.values[column.name] || "空"}</td>)}
-            {base.sectionId === "hot-topic" && <td>{item.occurrenceCount ?? 0}</td>}
+            {["hot-topic", "lost-deal"].includes(base.sectionId) && <td>{item.occurrenceCount ?? 0}</td>}
             <td><span className={`knowledge-state ${item.isEnabled ? "enabled" : "disabled"}`}>
               {item.isEnabled ? "已启用" : "已停用"}
             </span></td>
