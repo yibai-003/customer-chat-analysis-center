@@ -126,7 +126,8 @@
 
 ### T5 前端工作区分层
 
-将 `useWorkspaceController.ts` 拆分为：`useJobSelection`（任务列表/切换/删除）、`useSectionCatalog`（板块/字段/知识库加载）、`useRecordPaging`（分页/筛选/详情）、`useAnalysisActions`（启动/暂停/取消/重试），组合层保留在 150 行以内。
+- [x] 将 `useWorkspaceController.ts` 拆分为 `useJobSelection`（任务与会话、操作令牌、刷新与轮询）、`useSectionCatalog`（板块/字段加载）、`useRecordWorkspace`（分页/筛选/详情，已存在故复用）与 `useAnalysisActions`（启动/暂停/取消/重试）。
+- [x] 组合层只负责 hook 装配、header 测量与任务板块同步，控制在 150 行以内。
 
 **验收标准**
 
