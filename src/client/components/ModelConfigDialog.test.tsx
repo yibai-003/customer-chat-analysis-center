@@ -129,6 +129,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -394,6 +395,7 @@ describe("ModelConfigDialog", () => {
   });
 
   it("uses distinct text statuses for paid and unavailable members", async () => {
+    vi.setSystemTime(new Date("2026-09-16T03:00:00.000Z"));
     const statusMembers = [
       member({ id: "paid", name: "付费备用", billingMode: "paid" }),
       member({ id: "quota", name: "额度耗尽", quotaBlocked: true }),
