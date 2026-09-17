@@ -4,6 +4,7 @@
     "dev": "tsx src/server/launcher.ts",
     "start": "tsx src/server/launcher.ts",
     "test": "vitest run",
+    "smoke": "node scripts/smoke-local.mjs",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
     "knowledge:export": "tsx src/server/knowledge-cli.ts export",

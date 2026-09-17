@@ -173,12 +173,13 @@ npm.cmd run db:check
 1. 创建功能分支。
 2. 先写失败测试，再修改生产代码。
 3. 本地完成类型检查、测试、构建和数据库检查。
-4. 执行 `npm run backup`。
-5. 执行 `npm run knowledge:export`，检查快照 diff。
-6. 检查提交中没有 `.env`、API Key、`data/`、聊天截图和 Excel。
-7. 提交并推送 GitHub。
-8. 拉取到临时目录做一次新环境启动检查。
-9. 再在个人环境重启服务。
+4. 执行 `npm run smoke`：用临时数据目录启动服务子进程，验证健康接口、静态页面与就绪接口，不调用任何模型。
+5. 执行 `npm run backup`。
+6. 执行 `npm run knowledge:export`，检查快照 diff。
+7. 检查提交中没有 `.env`、API Key、`data/`、聊天截图和 Excel。
+8. 提交并推送 GitHub。
+9. 拉取到临时目录做一次新环境启动检查。
+10. 再在个人环境重启服务。
 
 ## 当前执行顺序
 

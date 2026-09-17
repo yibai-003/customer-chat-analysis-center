@@ -2,14 +2,14 @@
 
 **计划：** `docs/architecture-remediation-plan-2026-09-17.md`
 
-**最后更新：** 2026-09-17（T6 进行中）
+**最后更新：** 2026-09-17（T6 阻塞：eslint 等待 npm 网络恢复）
 
 ## 恢复入口
 
-- 当前任务：T6（质量闸门）
-- 当前步骤：安装 eslint 开发依赖并编写最小规则集
-- 下一步：编写 `scripts/smoke-local.mjs` 并纳入发布流程文档
-- 工作区状态：T5 已提交；T6 未开始编码
+- 当前任务：T6（质量闸门，阻塞中）
+- 当前步骤：冒烟脚本已完成并提交；eslint 依赖安装失败
+- 下一步：网络/证书恢复后执行 `npm install -D eslint typescript-eslint eslint-plugin-react-hooks`，再补最小规则集与 `npm run lint`
+- 工作区状态：T6 冒烟部分已提交；eslint 未开始编码
 - 恢复方法：读本入口 → 打开计划文档查看该任务未勾选步骤 → 继续执行，无需通读项目
 
 ## 任务计划表
@@ -23,7 +23,7 @@
 | T3 执行类型注册表 | 已完成 | - | - | `field-analysis-service.ts` 706 → 178 行；新增 `execution/` 9 个文件与 3 项注册表测试；558 项测试通过；`typecheck`、`build`、`db:check` 通过 | - |
 | T4 结构化对象字段抽象 | 已完成 | - | - | 新增 `structured.ts` 工厂与探针测试；未成交/接待 5 个 handler 收敛为 3 个 definition；现有断言不改全部通过（559 项）；前台新增 `StructuredResultView` 且 DOM 不变 | - |
 | T5 前端工作区分层 | 已完成 | - | - | `useWorkspaceController.ts` 484 → 117 行；新增 `useJobSelection`（273 行）、`useAnalysisActions`（174 行）、`useSectionCatalog`（22 行）；App 与 hook 测试断言不改全部通过；全量 559 项通过 | - |
-| T6 质量闸门 | 进行中 | 安装 eslint 依赖并编写最小规则集 | 编写冒烟脚本 | - | - |
+| T6 质量闸门 | 阻塞 | 冒烟脚本完成；eslint 依赖安装失败 | 网络恢复后安装 eslint 并补规则集 | `npm run smoke` 通过（3 秒，可复跑，`ready:false` 符合空库预期） | npm 证书错误 `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`，不绕过证书 |
 | T7 文档治理 | 未开始 | - | - | - | - |
 | T8 实例锁与平台健壮性 | 未开始 | - | - | - | - |
 
@@ -31,6 +31,7 @@
 
 按时间倒序追加，每条格式：日期 / 任务 / 事件 / 证据。
 
+- 2026-09-17 / T6 / 冒烟脚本完成，eslint 阻塞 / 新增 `scripts/smoke-local.mjs` 与 `npm run smoke`：临时数据目录启动子进程，校验 health/静态页/ready/knowledge-sync，3 秒通过且可复跑；eslint 安装因 npm 证书错误失败，未绕过校验
 - 2026-09-17 / T5 / 完成前端工作区分层 / 控制器 484 → 117 行；会话与操作令牌、轮询、刷新迁入 `useJobSelection`，分析/任务操作迁入 `useAnalysisActions`，板块字段加载迁入 `useSectionCatalog`；分页筛选复用既有 `useRecordWorkspace`；App 33 项与 hook 8 项断言不改通过；全量 559 项通过；`typecheck`、`build` 通过
 - 2026-09-17 / T4 / 完成结构化对象字段抽象 / 新增 `execution/structured.ts` 工厂；未成交（归因/派生/话术）与接待质检（分析/派生）迁移为 3 个 definition；移除 2 个上下文访问器；前端新增 `StructuredResultView` 配置化渲染；探针板块测试通过；全量 559 项通过；`typecheck`、`build`、`db:check` 通过
 - 2026-09-17 / T3 / 完成执行类型注册表 / `field-analysis-service.ts` 拆分为 `execution/`（registry、support、graph 与 5 个 handler 文件），调度器 706 → 178 行；`ANALYSIS_EXECUTION_TYPES` 常量派生 zod 枚举、catalog schema 与客户端选项；新增注册表测试 3 项；全量 558 项通过；`typecheck`、`build`、`db:check` 通过
@@ -42,6 +43,7 @@
 
 | 日期 | 任务 | 决策 | 原因 | 影响 |
 | --- | --- | --- | --- | --- |
+| 2026-09-17 | T6 | npm 安装失败时不绕过证书校验 | 项目已明确禁止放宽 TLS/证书来获得依赖 | eslint 任务保持阻塞，等待网络/证书恢复后重试 |
 | 2026-09-17 | T5 | 分页/筛选/详情复用既有 `useRecordWorkspace`，不新建 `useRecordPaging` | 该 hook 已独立承担列表查询与详情请求，重命名只会制造无谓 diff | 计划文档已同步为“复用既有 hook” |
 | 2026-09-17 | T4 | 探针板块以测试夹具形式验收，不落地真实板块 | 落地真实板块需要迁移、catalog 与 UI 全链路，超出抽象验收范围 | 生产接入新板块仍需在 `execution/index.ts` 增加一行 import；探针已证明无需改调度器与注册表 |
 | 2026-09-17 | T3 | 执行类型字面量收敛规则：常量定义 + 每个 handler 注册一处 + 板块专属谓词（`isLostDealAttribution` 等 2 处） | 追求“活代码零字面量”会引入无意义的间接层，注册表本身就需要声明类型 | 验收口径改为“不再维护重复清单或 switch”，计划文档已同步 |

@@ -138,7 +138,11 @@
 ### T6 质量闸门
 
 - [ ] 增加 eslint（typescript-eslint + react-hooks）最小规则集与 `npm run lint`；规则只启用 error 级最小集合，历史告警保持 warn；lock 变更单独提交。
-- [ ] 新增 `scripts/smoke-local.mjs`：用临时 `DATA_DIR` / `DATABASE_PATH` 启动服务子进程，验证 `/api/health`、静态页面与 `/api/ready` 的预期状态；不调用任何模型；纳入发布流程文档。
+- [x] 新增 `scripts/smoke-local.mjs`：用临时 `DATA_DIR` / `DATABASE_PATH` 启动服务子进程，验证 `/api/health`、静态页面与 `/api/ready` 的预期状态；不调用任何模型；纳入发布流程文档。
+
+**阻塞（2026-09-17）**
+
+`npm install -D eslint typescript-eslint eslint-plugin-react-hooks` 失败：`UNABLE_TO_GET_ISSUER_CERT_LOCALLY`（随后重试为连接超时）。按项目规则不绕过证书校验，待 npm 网络/证书恢复后重新安装，再补 lint 配置与脚本。
 
 **验收标准**
 
