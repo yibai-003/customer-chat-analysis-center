@@ -149,6 +149,86 @@ describe("model pool administration API", () => {
     });
   });
 
+  it("validates bulk verification, removal and restore requests", async () => {
+    const provider = await jsonRequest("/api/model-providers", {
+      method: "POST",
+      body: JSON.stringify({
+        name: "竞价池服务商",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        apiKey: "bulk-route-secret",
+      }),
+    });
+    expect(provider.status).toBe(200);
+    const installed = await jsonRequest("/api/model-pools/qianwen-free/install", { method: "POST" });
+    const [first, second] = installed.body.data.created;
+
+    const emptyVerify = await jsonRequest("/api/model-pool-members/verify", {
+      method: "POST",
+      body: JSON.stringify({ ids: [] }),
+    });
+    expect(emptyVerify.status).toBe(400);
+
+    const emptyRemoval = await jsonRequest("/api/model-pool-members/remove", {
+      method: "POST",
+      body: JSON.stringify({ ids: [], reason: "maintenance" }),
+    });
+    expect(emptyRemoval.status).toBe(400);
+
+    const duplicate = await jsonRequest("/api/model-pool-members/remove", {
+      method: "POST",
+      body: JSON.stringify({ ids: [first, first], reason: "maintenance" }),
+    });
+    expect(duplicate.status).toBe(400);
+    expect(duplicate.body.error).toContain("重复");
+
+    const oversized = await jsonRequest("/api/model-pool-members/restore", {
+      method: "POST",
+      body: JSON.stringify({ ids: Array.from({ length: 51 }, () => randomUUID()) }),
+    });
+    expect(oversized.status).toBe(400);
+
+    const unknown = await jsonRequest("/api/model-pool-members/remove", {
+      method: "POST",
+      body: JSON.stringify({ ids: ["missing-member"], reason: "maintenance" }),
+    });
+    expect(unknown.status).toBe(404);
+    expect(unknown.body.error).toContain("不存在");
+
+    const invalidReason = await jsonRequest("/api/model-pool-members/remove", {
+      method: "POST",
+      body: JSON.stringify({ ids: [first], reason: "made-up" }),
+    });
+    expect(invalidReason.status).toBe(400);
+
+    const removal = await jsonRequest("/api/model-pool-members/remove", {
+      method: "POST",
+      body: JSON.stringify({ ids: [first, second], reason: "quota", note: "额度耗尽" }),
+    });
+    expect(removal.status).toBe(200);
+    expect(removal.body.data).toEqual({ removed: [first, second] });
+
+    const removedList = await jsonRequest("/api/model-pools");
+    const removed = removedList.body.data.members.find((member: any) => member.id === first);
+    expect(removed).toMatchObject({
+      poolEnabled: false,
+      poolRemovedReason: "quota",
+      poolRemovedNote: "额度耗尽",
+    });
+    expect(removed.poolRemovedAt).toBeTruthy();
+
+    const restore = await jsonRequest("/api/model-pool-members/restore", {
+      method: "POST",
+      body: JSON.stringify({ ids: [first] }),
+    });
+    expect(restore.status).toBe(200);
+    expect(restore.body.data).toEqual({ restored: [first] });
+
+    const restoredList = await jsonRequest("/api/model-pools");
+    const restored = restoredList.body.data.members.find((member: any) => member.id === first);
+    expect(restored).toMatchObject({ poolEnabled: true });
+    expect(restored.poolRemovedAt).toBeUndefined();
+  });
+
   it("patches only supported model-pool member fields", async () => {
     const provider = createModelProvider({
       name: "Member route provider",

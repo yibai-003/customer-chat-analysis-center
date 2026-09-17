@@ -119,6 +119,9 @@ export function mapModelConfigRow(row: any): ModelConfig {
     presetVersion: row.preset_version ?? undefined,
     capabilityEligible: capabilityFresh && capabilityPassed,
     quotaBlocked,
+    poolRemovedAt: row.pool_removed_at ?? undefined,
+    poolRemovedReason: row.pool_removed_reason ?? undefined,
+    poolRemovedNote: row.pool_removed_note ?? undefined,
   };
 }
 

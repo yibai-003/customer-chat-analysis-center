@@ -521,6 +521,85 @@ describe("ModelConfigDialog", () => {
     expect(requests.filter((request) => request.url === "/api/model-pools/qianwen-free/verify")).toHaveLength(1);
   });
 
+  it("bulk-verifies selected members with enablePassed and reports per-member results", async () => {
+    const pooled = member({ id: "pool-a", name: "池内甲", poolEnabled: true, capabilityEligible: true });
+    const removed = member({
+      id: "pool-b",
+      name: "已剔除乙",
+      poolEnabled: false,
+      capabilityEligible: false,
+      capabilityCheckedAt: undefined,
+      capabilityStatus: undefined,
+    });
+    responseFor = (url) => {
+      if (url === "/api/model-pool-members/verify") {
+        return [
+          { id: "pool-a", passed: true },
+          { id: "pool-b", passed: false, error: "认证失败", errorCode: "auth" },
+        ];
+      }
+      if (url === "/api/model-pools") {
+        return {
+          members: [pooled, removed],
+          summary: {
+            total: 2,
+            vision: { total: 2, enabled: 1, verified: 1, blocked: 0 },
+            text: { total: 0, enabled: 0, verified: 0, blocked: 0 },
+          },
+        };
+      }
+      return defaultData(url);
+    };
+    await renderDialog([pooled, removed]);
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "选择成员 已剔除乙" }));
+    expect(screen.getByText("已选 1 个")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "验证已选" }));
+
+    await waitFor(() => expect(
+      requests.filter((request) => request.url === "/api/model-pool-members/verify"),
+    ).toHaveLength(1));
+    const verifyRequest = requests.find((request) => request.url === "/api/model-pool-members/verify")!;
+    expect(JSON.parse(String(verifyRequest.init?.body))).toEqual({
+      ids: ["pool-b"],
+      enablePassed: true,
+    });
+    await screen.findByText("验证完成：通过 1/2");
+  });
+
+  it("confirms bulk removal with a reason and warns when the purpose becomes unready", async () => {
+    const onlyEligible = member({ id: "only", name: "唯一可用", poolEnabled: true, capabilityEligible: true });
+    responseFor = (url) => {
+      if (url === "/api/model-pool-members/remove") return { removed: ["only"] };
+      if (url === "/api/model-pools") {
+        return {
+          members: [onlyEligible],
+          summary: {
+            total: 1,
+            vision: { total: 1, enabled: 1, verified: 1, blocked: 0 },
+            text: { total: 0, enabled: 0, verified: 0, blocked: 0 },
+          },
+        };
+      }
+      return defaultData(url);
+    };
+    await renderDialog([onlyEligible]);
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "选择成员 唯一可用" }));
+    fireEvent.click(screen.getByRole("button", { name: "剔除已选" }));
+    expect(await screen.findByText(/视觉用途将进入未就绪状态/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("剔除原因"), { target: { value: "quota" } });
+    fireEvent.click(screen.getByRole("button", { name: "确认剔除" }));
+
+    await waitFor(() => expect(
+      requests.filter((request) => request.url === "/api/model-pool-members/remove"),
+    ).toHaveLength(1));
+    const removeRequest = requests.find((request) => request.url === "/api/model-pool-members/remove")!;
+    expect(JSON.parse(String(removeRequest.init?.body))).toEqual({ ids: ["only"], reason: "quota" });
+    await screen.findByText(/已剔除 1 个成员/);
+  });
+
   it("classifies capability snapshots with the configured TTL and server time semantics", async () => {
     vi.setSystemTime(new Date("2026-09-16T06:00:00.000Z"));
     const capabilityMembers = [

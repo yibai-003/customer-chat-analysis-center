@@ -353,6 +353,9 @@ export interface ModelConfig {
   presetVersion?: number;
   capabilityEligible: boolean;
   quotaBlocked: boolean;
+  poolRemovedAt?: string;
+  poolRemovedReason?: "verify_failed" | "unstable" | "quota" | "maintenance";
+  poolRemovedNote?: string;
 }
 
 export interface AnalysisRun {

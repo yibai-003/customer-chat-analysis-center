@@ -13,6 +13,9 @@ import {
   installQianwenFreePool,
   listModelUsageEvents,
   listPoolMembers,
+  POOL_REMOVAL_REASONS,
+  removePoolMembers,
+  restorePoolMembers,
   updateModelPoolSettings,
   updatePoolMember,
   verifyPoolMembers,
@@ -51,8 +54,18 @@ const poolMemberPatchSchema = z.object({
 }).strict();
 
 const verificationSchema = z.object({
-  ids: z.array(idSchema).max(50),
+  ids: z.array(idSchema).min(1).max(50),
   enablePassed: z.boolean().optional().default(false),
+}).strict();
+
+const removalSchema = z.object({
+  ids: z.array(idSchema).min(1).max(50),
+  reason: z.enum(POOL_REMOVAL_REASONS),
+  note: z.string().max(200).optional(),
+}).strict();
+
+const memberIdsSchema = z.object({
+  ids: z.array(idSchema).min(1).max(50),
 }).strict();
 
 const settingsPatchSchema = z.object({
@@ -177,6 +190,38 @@ export function createModelPoolRouter(): express.Router {
       return ok(res, await verifyPoolMembers(input.ids, {
         enablePassed: input.enablePassed,
       }));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.post("/model-pool-members/verify", async (req, res) => {
+    try {
+      const input = verificationSchema.parse(req.body);
+      return ok(res, await verifyPoolMembers(input.ids, {
+        enablePassed: input.enablePassed,
+      }));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.post("/model-pool-members/remove", (req, res) => {
+    try {
+      const input = removalSchema.parse(req.body);
+      return ok(res, removePoolMembers(input.ids, {
+        reason: input.reason,
+        note: input.note,
+      }));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.post("/model-pool-members/restore", (req, res) => {
+    try {
+      const input = memberIdsSchema.parse(req.body);
+      return ok(res, restorePoolMembers(input.ids));
     } catch (error) {
       return fail(res, error);
     }

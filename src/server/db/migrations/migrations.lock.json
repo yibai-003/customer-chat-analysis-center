@@ -11,5 +11,6 @@
   "011-optimized-reception-quality-prompts.ts": "d2dcbd415433254dd9f2f892c14cdb85af73e14e8977d71ab6d4c995d2f130e8",
   "012-fused-reception-quality-prompts.ts": "2c4f85f272afce051837f250a5fee43574f7635e097f2313dcc3eaf3f5c3d7dd",
   "013-reception-excel-schema.ts": "9e6be8dfb9dde3e98e543800f392a75adbf0a0c2ef69b9e8fbb908f6f5953f35",
-  "014-model-pools.ts": "6228ed3a32bb31d1de6e784589ec2dcf8215e6ce24b62abb4e7d66a0631edaf3"
+  "014-model-pools.ts": "6228ed3a32bb31d1de6e784589ec2dcf8215e6ce24b62abb4e7d66a0631edaf3",
+  "015-pool-removal-and-efficiency-indexes.ts": "c667d77ca63f0d6bb4bc6dae2bbe8f7a381ca86e78bcd2efea675c10f1c06bff"
 }

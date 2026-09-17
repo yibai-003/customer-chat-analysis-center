@@ -8,6 +8,7 @@ import type {
 } from "../../shared/types";
 import { db } from "../db/client";
 import { testModelCapabilities } from "./model-config-service";
+import { classifyModelError } from "../ai/openai-compatible-client";
 import { mapModelConfigRow } from "./model-provider-service";
 import {
   QIANWEN_FREE_POOL_PRESET,
@@ -33,6 +34,7 @@ export interface PoolVerificationResult {
   capabilities?: NonNullable<ModelConfig["capabilityStatus"]>;
   checkedAt?: string;
   error?: string;
+  errorCode?: string;
 }
 
 export interface PoolVerificationOptions {
@@ -198,8 +200,7 @@ export function updatePoolMember(id: string, raw: unknown) {
   return mapModelConfigRow(db.prepare(`${modelWithProviderSql} WHERE m.id=?`).get(id));
 }
 
-export function getPoolSummary() {
-  const members = listPoolMembers();
+export function getPoolSummary() {  const members = listPoolMembers();
   const summarize = (items: ModelConfig[]) => ({
     total: items.length,
     enabled: items.filter((item) => item.isEnabled && item.poolEnabled).length,
@@ -211,6 +212,45 @@ export function getPoolSummary() {
     vision: summarize(members.filter((item) => item.purpose === "vision")),
     text: summarize(members.filter((item) => item.purpose === "text")),
   };
+}
+
+export const POOL_REMOVAL_REASONS = ["verify_failed", "unstable", "quota", "maintenance"] as const;
+export type PoolRemovalReason = typeof POOL_REMOVAL_REASONS[number];
+
+function validatedMemberIds(ids: string[]) {
+  const parsed = z.array(z.string().min(1).max(200)).min(1).max(MAX_VERIFICATION_IDS).parse(ids);
+  const unique = [...new Set(parsed)];
+  if (unique.length !== parsed.length) throw new Error("成员 ID 不能重复");
+  const existing = new Set((db.prepare("SELECT id FROM model_configs").all() as Array<{ id: string }>)
+    .map((row) => row.id));
+  if (unique.some((id) => !existing.has(id))) throw new Error("模型池成员不存在");
+  return unique;
+}
+
+export function removePoolMembers(
+  ids: string[],
+  input: { reason: PoolRemovalReason; note?: string },
+): { removed: string[] } {
+  const unique = validatedMemberIds(ids);
+  if (!POOL_REMOVAL_REASONS.includes(input.reason)) throw new Error("剔除原因无效");
+  const now = new Date().toISOString();
+  const update = db.prepare(`UPDATE model_configs SET pool_enabled=0, pool_removed_at=?,
+    pool_removed_reason=?, pool_removed_note=?, updated_at=? WHERE id=?`);
+  db.transaction(() => {
+    for (const id of unique) update.run(now, input.reason, input.note ?? null, now, id);
+  })();
+  return { removed: unique };
+}
+
+export function restorePoolMembers(ids: string[]): { restored: string[] } {
+  const unique = validatedMemberIds(ids);
+  const now = new Date().toISOString();
+  const update = db.prepare(`UPDATE model_configs SET pool_enabled=1, pool_removed_at=NULL,
+    pool_removed_reason=NULL, pool_removed_note=NULL, updated_at=? WHERE id=?`);
+  db.transaction(() => {
+    for (const id of unique) update.run(now, id);
+  })();
+  return { restored: unique };
 }
 
 const settingsSchema = z.object({
@@ -331,11 +371,9 @@ export async function verifyPoolMembers(
         const capabilities = checked.capabilities;
         const passed = capabilities.text && capabilities.json
           && (member.purpose === "text" || capabilities.vision);
-        if (!passed || member.memberType === "ocr") {
-          db.prepare("UPDATE model_configs SET pool_enabled=0, updated_at=? WHERE id=?")
-            .run(new Date().toISOString(), id);
-        } else if (options.enablePassed) {
-          db.prepare("UPDATE model_configs SET pool_enabled=1, updated_at=? WHERE id=?")
+        if (passed && options.enablePassed && member.memberType === "general") {
+          db.prepare(`UPDATE model_configs SET pool_enabled=1, pool_removed_at=NULL,
+            pool_removed_reason=NULL, pool_removed_note=NULL, updated_at=? WHERE id=?`)
             .run(new Date().toISOString(), id);
         }
         results[index] = {
@@ -347,14 +385,14 @@ export async function verifyPoolMembers(
           checkedAt: checked.checkedAt,
         };
       } catch (error) {
-        db.prepare("UPDATE model_configs SET pool_enabled=0, updated_at=? WHERE id=?")
-          .run(new Date().toISOString(), id);
+        const classified = classifyModelError(error);
         results[index] = {
           id,
           model: member.model,
           purpose: member.purpose,
           passed: false,
-          error: error instanceof Error ? error.message : "能力验证失败",
+          error: classified.message,
+          errorCode: classified.code,
         };
       }
     }

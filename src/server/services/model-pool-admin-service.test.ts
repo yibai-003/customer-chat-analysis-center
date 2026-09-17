@@ -10,6 +10,8 @@ import {
   installQianwenFreePool,
   listModelUsageEvents,
   listPoolMembers,
+  removePoolMembers,
+  restorePoolMembers,
   updateModelPoolSettings,
   updatePoolMember,
   verifyPoolMembers,
@@ -153,7 +155,9 @@ describe("model pool administration", () => {
 
   it("verifies unique IDs with concurrency two and enables passed members only when requested", async () => {
     createDashScopeProvider();
-    const ids = installQianwenFreePool().created.slice(0, 5);
+    const ids = installQianwenFreePool().created
+      .filter((id) => listPoolMembers().find((member) => member.id === id)?.memberType === "general")
+      .slice(0, 5);
     let active = 0;
     let maxActive = 0;
     vi.mocked(testModelCapabilities).mockImplementation(async (id) => {
@@ -183,9 +187,10 @@ describe("model pool administration", () => {
       .rejects.toThrow("最多验证 50 个模型池成员");
   });
 
-  it("keeps failed members disabled and returns per-member failures", async () => {
+  it("keeps verification failures out of routing without auto-removing the member", async () => {
     createDashScopeProvider();
     const [id] = installQianwenFreePool().created;
+    db.prepare("UPDATE model_configs SET pool_enabled=1 WHERE id=?").run(id);
     vi.mocked(testModelCapabilities).mockResolvedValueOnce({
       model: "qwen3-vl-plus",
       purpose: "vision",
@@ -196,7 +201,19 @@ describe("model pool administration", () => {
     await expect(verifyPoolMembers([id], { enablePassed: true })).resolves.toEqual([
       expect.objectContaining({ id, passed: false }),
     ]);
-    expect(listPoolMembers().find((member) => member.id === id)?.poolEnabled).toBe(false);
+    const member = listPoolMembers().find((item) => item.id === id)!;
+    expect(member.poolEnabled).toBe(true);
+    expect(member.capabilityEligible).toBe(false);
+  });
+
+  it("reports per-member error categories when a verification request throws", async () => {
+    createDashScopeProvider();
+    const [id] = installQianwenFreePool().created;
+    vi.mocked(testModelCapabilities).mockRejectedValueOnce(new Error("模型服务错误 (401)"));
+
+    const [result] = await verifyPoolMembers([id], { enablePassed: true });
+    expect(result).toMatchObject({ id, passed: false, errorCode: "auth" });
+    expect(result.error).toBeTruthy();
   });
 
   it("keeps verified OCR preset members disabled for general vision routing", async () => {
@@ -227,6 +244,63 @@ describe("model pool administration", () => {
       expect.objectContaining({ pool_enabled: 0, capability_json: expect.stringContaining('"vision":true') }),
       expect.objectContaining({ pool_enabled: 0, capability_json: expect.stringContaining('"vision":true') }),
     ]);
+  });
+
+  it("removes members with reason metadata and requires fresh verification after restore", () => {
+    createDashScopeProvider();
+    const created = installQianwenFreePool().created;
+    const [first, second] = created;
+    db.prepare(`UPDATE model_configs SET pool_enabled=1, capability_json=?, capability_checked_at=?
+      WHERE id IN (?,?)`)
+      .run(JSON.stringify({ text: true, json: true, vision: true }), Date.now(), first, second);
+
+    expect(removePoolMembers([first, second], { reason: "unstable", note: "连续切换" }))
+      .toEqual({ removed: [first, second] });
+    const removed = listPoolMembers().find((member) => member.id === first)!;
+    expect(removed).toMatchObject({
+      poolEnabled: false,
+      poolRemovedReason: "unstable",
+      poolRemovedNote: "连续切换",
+    });
+    expect(removed.poolRemovedAt).toBeTruthy();
+    expect(db.prepare("SELECT id FROM model_configs WHERE id=?").get(first)).toEqual({ id: first });
+
+    db.prepare("UPDATE model_configs SET capability_json=NULL, capability_checked_at=NULL WHERE id=?").run(first);
+    expect(restorePoolMembers([first])).toEqual({ restored: [first] });
+    const restored = listPoolMembers().find((member) => member.id === first)!;
+    expect(restored.poolEnabled).toBe(true);
+    expect(restored.poolRemovedAt).toBeUndefined();
+    expect(restored.poolRemovedReason).toBeUndefined();
+    expect(restored.capabilityEligible).toBe(false);
+  });
+
+  it("enabling a previously removed general member after verification clears the removal metadata", async () => {
+    createDashScopeProvider();
+    const [id] = installQianwenFreePool().created
+      .filter((candidate) => listPoolMembers().find((member) => member.id === candidate)?.memberType === "general");
+    removePoolMembers([id], { reason: "maintenance" });
+    vi.mocked(testModelCapabilities).mockResolvedValueOnce({
+      model: "qwen3-vl-plus",
+      purpose: "vision",
+      capabilities: { text: true, json: true, vision: true, errors: {} },
+      checkedAt: "2026-09-16T00:00:00.000Z",
+    });
+
+    await expect(verifyPoolMembers([id], { enablePassed: true })).resolves.toEqual([
+      expect.objectContaining({ id, passed: true }),
+    ]);
+    const member = listPoolMembers().find((item) => item.id === id)!;
+    expect(member.poolEnabled).toBe(true);
+    expect(member.poolRemovedAt).toBeUndefined();
+  });
+
+  it("rejects duplicate, unknown, empty and oversized member selections", () => {
+    createDashScopeProvider();
+    const [id] = installQianwenFreePool().created;
+    expect(() => removePoolMembers([id, id], { reason: "maintenance" })).toThrow("成员 ID 不能重复");
+    expect(() => restorePoolMembers(["missing-member"])).toThrow("模型池成员不存在");
+    expect(() => removePoolMembers([], { reason: "maintenance" })).toThrow();
+    expect(() => restorePoolMembers(Array.from({ length: 51 }, () => randomUUID()))).toThrow();
   });
 
   it("reads summaries, validates settings, and filters newest usage events", () => {

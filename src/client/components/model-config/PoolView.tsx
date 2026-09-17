@@ -35,6 +35,20 @@ type InstallResult = {
   needsVerification: string[];
 };
 
+type RemovalReason = "verify_failed" | "unstable" | "quota" | "maintenance";
+
+const removalReasonLabels: Record<RemovalReason, string> = {
+  verify_failed: "验证失败",
+  unstable: "稳定性差",
+  quota: "额度/限流",
+  maintenance: "人工维护",
+};
+
+function eligibleForRouting(model: ModelConfig) {
+  return model.isEnabled && model.poolEnabled && model.capabilityEligible
+    && !model.quotaBlocked && !model.cooldownUntil;
+}
+
 function chunk<T>(items: T[], size: number) {
   const result: T[][] = [];
   for (let index = 0; index < items.length; index += size) {
@@ -134,6 +148,11 @@ export function PoolView({
   const [editState, setEditState] = useState<EditState | null>(null);
   const [installing, setInstalling] = useState(false);
   const [verifyingDefaults, setVerifyingDefaults] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmingRemoval, setConfirmingRemoval] = useState(false);
+  const [removalReason, setRemovalReason] = useState<RemovalReason>("maintenance");
+  const [removalNote, setRemovalNote] = useState("");
   const [message, setMessage] = useState("");
   const [settingsForm, setSettingsForm] = useState(settings);
 
@@ -144,6 +163,15 @@ export function PoolView({
     [pool.members, purpose],
   );
   const summary = pool.summary[purpose];
+  const selectedMembers = pool.members.filter((model) => selectedIds.includes(model.id));
+  const visibleSelected = members.length > 0 && members.every((model) => selectedIds.includes(model.id));
+  const selectedEligible = selectedMembers.filter(eligibleForRouting);
+  const affectedPurposes = (["vision", "text"] as const).filter((panelPurpose) => {
+    const removing = selectedEligible.filter((model) => model.purpose === panelPurpose);
+    if (!removing.length) return false;
+    return !pool.members.some((model) => model.purpose === panelPurpose
+      && eligibleForRouting(model) && !selectedIds.includes(model.id));
+  });
   const pendingDefaults = useMemo(() => pool.members.filter((model) => (
     model.isPurposeDefault
     && model.isEnabled
@@ -284,6 +312,105 @@ export function PoolView({
     }
   };
 
+  const refreshAfterMutation = async (label: string) => {
+    markDirty();
+    try {
+      await refreshPool();
+    } catch (error) {
+      reportError(`${label}已变更，但列表刷新失败：${
+        error instanceof Error ? error.message : "刷新失败"
+      }`);
+    }
+  };
+
+  const bulkVerify = async (ids: string[]) => {
+    if (!ids.length) return;
+    setBulkBusy(true);
+    setMessage("正在验证选中的模型...");
+    let mutated = false;
+    try {
+      const results = await api<Array<{ id: string; passed: boolean; error?: string }>>(
+        "/api/model-pool-members/verify",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids, enablePassed: true }),
+        },
+      );
+      mutated = true;
+      const passed = results.filter((result) => result.passed).length;
+      setMessage(`验证完成：通过 ${passed}/${results.length}`);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "批量验证失败";
+      setMessage(text);
+      reportError(text);
+    } finally {
+      setBulkBusy(false);
+    }
+    if (mutated) await refreshAfterMutation("验证结果");
+  };
+
+  const verifyProblems = () => void bulkVerify(members
+    .filter((model) => capabilityStateFor(model, settings.capabilityTtlMs) !== "verified")
+    .map((model) => model.id));
+
+  const removeSelected = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    setBulkBusy(true);
+    try {
+      await api("/api/model-pool-members/remove", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, reason: removalReason, note: removalNote || undefined }),
+      });
+      setSelectedIds([]);
+      setConfirmingRemoval(false);
+      setRemovalNote("");
+      setMessage(`已剔除 ${ids.length} 个成员，配置和历史运行保留`);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "剔除失败";
+      setMessage(text);
+      reportError(text);
+      setBulkBusy(false);
+      return;
+    }
+    setBulkBusy(false);
+    await refreshAfterMutation("成员状态");
+  };
+
+  const restoreSelected = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    setBulkBusy(true);
+    try {
+      await api("/api/model-pool-members/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      setMessage(`已恢复 ${ids.length} 个成员，需重新验证后才可参与路由`);
+    } catch (error) {
+      const text = error instanceof Error ? error.message : "恢复失败";
+      setMessage(text);
+      reportError(text);
+      setBulkBusy(false);
+      return;
+    }
+    setBulkBusy(false);
+    await refreshAfterMutation("成员状态");
+  };
+
+  const toggleSelected = (id: string) => setSelectedIds((current) => (
+    current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
+  ));
+
+  const toggleVisible = () => setSelectedIds((current) => (
+    visibleSelected
+      ? current.filter((id) => !members.some((model) => model.id === id))
+      : [...new Set([...current, ...members.map((model) => model.id)])]
+  ));
+
   const saveSettings = async () => {
     try {
       await api("/api/model-pool-settings", {
@@ -312,6 +439,8 @@ export function PoolView({
 
   const selectPurpose = (nextPurpose: ModelPurpose, focus = false) => {
     setPurpose(nextPurpose);
+    setSelectedIds([]);
+    setConfirmingRemoval(false);
     if (focus) document.getElementById(`model-pool-purpose-tab-${nextPurpose}`)?.focus();
   };
 
@@ -399,6 +528,54 @@ export function PoolView({
 
       {message && <div className="model-console-message" role="status">{message}</div>}
 
+      <div className="pool-bulk-bar" role="group" aria-label="模型池批量操作">
+        <span>{selectedIds.length ? `已选 ${selectedIds.length} 个` : "未选择成员"}</span>
+        <button type="button" disabled={!selectedIds.length || bulkBusy}
+          title={selectedIds.length ? "验证选中成员" : "先选择成员"}
+          onClick={() => void bulkVerify(selectedIds)}>验证已选</button>
+        <button type="button" disabled={!members.length || bulkBusy}
+          title={members.length ? "验证本用途未通过的成员" : "该用途暂无成员"}
+          onClick={verifyProblems}>验证失败/过期项</button>
+        <button type="button" disabled={!selectedIds.length || bulkBusy}
+          title={selectedIds.length ? "从路由池剔除，保留配置与历史" : "先选择成员"}
+          onClick={() => setConfirmingRemoval(true)}>剔除已选</button>
+        <button type="button" disabled={!selectedIds.length || bulkBusy}
+          title={selectedIds.length ? "恢复入池，需重新验证" : "先选择成员"}
+          onClick={() => void restoreSelected()}>恢复已选</button>
+        {selectedIds.length > 0 && <button type="button" disabled={bulkBusy}
+          onClick={() => { setSelectedIds([]); setConfirmingRemoval(false); }}>清空选择</button>}
+      </div>
+
+      {confirmingRemoval && (
+        <div className="pool-removal-confirm" role="alertdialog" aria-label="确认剔除成员">
+          <p>
+            将剔除 {selectedIds.length} 个成员；模型配置、服务商关联、历史运行与使用事件保留。
+            {affectedPurposes.length > 0 && (
+              <strong>
+                注意：{affectedPurposes.map((item) => item === "vision" ? "视觉" : "文本").join("、")}
+                用途将进入未就绪状态，不会自动改用付费或其他用途模型。
+              </strong>
+            )}
+          </p>
+          <label>剔除原因
+            <select aria-label="剔除原因" value={removalReason}
+              onChange={(event) => setRemovalReason(event.target.value as RemovalReason)}>
+              {(Object.keys(removalReasonLabels) as RemovalReason[]).map((reason) => (
+                <option key={reason} value={reason}>{removalReasonLabels[reason]}</option>
+              ))}
+            </select>
+          </label>
+          <label>补充说明
+            <input aria-label="剔除补充说明" maxLength={200} value={removalNote}
+              onChange={(event) => setRemovalNote(event.target.value)} />
+          </label>
+          <span className="model-row-actions">
+            <button type="button" disabled={bulkBusy} onClick={() => void removeSelected()}>确认剔除</button>
+            <button type="button" disabled={bulkBusy} onClick={() => setConfirmingRemoval(false)}>取消</button>
+          </span>
+        </div>
+      )}
+
       {(["vision", "text"] as const).map((panelPurpose) => (
         <div
           key={panelPurpose}
@@ -411,6 +588,10 @@ export function PoolView({
           {purpose === panelPurpose && <table className="model-pool-table">
           <thead>
             <tr>
+              <th>
+                <input type="checkbox" aria-label="全选当前用途成员" checked={visibleSelected}
+                  onChange={toggleVisible} />
+              </th>
               <th>模型</th>
               <th>等级</th>
               <th>计费</th>
@@ -435,6 +616,11 @@ export function PoolView({
               const status = statusFor(model, capabilityState);
               return (
                 <tr key={model.id}>
+                  <td>
+                    <input type="checkbox" aria-label={`选择成员 ${model.name}`}
+                      checked={selectedIds.includes(model.id)}
+                      onChange={() => toggleSelected(model.id)} />
+                  </td>
                   <td className="model-name-cell">
                     <strong>{model.name}</strong>
                     <code>{model.model}</code>
@@ -553,7 +739,21 @@ export function PoolView({
                       />
                     ) : model.priority}
                   </td>
-                  <td><span className={`model-status ${status.tone}`}>{status.text}</span></td>
+                  <td>
+                    <span className={`model-status ${status.tone}`}>{status.text}</span>
+                    {model.poolRemovedReason && (
+                      <small className="model-status-note">
+                        已剔除：{removalReasonLabels[model.poolRemovedReason]}
+                        {model.poolRemovedAt ? ` · ${displayDate(model.poolRemovedAt)}` : ""}
+                      </small>
+                    )}
+                    {model.consecutiveFailures > 0 && (
+                      <small className="model-status-note">
+                        连续失败 {model.consecutiveFailures} 次
+                        {model.lastFailureAt ? ` · ${displayDate(model.lastFailureAt)}` : ""}
+                      </small>
+                    )}
+                  </td>
                   <td>
                     {editing ? (
                       <span className="model-row-actions">
@@ -569,7 +769,7 @@ export function PoolView({
               );
             })}
             {members.length === 0 && (
-              <tr><td colSpan={11} className="model-console-empty">该用途暂无模型池成员。</td></tr>
+              <tr><td colSpan={12} className="model-console-empty">该用途暂无模型池成员。</td></tr>
             )}
           </tbody>
           </table>}

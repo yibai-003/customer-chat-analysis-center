@@ -12,6 +12,7 @@ import { applyReceptionQualityConfiguration } from "./009-reception-quality-norm
 import { applyUnifiedReceptionQualityConfiguration } from "./010-unified-reception-quality";
 import { applyOptimizedReceptionQualityConfiguration } from "./011-optimized-reception-quality-prompts";
 import { applyReceptionExcelSchemaConfiguration } from "./013-reception-excel-schema";
+import { applyPoolRemovalAndEfficiencyIndexes } from "./015-pool-removal-and-efficiency-indexes";
 import { applyModelPools } from "./014-model-pools";
 
 let dir: string;
@@ -24,7 +25,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -63,8 +64,8 @@ describe("versioned migrations", () => {
 
     runMigrations(db);
 
-    expect(currentSchemaVersion).toBe(14);
-    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(currentSchemaVersion).toBe(15);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
     const qwenRows = db.prepare(`
       SELECT
         model.provider_id,
@@ -104,6 +105,27 @@ describe("versioned migrations", () => {
 
     expect(db.prepare("SELECT COUNT(*) count FROM model_providers").get()).toEqual({ count: 4 });
     expect(db.prepare("SELECT COUNT(*) count FROM model_pool_settings").get()).toEqual({ count: 1 });
+  });
+  it("adds pool removal fields and efficiency indexes idempotently", () => {
+    applyLegacyBaseline(db);
+    runMigrations(db);
+    applyPoolRemovalAndEfficiencyIndexes(db);
+
+    const columns = (db.prepare("PRAGMA table_info(model_configs)").all() as Array<{ name: string }>)
+      .map((column) => column.name);
+    for (const name of ["pool_removed_at", "pool_removed_reason", "pool_removed_note"]) {
+      expect(columns).toContain(name);
+    }
+    const indexes = (db.prepare("SELECT name FROM sqlite_master WHERE type='index'").all() as Array<{ name: string }>)
+      .map((row) => row.name);
+    for (const name of [
+      "idx_field_runs_created_at",
+      "idx_field_runs_field_created",
+      "idx_model_usage_events_field_created",
+    ]) {
+      expect(indexes).toContain(name);
+    }
+    expect(columns.filter((name) => name === "pool_removed_at")).toHaveLength(1);
   });
   it("replaces legacy reception prompts with compact structured protocols", () => {
     applyLegacyBaseline(db);
