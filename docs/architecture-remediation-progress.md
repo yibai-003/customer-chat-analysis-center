@@ -2,14 +2,14 @@
 
 **计划：** `docs/architecture-remediation-plan-2026-09-17.md`
 
-**最后更新：** 2026-09-17（T5 已完成）
+**最后更新：** 2026-09-17（T6 进行中）
 
 ## 恢复入口
 
-- 当前任务：无
-- 当前步骤：无
-- 下一步：T6（质量闸门：eslint + 冒烟脚本）
-- 工作区状态：T5 已提交
+- 当前任务：T6（质量闸门）
+- 当前步骤：安装 eslint 开发依赖并编写最小规则集
+- 下一步：编写 `scripts/smoke-local.mjs` 并纳入发布流程文档
+- 工作区状态：T5 已提交；T6 未开始编码
 - 恢复方法：读本入口 → 打开计划文档查看该任务未勾选步骤 → 继续执行，无需通读项目
 
 ## 任务计划表
@@ -23,7 +23,7 @@
 | T3 执行类型注册表 | 已完成 | - | - | `field-analysis-service.ts` 706 → 178 行；新增 `execution/` 9 个文件与 3 项注册表测试；558 项测试通过；`typecheck`、`build`、`db:check` 通过 | - |
 | T4 结构化对象字段抽象 | 已完成 | - | - | 新增 `structured.ts` 工厂与探针测试；未成交/接待 5 个 handler 收敛为 3 个 definition；现有断言不改全部通过（559 项）；前台新增 `StructuredResultView` 且 DOM 不变 | - |
 | T5 前端工作区分层 | 已完成 | - | - | `useWorkspaceController.ts` 484 → 117 行；新增 `useJobSelection`（273 行）、`useAnalysisActions`（174 行）、`useSectionCatalog`（22 行）；App 与 hook 测试断言不改全部通过；全量 559 项通过 | - |
-| T6 质量闸门 | 未开始 | - | - | - | - |
+| T6 质量闸门 | 进行中 | 安装 eslint 依赖并编写最小规则集 | 编写冒烟脚本 | - | - |
 | T7 文档治理 | 未开始 | - | - | - | - |
 | T8 实例锁与平台健壮性 | 未开始 | - | - | - | - |
 
