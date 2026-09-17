@@ -18,7 +18,7 @@
 
 ## 启动
 
-使用 Node.js 22.12 或更新版本，确保 node.exe 与 npm.cmd 在 PATH 中。
+使用 Node.js 22.12 或更新版本，确保 node.exe 与 npm.cmd 在 PATH 中。容器化与局域网固定主机部署（镜像、Compose、持久卷、非 root、健康检查、升级回滚）见 [局域网部署与单实例运行](lan-deployment.md)。
 
 ```powershell
 cd "E:\客服解析中心\customer-chat-analysis-center"

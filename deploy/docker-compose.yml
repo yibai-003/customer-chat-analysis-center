@@ -1,0 +1,37 @@
+services:
+  app:
+    image: ${APP_IMAGE:-customer-chat-analysis:lan}
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: customer-chat-analysis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${APP_PORT:-8787}:8787"
+    environment:
+      PORT: "8787"
+      DATA_DIR: /app/data
+      DATABASE_PATH: /app/data/app.db
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?请在 deploy/.env 中提供独立的加密密钥}
+      SESSION_SECRET: ${SESSION_SECRET:?请在 deploy/.env 中提供会话密钥（账号单元启用后生效）}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
+      ANALYSIS_CONCURRENCY: ${ANALYSIS_CONCURRENCY:-2}
+      ANALYSIS_BATCH_SIZE: ${ANALYSIS_BATCH_SIZE:-20}
+      MIN_FREE_DISK_MB: ${MIN_FREE_DISK_MB:-512}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_RETENTION: ${BACKUP_RETENTION:-7}
+      CLEANUP_RETENTION_DAYS: ${CLEANUP_RETENTION_DAYS:-14}
+      LOG_MAX_MB: ${LOG_MAX_MB:-10}
+      LOG_RETENTION: ${LOG_RETENTION:-7}
+    volumes:
+      - ${DEPLOY_DATA_DIR:-./data}:/app/data
+      - ${DEPLOY_KNOWLEDGE_DIR:-./knowledge}:/app/knowledge
+    mem_limit: ${APP_MEMORY_LIMIT:-2g}
+    cpus: ${APP_CPU_LIMIT:-2.0}
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "7"
+    deploy:
+      replicas: 1

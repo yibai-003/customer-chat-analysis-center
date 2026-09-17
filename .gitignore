@@ -2,6 +2,9 @@ node_modules
 dist
 data
 .env
+deploy/.env
+deploy/data
+deploy/knowledge
 .secrets/
 *.key.json
 *.log
