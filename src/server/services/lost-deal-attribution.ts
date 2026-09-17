@@ -237,14 +237,6 @@ export function loadLostDealKnowledgeCandidates(field: AnalysisField): LostDealK
   };
 }
 
-export function attributionFromContext(context: Record<string, unknown>): LostDealAttribution {
-  const value = context["未成交归因"];
-  if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new Error("未成交归因结果不存在或格式无效");
-  }
-  return value as unknown as LostDealAttribution;
-}
-
 export function buildLostDealAttributionMessages(input: {
   field: AnalysisField;
   summary: string;

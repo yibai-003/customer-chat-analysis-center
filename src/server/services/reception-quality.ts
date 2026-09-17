@@ -228,12 +228,6 @@ export function deriveReceptionQualityFields(quality: ReceptionQualityAnalysis):
   };
 }
 
-export function receptionQualityFromContext(context: Record<string, unknown>): ReceptionQualityAnalysis {
-  const value = context["统一质检分析"];
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("统一质检分析结果不存在或格式无效");
-  return value as unknown as ReceptionQualityAnalysis;
-}
-
 export function buildReceptionQualityMessages(input: {
   field: AnalysisField;
   screenshotFacts: unknown;

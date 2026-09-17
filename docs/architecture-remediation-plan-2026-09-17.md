@@ -111,10 +111,10 @@
 
 **实施顺序**
 
-- [ ] 定义 `StructuredFieldDefinition`：`{ key, sources, parse(raw, ctx), derive(parsed), status(result), exportFields }`。
-- [ ] 未成交（归因、派生、话术）与接待质检（质检分析、派生）迁移到同一抽象；业务规则文件（`lost-deal-script-rules.ts`、`reception-quality-rules.ts`）保持独立，只抽象流程不抽象内容。
-- [ ] 前端抽取 `StructuredResultView`，板块差异用配置声明，替换 `App.tsx` 中的专用渲染分支。
-- [ ] 用探针验收：新增一个最小结构化板块，只允许 1 个迁移 + 1 个规则文件 + 1 个 definition 文件。
+- [x] 定义 `StructuredFieldDefinition`：`{ key, sources, parse(raw, ctx), derive(parsed), status(result), exportFields }`。
+- [x] 未成交（归因、派生、话术）与接待质检（质检分析、派生）迁移到同一抽象；业务规则文件（`lost-deal-script-rules.ts`、`reception-quality-rules.ts`）保持独立，只抽象流程不抽象内容。
+- [x] 前端抽取 `StructuredResultView`，板块差异用配置声明，替换 `App.tsx` 中的专用渲染分支。
+- [x] 用探针验收：新增一个最小结构化板块，只允许 1 个迁移 + 1 个规则文件 + 1 个 definition 文件。
 
 **验收标准**
 

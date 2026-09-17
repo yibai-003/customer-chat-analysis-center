@@ -13,6 +13,37 @@ import { RecordPager } from "./components/RecordPager";
 import { SectionConfigDialog } from "./components/SectionConfigDialog";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
 import { KnowledgeSyncStatus } from "./components/KnowledgeSyncStatus";
+import {
+  StructuredResultView,
+  structuredItems,
+  type StructuredResultViewConfig,
+} from "./components/StructuredResultView";
+
+const lostDealResultView: StructuredResultViewConfig = {
+  className: "lost-deal-attribution",
+  ariaLabel: "未成交归因摘要",
+  title: "未成交归因摘要",
+  sections: [
+    { label: "客户原因", items: (parsed) => structuredItems(parsed.customerReasons) },
+    { label: "客服原因", items: (parsed) => structuredItems(parsed.serviceReasons) },
+    { label: "需求类型", items: (parsed) => structuredItems(parsed.demandTypes) },
+  ],
+  detail: {
+    label: "具体需求",
+    fallback: "未提取",
+    value: (parsed) => typeof parsed.specificDemand === "string" ? parsed.specificDemand : "",
+  },
+  evidence: (parsed) => Array.isArray(parsed.evidence)
+    ? parsed.evidence.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
+    : [],
+  evidenceFallback: "无明确未成交依据",
+  confidence: (parsed) => typeof parsed.confidence === "number" ? parsed.confidence : Number(parsed.confidence),
+  confidenceFallback: "未提供",
+  reviewRequired: (parsed) => parsed.reviewRequired === true,
+  statusLabels: { review: "待复核", ok: "已归因" },
+  warning: "证据不足或置信度偏低，请人工复核后再作为结论使用。",
+  listFallback: "无明确依据",
+};
 
 const labels: Record<string, string> = {
   pending: "待解析", processing: "解析中", completed: "已完成",
@@ -167,59 +198,6 @@ export function formatFieldResult(value: unknown) {
   return String(value);
 }
 
-function attributionItems(value: unknown): Array<{ name: string; proposedName?: string; evidence: string; confidence: number }> {
-  if (!Array.isArray(value)) return [];
-  return value.filter((item): item is { name: string; evidence: string; confidence: number } => (
-    Boolean(item)
-    && typeof item === "object"
-    && typeof (item as Record<string, unknown>).name === "string"
-  )).map((item) => ({
-    name: typeof (item as Record<string, unknown>).proposedName === "string"
-      ? `${item.name}（建议：${(item as Record<string, unknown>).proposedName}）`
-      : item.name,
-    evidence: typeof item.evidence === "string" ? item.evidence : "",
-    confidence: typeof item.confidence === "number" ? item.confidence : Number(item.confidence) || 0,
-  }));
-}
-
-function AttributionSummary({ value }: { value: unknown }) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const attribution = value as Record<string, unknown>;
-  const customerReasons = attributionItems(attribution.customerReasons);
-  const serviceReasons = attributionItems(attribution.serviceReasons);
-  const demandTypes = attributionItems(attribution.demandTypes);
-  const evidence = Array.isArray(attribution.evidence)
-    ? attribution.evidence.filter((item): item is string => typeof item === "string" && Boolean(item.trim()))
-    : [];
-  const confidence = typeof attribution.confidence === "number"
-    ? attribution.confidence
-    : Number(attribution.confidence);
-  const reviewRequired = attribution.reviewRequired === true;
-  const list = (items: Array<{ name: string; evidence: string; confidence: number }>) => items.length
-    ? items.map((item) => `${item.name}${item.evidence ? ` · ${item.evidence}` : ""}`).join("\n")
-    : "无明确依据";
-
-  return <div className="lost-deal-attribution" aria-label="未成交归因摘要">
-    <div className="lost-deal-attribution-head">
-      <h4>未成交归因摘要</h4>
-      <span className={reviewRequired ? "review-flag" : "confidence-flag"}>
-        {reviewRequired ? "待复核" : "已归因"}
-      </span>
-    </div>
-    <div className="lost-deal-attribution-grid">
-      <div><small>客户原因</small><strong>{list(customerReasons)}</strong></div>
-      <div><small>客服原因</small><strong>{list(serviceReasons)}</strong></div>
-      <div><small>需求类型</small><strong>{list(demandTypes)}</strong></div>
-      <div><small>具体需求</small><strong>{typeof attribution.specificDemand === "string" && attribution.specificDemand ? attribution.specificDemand : "未提取"}</strong></div>
-    </div>
-    <div className="lost-deal-attribution-meta">
-      <div><small>整体证据</small><span>{evidence.length ? evidence.join("\n") : "无明确未成交依据"}</span></div>
-      <div><small>整体置信度</small><b>{Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : "未提供"}</b></div>
-    </div>
-    {reviewRequired && <p className="lost-deal-attribution-warning">证据不足或置信度偏低，请人工复核后再作为结论使用。</p>}
-  </div>;
-}
-
 export function Detail({ record, section, fields, setRecord, onAnalyze, onRetry, onSave, busy, onPreviewImage = () => undefined }: { record: RecordDetail; section?: AnalysisSection; fields: AnalysisField[]; setRecord: (r: RecordDetail) => void; onAnalyze: () => void; onRetry: (fieldKey: string) => void; onSave: () => void; busy: boolean; onPreviewImage?: (src: string, alt: string) => void }) {
   const run = section && record.analysisRuns.find((item) => item.sectionId === section.id);
   const fieldRuns = section ? record.fieldRuns.filter((item) => item.sectionId === section.id) : [];
@@ -272,7 +250,7 @@ export function Detail({ record, section, fields, setRecord, onAnalyze, onRetry,
     </div>
     <div className="detail-block detail-results">
       <h3>字段解析结果 <span>{fieldRuns.length ? `· ${fieldRuns.length} 次字段运行` : run ? `· ${run.createdAt.slice(11, 16)}` : ""}</span></h3>
-      {Boolean(attributionValue) && <AttributionSummary value={attributionValue} />}
+      {Boolean(attributionValue) && <StructuredResultView config={lostDealResultView} value={attributionValue} />}
       <div className="result-fields-grid">{displayFields.map((field) => {
         const fieldRun = fieldRuns.find((item) => item.fieldKey === field.key);
         const retryable = fieldRun && ["failed", "needs_review", "skipped"].includes(fieldRun.status);
