@@ -10,8 +10,10 @@ export function AnalysisRunDialog({
   capacity,
   onConfirm,
   onCancel,
+  selectedCount,
 }: {
   capacity: AnalysisCapacity;
+  selectedCount?: number | null;
   onConfirm: (options: Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize" | "maxPaidTokens">>) => void;
   onCancel: () => void;
 }) {
@@ -54,6 +56,10 @@ export function AnalysisRunDialog({
       <span>系统推荐</span>
       <strong>并发 {recommendation.concurrency} · 每批 {recommendation.batchSize} 条</strong>
     </div>
+
+    {typeof selectedCount === "number" && <div className="analysis-target">
+      本次只解析已选 {selectedCount} 条记录
+    </div>}
 
     {capacity.warnings.length > 0 && <div className="capacity-warnings">
       {capacity.warnings.map((warning) => <p key={warning}>{warning}</p>)}

@@ -1,5 +1,6 @@
 import { runOwnership, assertRunOwnership } from "./run-ownership";
 import { withAnalysisCancellation, analysisSignal } from "./analysis-cancellation";
+import { z } from "zod";
 import {
   acquireJobRun,
   assertJobSection,
@@ -18,6 +19,7 @@ import {
 } from "../db/repositories";
 import { analyzeRecordFields } from "./field-analysis-service";
 import { config } from "../config";
+import { db } from "../db/client";
 import type { AnalysisJobOptions, BatchProgress, Job, RecordStatus } from "../../shared/types";
 import { listFields } from "./field-config-service";
 import { withPaidTokenBudget } from "../ai/model-budget";
@@ -56,6 +58,26 @@ export interface StartedAnalysisJob {
 }
 
 const NORMAL_BATCH_STATUSES: RecordStatus[] = ["pending", "failed", "needs_review"];
+export const MAX_TARGETED_RECORDS = 200;
+
+export function prepareTargetedRecordIds(jobId: string, raw: unknown): {
+  selected: number;
+  executable: string[];
+  skipped: number;
+} {
+  const parsed = z.array(z.string().min(1).max(200)).min(1).max(MAX_TARGETED_RECORDS).parse(raw);
+  const unique = [...new Set(parsed)];
+  if (unique.length !== parsed.length) throw new Error("记录 ID 不能重复");
+  const placeholders = unique.map(() => "?").join(",");
+  const rows = db.prepare(`SELECT id, job_id, status FROM records WHERE id IN (${placeholders})`)
+    .all(...unique) as Array<{ id: string; job_id: string; status: RecordStatus }>;
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  if (unique.some((id) => byId.get(id)?.job_id !== jobId)) {
+    throw new Error("记录不存在或不属于当前任务");
+  }
+  const executable = unique.filter((id) => NORMAL_BATCH_STATUSES.includes(byId.get(id)!.status));
+  return { selected: unique.length, executable, skipped: unique.length - executable.length };
+}
 const defaultPreparationDependencies: AnalysisPreparationDependencies = {
   getProgressBaseline: getAnalysisProgressBaseline,
   listAnalysisFields: listFields,

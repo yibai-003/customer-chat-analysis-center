@@ -391,7 +391,7 @@ describe("explicit import section and manual refresh", () => {
       return defaultResponse(url);
     };
     await act(async () => root.render(<App />));
-    await act(async () => host.querySelector<HTMLButtonElement>(".record")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")!.click());
     await act(async () => [...host.querySelectorAll<HTMLButtonElement>(".detail-actions button")].find(b => b.textContent === "保存复核")!.click());
     expect(saved).toBe(true);
     expect(host.querySelector(".record .review")?.textContent).toBe("已确认");
@@ -404,7 +404,7 @@ describe("explicit import section and manual refresh", () => {
     responseFor = (url, init) => url === "/api/records/page-1" && init?.method === "PATCH"
       ? { ok: false, json: async () => ({ success: false, error: "保存失败测试" }) } as Response : fallback(url, init);
     await act(async () => root.render(<App />));
-    await act(async () => host.querySelector<HTMLButtonElement>(".record")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")!.click());
     const note = host.querySelector<HTMLTextAreaElement>(".detail-scroll > .result-field textarea")!;
     await act(async () => { Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(note, "未保存备注"); note.dispatchEvent(new Event("input", { bubbles: true })); });
     const button = [...host.querySelectorAll<HTMLButtonElement>(".detail-actions button")].find(b => b.textContent === "保存复核")!;
@@ -452,7 +452,7 @@ describe("explicit import section and manual refresh", () => {
   it("refreshes job progress without replacing unsaved review notes", async () => {
     await act(async () => root.render(<App />));
     await waitFor(() => expect(host.textContent).toContain("记录 01"));
-    await act(async () => host.querySelector<HTMLButtonElement>(".record")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")!.click());
     const note = host.querySelector<HTMLTextAreaElement>(".detail-scroll > .result-field textarea")!;
     await act(async () => {
       Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(note, "保留我的复核备注");
@@ -481,6 +481,44 @@ async function flushMicrotasks() {
     await Promise.resolve();
   });
 }
+
+describe("targeted record analysis", () => {
+  it("sends only the selected records and keeps checkbox clicks from opening the detail", async () => {
+    responseFor = (url, init) => {
+      if (url === "/api/jobs/job-1/analyze" && init?.method === "POST") {
+        return jsonResponse({
+          ...jobs[0],
+          status: "processing",
+          targeted: { selected: 1, executable: 1, skipped: 0 },
+        });
+      }
+      return defaultResponse(url);
+    };
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+
+    const checkbox = host.querySelector<HTMLInputElement>('input[aria-label="选择记录 1"]')!;
+    await act(async () => checkbox.click());
+    expect(host.textContent).toContain("已选择 1 条");
+    expect(host.textContent).not.toContain("RECORD 01");
+
+    const targeted = [...host.querySelectorAll<HTMLButtonElement>(".record-bulk-bar button")]
+      .find((button) => button.textContent === "解析已选");
+    await act(async () => targeted!.click());
+    await waitFor(() => expect(host.textContent).toContain("本次只解析已选 1 条记录"));
+
+    const confirm = [...host.querySelectorAll<HTMLButtonElement>(".analysis-run-modal button")]
+      .find((button) => button.textContent?.includes("开始解析"));
+    await act(async () => confirm!.click());
+
+    await waitFor(() => expect(
+      requests.filter((url) => url === "/api/jobs/job-1/analyze"),
+    ).toHaveLength(1));
+    const analyzeRequest = requestOptions.find((option) => option.url === "/api/jobs/job-1/analyze")!;
+    expect(JSON.parse(String(analyzeRequest.init?.body))).toMatchObject({ recordIds: ["page-1"] });
+    expect(host.textContent).toContain("已选择 1 条：可执行 1 条，跳过 0 条");
+  });
+});
 
 describe("App record pagination", () => {
   it("loads capacity before batch analysis and posts the confirmed run options", async () => {
@@ -560,7 +598,7 @@ describe("App record pagination", () => {
     );
     await act(async () => root.render(<App />));
     await waitFor(() => expect(host.textContent).toContain("记录 01"));
-    await act(async () => host.querySelector<HTMLButtonElement>(".record")?.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")?.click());
     await waitFor(() => expect(host.textContent).toContain("RECORD 01"));
 
     const analyzeButton = [...host.querySelectorAll<HTMLButtonElement>(".detail-actions button")]
@@ -968,7 +1006,7 @@ describe("App record pagination", () => {
     await act(async () => root.render(<App />));
     await waitFor(() => expect(host.textContent).toContain("记录 01"));
 
-    await act(async () => host.querySelector<HTMLButtonElement>(".record")?.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")?.click());
     await waitFor(() => expect(host.textContent).toContain("RECORD 01"));
     await act(async () => {
       host.querySelector<HTMLButtonElement>('button[aria-label="下一页"]')?.click();
@@ -988,7 +1026,7 @@ describe("App record pagination", () => {
     await act(async () => root.render(<App />));
     await waitFor(() => expect(host.textContent).toContain("记录 01"));
 
-    await act(async () => host.querySelector<HTMLButtonElement>(".record")?.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")?.click());
     await waitFor(() => expect(requests).toContain("/api/records/page-1"));
 
     const filter = host.querySelector<HTMLSelectElement>(".content-actions select");
@@ -1080,7 +1118,7 @@ describe("App record pagination", () => {
     };
     await act(async () => root.render(<App />));
     await waitFor(() => expect(host.textContent).toContain("记录 01"));
-    await act(async () => host.querySelector<HTMLButtonElement>(".record")?.click());
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")?.click());
     await waitFor(() => expect(host.textContent).toContain("RECORD 01"));
 
     const analyzeButton = [...host.querySelectorAll<HTMLButtonElement>(".content-actions button")]

@@ -109,6 +109,8 @@ export function useWorkspaceController() {
     changeFilter: records.changeFilter,
     analyzeRecord: actions.analyzeRecord,
     requestBatchAnalysis: actions.requestBatchAnalysis,
+    pendingTargetedCount: actions.pendingTargetedCount,
+    targetedSummary: actions.targetedSummary,
     startBatchAnalysis: actions.startBatchAnalysis,
     retryField: actions.retryField,
     saveReview,

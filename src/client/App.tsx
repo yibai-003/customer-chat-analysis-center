@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { BotanicalArt, ArtworkCredits } from "./components/BotanicalArt";
 import type { AnalysisField, AnalysisSection, RecordDetail } from "../shared/types";
 import { AnalysisProgress } from "./components/AnalysisProgress";
@@ -12,6 +13,7 @@ import { ModelConfigDialog } from "./components/ModelConfigDialog";
 import { RecordPager } from "./components/RecordPager";
 import { SectionConfigDialog } from "./components/SectionConfigDialog";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
+import { useRecordSelection } from "./hooks/useRecordSelection";
 import { KnowledgeSyncStatus } from "./components/KnowledgeSyncStatus";
 import {
   StructuredResultView,
@@ -99,6 +101,8 @@ export default function App() {
     handleImportCompleted,
     analyzeRecord,
     requestBatchAnalysis,
+    pendingTargetedCount,
+    targetedSummary,
     startBatchAnalysis,
     retryField,
     saveReview,
@@ -108,6 +112,10 @@ export default function App() {
     requestRecordDetail,
     editSelectedRecord,
   } = useWorkspaceController();
+  const selection = useRecordSelection({ jobId: job?.id, sectionId: currentSection?.id, filter });
+  useEffect(() => {
+    if (targetedSummary && targetedSummary.skipped > 0) selection.clear();
+  }, [targetedSummary]);
   if (knowledgeSection) {
     return <KnowledgeWorkspace
       section={knowledgeSection}
@@ -149,14 +157,24 @@ export default function App() {
           {notice && <div className="notice">{notice}</div>}
           {!job ? <div className="blank"><div className="upload-art"><b>XLSX</b><i>＋</i></div><h2>把聊天记录带进来</h2><p>支持带嵌入图片和辅助字段的 .xlsx 文件</p><label className="button primary large">选择文件<input hidden type="file" accept=".xlsx" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) importFile(file); }} /></label></div> :
             <div className="record-list">
-              <div className="list-head"><span />记录<span>来源字段</span><span>解析状态</span><span>复核</span><span>操作</span></div>
-              {recordPage.items.map((record, index) => <button key={record.id} className={`record ${selected?.id === record.id ? "active" : ""}`} onClick={() => job && void requestRecordDetail(record.id, job.id, { explicit: true })}>
-                <span className="checkbox">{index === 0 ? "✓" : ""}</span>
-                <span className="record-main"><img src={record.imageUrl} alt="" loading="lazy" decoding="async" /><span><strong>记录 {String(record.rowNumber).padStart(2, "0")}</strong><small>{record.sheetName} · 第 {record.rowNumber} 行</small></span></span>
-                <span className="field-tags">{Object.entries(record.sourceFields).slice(0, 2).map(([key, value]) => <em key={key}>{key}: {value || "空"}</em>)}</span>
-                <span className={`status ${record.status}`}><i />{labels[record.status]}</span>
-                <span className={`review ${record.reviewStatus}`}>{labels[record.reviewStatus] ?? "未复核"}</span><span className="view">查看 →</span>
-              </button>)}
+              <div className="list-head"><label className="record-check"><input type="checkbox" aria-label="全选本页记录" checked={recordPage.items.length > 0 && recordPage.items.every((record) => selection.selectedIds.includes(record.id))} onChange={() => selection.togglePage(recordPage.items.map((record) => record.id))} /></label><span>记录</span><span>来源字段</span><span>解析状态</span><span>复核</span><span>操作</span></div>
+              <div className="record-bulk-bar">
+                <span>{selection.selectedIds.length ? `已选择 ${selection.selectedIds.length} 条` : "未选择记录"}</span>
+                <button type="button" disabled={!selection.selectedIds.length || busy || taskActionBusy || job.status === "processing" || job.status === "cancelled"} onClick={() => void requestBatchAnalysis(selection.selectedIds)}>解析已选</button>
+                {selection.selectedIds.length > 0 && <button type="button" disabled={busy} onClick={selection.clear}>清空选择</button>}
+              </div>
+              {recordPage.items.map((record) => {
+                const checked = selection.selectedIds.includes(record.id);
+                return <div key={record.id} className={`record ${selected?.id === record.id ? "active" : ""}`}>
+                  <label className="record-check"><input type="checkbox" aria-label={`选择记录 ${record.rowNumber}`} checked={checked} onChange={() => selection.toggle(record.id)} /></label>
+                  <button className="record-select" onClick={() => job && void requestRecordDetail(record.id, job.id, { explicit: true })}>
+                    <span className="record-main"><img src={record.imageUrl} alt="" loading="lazy" decoding="async" /><span><strong>记录 {String(record.rowNumber).padStart(2, "0")}</strong><small>{record.sheetName} · 第 {record.rowNumber} 行</small></span></span>
+                    <span className="field-tags">{Object.entries(record.sourceFields).slice(0, 2).map(([key, value]) => <em key={key}>{key}: {value || "空"}</em>)}</span>
+                    <span className={`status ${record.status}`}><i />{labels[record.status]}</span>
+                    <span className={`review ${record.reviewStatus}`}>{labels[record.reviewStatus] ?? "未复核"}</span><span className="view">查看 →</span>
+                  </button>
+                </div>;
+              })}
               {!recordPage.items.length && <div className="no-results">当前筛选下没有记录</div>}
               <RecordPager
                 page={page}
@@ -177,6 +195,7 @@ export default function App() {
       {dialog === "section" && <SectionConfigDialog sections={sections} close={() => setDialog(null)} saved={() => { setDialog(null); refresh(); }} />}
       {analysisCapacity && <AnalysisRunDialog
         capacity={analysisCapacity}
+        selectedCount={pendingTargetedCount}
         onCancel={() => setAnalysisCapacity(null)}
         onConfirm={(options) => void startBatchAnalysis({
           concurrency: options.concurrency,

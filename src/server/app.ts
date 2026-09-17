@@ -11,7 +11,7 @@ import { startImportJob } from "./services/import-worker";
 import { previewWorkbookStreaming } from "./services/streaming-xlsx-import-service";
 import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSections, upsertSection, deleteSection, requestJobPause, requestJobCancel, createImportJob, getImportJob, updateImportJob } from "./db/repositories";
 import { analyzeRecord } from "./services/analysis-service";
-import { analyzeJob, retryFailedJob } from "./services/batch-analysis-service";
+import { analyzeJob, prepareTargetedRecordIds, retryFailedJob } from "./services/batch-analysis-service";
 import { exportJob } from "./services/excel-export-service";
 import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig, getModelReadinessChecks, getModelReadinessActions } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
@@ -176,12 +176,25 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.post("/api/jobs/:id/analyze", async (req, res) => {
     try {
       if (!getJob(req.params.id)) return fail(res, "任务不存在", 404);
-      void (dependencies.analyzeJobRunner ?? analyzeJob)(req.params.id, req.body.sectionId, {
-        concurrency: req.body.concurrency,
-        batchSize: req.body.batchSize,
-        maxPaidTokens: req.body.maxPaidTokens,
-      }).catch((error) => console.error("批量解析失败", error));
-      return ok(res, getJob(req.params.id));
+      const targeted = req.body.recordIds !== undefined
+        ? prepareTargetedRecordIds(req.params.id, req.body.recordIds)
+        : undefined;
+      if (!targeted || targeted.executable.length) {
+        void (dependencies.analyzeJobRunner ?? analyzeJob)(req.params.id, req.body.sectionId, {
+          concurrency: req.body.concurrency,
+          batchSize: req.body.batchSize,
+          maxPaidTokens: req.body.maxPaidTokens,
+          recordIds: targeted?.executable,
+        }).catch((error) => console.error("批量解析失败", error));
+      }
+      return ok(res, {
+        ...getJob(req.params.id),
+        targeted: targeted ? {
+          selected: targeted.selected,
+          executable: targeted.executable.length,
+          skipped: targeted.skipped,
+        } : undefined,
+      });
     } catch (error) { return fail(res, error); }
   });
   app.post("/api/jobs/:id/pause", (req, res) => {

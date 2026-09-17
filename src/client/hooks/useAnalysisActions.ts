@@ -1,3 +1,4 @@
+import { useRef, useState } from "react";
 import type { AnalysisCapacity, AnalysisJobOptions, AnalysisSection, Job } from "../../shared/types";
 import { api } from "../api";
 import { analysisStatusMessage } from "../analysis-status";
@@ -6,6 +7,7 @@ import type { useRecordWorkspace } from "./useRecordWorkspace";
 import type { JobOperationHelpers } from "./workspace-types";
 
 type AnalysisRunOptions = Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize" | "maxPaidTokens">>;
+type TargetedSummary = { selected: number; executable: number; skipped: number };
 type PollControls = Pick<
   ReturnType<typeof useAnalysisPolling>,
   "startAnalysisPoll" | "cancelAnalysisPoll" | "suspendAnalysisPoll" | "resumeAnalysisPoll"
@@ -45,6 +47,13 @@ export function useAnalysisActions(deps: {
   } = deps;
   const { captureJobOperation, isJobOperationCurrent, startBusyOperation, finishBusyOperation, startTaskActionOperation, finishTaskActionOperation } = operations;
   const { startAnalysisPoll, cancelAnalysisPoll, suspendAnalysisPoll, resumeAnalysisPoll } = poll;
+  const pendingRecordIdsRef = useRef<string[] | null>(null);
+  const [pendingTargetedCount, setPendingTargetedCount] = useState<number | null>(null);
+  const [targetedSummary, setTargetedSummary] = useState<{
+    selected: number;
+    executable: number;
+    skipped: number;
+  } | null>(null);
 
   const analyzeRecord = async (recordId: string) => {
     if (!job || !currentSection) return;
@@ -68,8 +77,10 @@ export function useAnalysisActions(deps: {
     } finally { finishBusyOperation(operation); }
   };
 
-  const requestBatchAnalysis = async () => {
+  const requestBatchAnalysis = async (recordIds?: string[]) => {
     if (!job || !currentSection) return;
+    pendingRecordIdsRef.current = recordIds && recordIds.length ? [...recordIds] : null;
+    setPendingTargetedCount(pendingRecordIdsRef.current?.length ?? null);
     if (!modelReadiness.ready) {
       setNotice("请先在模型配置中验证并启用对应的视觉模型和文本模型");
       setDialog("model");
@@ -90,23 +101,32 @@ export function useAnalysisActions(deps: {
     }
   };
 
+  const targetedNotice = (summary: TargetedSummary) =>
+    `已选择 ${summary.selected} 条：可执行 ${summary.executable} 条，跳过 ${summary.skipped} 条`;
+
   const startBatchAnalysis = async (options: AnalysisRunOptions) => {
     if (!job || !currentSection) return;
     setAnalysisCapacity(null);
     const operation = captureJobOperation();
     const operationJobId = job.id;
     const sectionId = currentSection.id;
+    const recordIds = pendingRecordIdsRef.current;
+    pendingRecordIdsRef.current = null;
+    setPendingTargetedCount(null);
     startBusyOperation(operation); setNotice("");
     try {
-      const current = await api<Job>(`/api/jobs/${operationJobId}/analyze`, {
+      const current = await api<Job & { targeted?: TargetedSummary }>(`/api/jobs/${operationJobId}/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sectionId, ...options }),
+        body: JSON.stringify({ sectionId, ...options, ...(recordIds ? { recordIds } : {}) }),
       });
       if (!isJobOperationCurrent(operation)) return;
+      const targeted = current.targeted;
+      if (targeted) setTargetedSummary(targeted);
       commitJobSummary(current);
       finishBusyOperation(operation);
       if (current.status === "processing") {
+        if (targeted) setNotice(targetedNotice(targeted));
         startAnalysisPoll(current);
       } else {
         await refreshCurrentRecordPage(
@@ -114,7 +134,9 @@ export function useAnalysisActions(deps: {
           () => mountedRef.current && isJobOperationCurrent(operation),
         );
         if (mountedRef.current && isJobOperationCurrent(operation)) {
-          setNotice("解析完成，请检查需复核记录");
+          setNotice(targeted
+            ? `${targetedNotice(targeted)}；解析完成，请检查需复核记录`
+            : "解析完成，请检查需复核记录");
         }
       }
     } catch (error) {
@@ -178,5 +200,13 @@ export function useAnalysisActions(deps: {
     }
   };
 
-  return { analyzeRecord, requestBatchAnalysis, startBatchAnalysis, retryField, taskAction };
+  return {
+    analyzeRecord,
+    requestBatchAnalysis,
+    startBatchAnalysis,
+    retryField,
+    taskAction,
+    pendingTargetedCount,
+    targetedSummary,
+  };
 }

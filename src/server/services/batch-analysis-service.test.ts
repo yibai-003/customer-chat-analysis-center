@@ -23,6 +23,7 @@ import { createFieldRun } from "./field-run-service";
 import { paidTokensRemaining } from "../ai/model-budget";
 import {
   analyzeJob,
+  prepareTargetedRecordIds,
   retryFailedJob,
   resolveAnalysisRunOptions,
   runInBatches,
@@ -105,6 +106,28 @@ describe("batch analysis scheduling", () => {
 
     expect(loaded).toHaveLength(3);
     expect(processed).toEqual([1, 2, 3]);
+  });
+
+  it("validates targeted record selections and splits executable from skipped records", () => {
+    const job = createJob("targeted.xlsx", "targeted.xlsx", { id: "refund", name: "refund" });
+    addRecords(job.id, [1, 2, 3, 4].map((rowNumber) => ({
+      sheetName: "Sheet1", rowNumber, anchor: {}, sourceFields: {}, imagePath: "test.png",
+    })));
+    const records = listRecords(job.id);
+    updateRecord(records[0].id, { status: "completed" });
+    updateRecord(records[1].id, { status: "failed" });
+    const otherJob = createJob("other.xlsx", "other.xlsx", { id: "refund", name: "refund" });
+    addRecords(otherJob.id, [{ sheetName: "Sheet1", rowNumber: 1, anchor: {}, sourceFields: {}, imagePath: "other.png" }]);
+    const otherRecord = listRecords(otherJob.id)[0];
+
+    expect(prepareTargetedRecordIds(job.id, [records[1].id, records[0].id, records[2].id]))
+      .toEqual({ selected: 3, executable: [records[1].id, records[2].id], skipped: 1 });
+    expect(() => prepareTargetedRecordIds(job.id, [])).toThrow();
+    expect(() => prepareTargetedRecordIds(job.id, [records[1].id, records[1].id])).toThrow("不能重复");
+    expect(() => prepareTargetedRecordIds(job.id, [otherRecord.id])).toThrow("不属于当前任务");
+    expect(() => prepareTargetedRecordIds(job.id, ["missing-record"])).toThrow("不属于当前任务");
+    expect(() => prepareTargetedRecordIds(job.id, Array.from({ length: 201 }, (_, index) => `missing-${index}`)))
+      .toThrow();
   });
 
   it("does not load another batch after a pause is requested", async () => {
