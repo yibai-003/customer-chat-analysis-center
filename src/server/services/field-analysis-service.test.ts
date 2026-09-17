@@ -7,58 +7,76 @@ import { updateRecord } from "../db/repositories";
 import { analyzeField, analyzeRecordFields, executeFieldGraph } from "./field-analysis-service";
 import { createFieldRun, getFieldResultContext } from "./field-run-service";
 import { listKnowledgeItems } from "./knowledge/knowledge-repository";
-import type { AnalysisField } from "../../shared/types";
+import type { AnalysisField, ModelConfig, ModelPurpose, ModelRouteResult } from "../../shared/types";
 
-vi.mock("./model-config-service", () => ({
-  getModelForPurpose: vi.fn((purpose: "vision" | "text") => ({
-    id: `${purpose}-model`,
-    name: `${purpose} model`,
-    baseUrl: "https://model.example/v1",
-    apiKey: "secret",
-    model: `${purpose}-model`,
-    supportsVision: purpose === "vision",
-    temperature: 0,
-    maxTokens: 200,
-  })),
-  getModelsForPurpose: vi.fn((purpose: "vision" | "text") => [{
-    id: `${purpose}-model`,
-    name: `${purpose} model`,
-    baseUrl: "https://model.example/v1",
-    apiKey: "secret",
-    model: `${purpose}-model`,
-    supportsVision: purpose === "vision",
-    temperature: 0,
-    maxTokens: 200,
-  }]),
-}));
-
-vi.mock("../ai/openai-compatible-client", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../ai/openai-compatible-client")>();
-  return {
-    ...actual,
-    callVisionModel: vi.fn(),
-  };
+vi.mock("./model-pool-service", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./model-pool-service")>();
+  return { ...actual, callModelPool: vi.fn() };
 });
 
 vi.mock("./knowledge/knowledge-match-service", () => ({
-  matchKnowledgeItem: vi.fn(async (input: { field: AnalysisField }) => ({
-    status: "completed",
-    result: { [input.field.key]: "knowledge-item-1" },
-    snapshotId: "task-5-dispatch-snapshot",
-  })),
+  matchKnowledgeItem: vi.fn(),
 }));
 
-import { callVisionModel } from "../ai/openai-compatible-client";
-import { getModelForPurpose, getModelsForPurpose } from "./model-config-service";
 import { matchKnowledgeItem } from "./knowledge/knowledge-match-service";
+import { callModelPool, ModelPoolError, type ModelPoolCallOptions } from "./model-pool-service";
 
-async function defaultModelCall(_model: unknown, messages: unknown[]) {
+function routedModel(purpose: ModelPurpose): ModelConfig {
+  return {
+    id: `${purpose}-model-id`,
+    name: `${purpose} model`,
+    baseUrl: "https://model.example/v1",
+    maskedApiKey: "********",
+    model: `${purpose}-model`,
+    supportsVision: purpose === "vision",
+    temperature: 0,
+    maxTokens: 200,
+    isDefault: false,
+    purpose,
+    isPurposeDefault: true,
+    isEnabled: true,
+    poolEnabled: true,
+    billingMode: "free",
+    qualityTier: "A",
+    priority: 100,
+    thinkingMode: false,
+    memberType: "general",
+    quotaTotalTokens: 1000,
+    quotaUsedTokens: 0,
+    quotaSafetyRatio: 0.95,
+    consecutiveFailures: 0,
+    capabilityEligible: true,
+    quotaBlocked: false,
+  };
+}
+
+function routedResponse(
+  purpose: ModelPurpose,
+  content: string,
+  raw = `{"purpose":"${purpose}"}`,
+  usage = { prompt_tokens: 3, completion_tokens: 2 },
+): ModelRouteResult {
+  const model = routedModel(purpose);
+  return {
+    content,
+    raw,
+    usage,
+    model,
+    attempts: [{
+      modelConfigId: model.id,
+      model: model.model,
+      status: "success",
+      durationMs: 7,
+    }],
+  };
+}
+
+async function defaultModelCall(messages: unknown[], options: ModelPoolCallOptions) {
   const { currentModelBudget } = await import("../ai/model-budget");
   currentModelBudget()?.consume();
   const serialized = JSON.stringify(messages);
   if (serialized.includes("customerReasons")) {
-    return {
-      content: JSON.stringify({
+    return routedResponse(options.purpose, JSON.stringify({
         customerReasons: [{ knowledgeItemId: "lost-customer-item", evidence: "客户说预算只有100元", confidence: 0.92 }],
         serviceReasons: [{ knowledgeItemId: "lost-service-item", evidence: "客户询问保障但客服未回应", confidence: 0.82 }],
         demandTypes: [{ name: "价格需求", evidence: "客户询问优惠", confidence: 0.88 }],
@@ -66,20 +84,13 @@ async function defaultModelCall(_model: unknown, messages: unknown[]) {
         specificDemandEvidence: "客户说预算只有100元",
         evidence: ["客户说预算只有100元", "客户询问保障但客服未回应"],
         confidence: 0.86,
-      }),
-      raw: "{}",
-      usage: {},
-    };
+      }));
   }
   const lostDealSummary = serialized.includes("未成交分析");
   const key = lostDealSummary ? "截图内容总结" : serialized.includes("图片 AI") ? "imageAi" : "textAi";
-  return {
-    content: JSON.stringify({ [key]: lostDealSummary
+  return routedResponse(options.purpose, JSON.stringify({ [key]: lostDealSummary
       ? "客户说预算只有100元。客户询问保障但客服未回应。客户询问优惠。"
-      : key === "imageAi" ? "图片结果" : "文本结果" }),
-    raw: "{}",
-    usage: {},
-  };
+      : key === "imageAi" ? "图片结果" : "文本结果" }));
 }
 
 const fields: AnalysisField[] = [
@@ -121,7 +132,20 @@ describe("field analysis executor", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(callVisionModel).mockImplementation(defaultModelCall);
+    vi.mocked(callModelPool).mockReset();
+    vi.mocked(callModelPool).mockImplementation(defaultModelCall);
+    vi.mocked(matchKnowledgeItem).mockReset();
+    vi.mocked(matchKnowledgeItem).mockImplementation(async (input: { field: AnalysisField }) => ({
+      status: "completed",
+      result: { [input.field.key]: "knowledge-item-1" },
+      snapshotId: "task-5-dispatch-snapshot",
+      route: routedResponse(
+        "text",
+        '{"knowledgeItemId":"knowledge-item-1"}',
+        '{"knowledgeRoute":true}',
+        { prompt_tokens: 11, completion_tokens: 4 },
+      ),
+    }));
     db.exec(`
       DELETE FROM knowledge_match_snapshots;
       DELETE FROM analysis_field_runs;
@@ -236,12 +260,75 @@ describe("field analysis executor", () => {
       needsReview: 0,
       skipped: 0,
     });
-    expect(vi.mocked(getModelsForPurpose).mock.calls.map(([purpose]) => purpose)).toEqual([
-      "vision",
-      "text",
+    expect(vi.mocked(callModelPool).mock.calls.map(([, options]) => options)).toEqual([
+      expect.objectContaining({
+        purpose: "vision",
+        recordId: "task-5-dispatch-record",
+        fieldId: "task-5-image",
+        operation: "ai",
+      }),
+      expect.objectContaining({
+        purpose: "text",
+        recordId: "task-5-dispatch-record",
+        fieldId: "task-5-text",
+        operation: "ai",
+      }),
     ]);
-    expect(callVisionModel).toHaveBeenCalledTimes(2);
     expect(matchKnowledgeItem).toHaveBeenCalledTimes(1);
+    const imageRun = db.prepare(`
+      SELECT model_config_snapshot_json, raw_response, input_tokens, output_tokens
+      FROM analysis_field_runs
+      WHERE field_id = 'task-5-image'
+    `).get() as {
+      model_config_snapshot_json: string;
+      raw_response: string;
+      input_tokens: number;
+      output_tokens: number;
+    };
+    expect(JSON.parse(imageRun.model_config_snapshot_json)).toEqual({
+      id: "vision-model-id",
+      name: "vision model",
+      model: "vision-model",
+      purpose: "vision",
+      attempts: [{
+        modelConfigId: "vision-model-id",
+        model: "vision-model",
+        status: "success",
+        durationMs: 7,
+      }],
+    });
+    expect(imageRun).toMatchObject({
+      raw_response: '{"purpose":"vision"}',
+      input_tokens: 3,
+      output_tokens: 2,
+    });
+    const matchRun = db.prepare(`
+      SELECT model_config_snapshot_json, raw_response, input_tokens, output_tokens
+      FROM analysis_field_runs
+      WHERE field_id = 'task-5-match'
+    `).get() as {
+      model_config_snapshot_json: string;
+      raw_response: string;
+      input_tokens: number;
+      output_tokens: number;
+    };
+    expect(JSON.parse(matchRun.model_config_snapshot_json)).toEqual({
+      id: "text-model-id",
+      name: "text model",
+      model: "text-model",
+      purpose: "text",
+      attempts: [{
+        modelConfigId: "text-model-id",
+        model: "text-model",
+        status: "success",
+        durationMs: 7,
+      }],
+    });
+    expect(matchRun).toMatchObject({
+      raw_response: '{"knowledgeRoute":true}',
+      input_tokens: 11,
+      output_tokens: 4,
+    });
     const extractRun = db.prepare(`
       SELECT result_json, model_config_snapshot_json
       FROM analysis_field_runs
@@ -304,20 +391,21 @@ describe("field analysis executor", () => {
         timestamp,
       );
     }
-    vi.mocked(callVisionModel)
-      .mockImplementationOnce(async () => ({
-        content: JSON.stringify({
+    vi.mocked(callModelPool)
+      .mockImplementationOnce(async (_messages, options) => routedResponse(
+        options.purpose,
+        JSON.stringify({
           截图内容总结: {
             会话场景: "混合",
             聊天内容总结: "客户先咨询尺寸，后申请退款。",
             证据片段: ["客户：尺寸多大", "客户：我要退款"],
           },
         }),
-        raw: '{"facts":true}',
-        usage: {},
-      }))
-      .mockImplementationOnce(async () => ({
-        content: JSON.stringify({
+        '{"facts":true}',
+      ))
+      .mockImplementationOnce(async (_messages, options) => routedResponse(
+        options.purpose,
+        JSON.stringify({
           scene: "混合",
           preSaleIssues: [{
             name: "答非所问",
@@ -339,9 +427,8 @@ describe("field analysis executor", () => {
           suggestion: "先回答尺寸，再明确说明退款处理步骤",
           confidence: 0.9,
         }),
-        raw: '{"quality":true}',
-        usage: {},
-      }));
+        '{"quality":true}',
+      ));
 
     const progress = await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
 
@@ -352,8 +439,30 @@ describe("field analysis executor", () => {
       needsReview: 0,
       skipped: 0,
     });
-    expect(callVisionModel).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(getModelsForPurpose).mock.calls.map(([purpose]) => purpose)).toEqual(["vision", "text"]);
+    expect(vi.mocked(callModelPool).mock.calls.map(([, options]) => options)).toEqual([
+      expect.objectContaining({
+        purpose: "vision",
+        recordId: "task-5-dispatch-record",
+        fieldId: "reception-facts",
+        operation: "ai",
+      }),
+      expect.objectContaining({
+        purpose: "text",
+        recordId: "task-5-dispatch-record",
+        fieldId: "reception-quality",
+        operation: "reception_quality_analysis",
+        validate: expect.any(Function),
+      }),
+    ]);
+    const qualityValidator = vi.mocked(callModelPool).mock.calls[1][1].validate;
+    expect(qualityValidator?.('{"scene":"invalid"}')).toEqual({ valid: false });
+    expect(qualityValidator?.(JSON.stringify({
+      scene: "无法判断",
+      preSaleIssues: [],
+      afterSaleIssues: [],
+      unverifiableItems: ["缺少可靠时间戳"],
+      confidence: 0.4,
+    }))).toEqual({ valid: true });
     const runs = db.prepare(`
       SELECT f.key, r.result_json, r.model_config_snapshot_json
       FROM analysis_field_runs r
@@ -467,12 +576,22 @@ describe("field analysis executor", () => {
       needsReview: 0,
       skipped: 0,
     });
-    expect(callVisionModel).toHaveBeenCalledTimes(2);
-    expect(vi.mocked(callVisionModel).mock.calls.map((call) => call[2])).toEqual([
-      { attempts: 1 },
-      { attempts: 1 },
+    expect(callModelPool).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(callModelPool).mock.calls.map(([, options]) => options)).toEqual([
+      expect.objectContaining({
+        purpose: "vision",
+        recordId: "task-5-dispatch-record",
+        fieldId: "lost-summary",
+        operation: "ai",
+      }),
+      expect.objectContaining({
+        purpose: "text",
+        recordId: "task-5-dispatch-record",
+        fieldId: "lost-attribution",
+        operation: "lost_deal_attribution",
+        validate: expect.any(Function),
+      }),
     ]);
-    expect(vi.mocked(getModelsForPurpose).mock.calls.map(([purpose]) => purpose)).toEqual(["vision", "text"]);
     const runs = db.prepare(`
       SELECT f.key, r.result_json
       FROM analysis_field_runs r
@@ -506,7 +625,7 @@ describe("field analysis executor", () => {
     await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
     expect(db.prepare("SELECT COUNT(*) count FROM lost_deal_record_reasons WHERE record_id = ?").get("task-5-dispatch-record").count).toBe(2);
     expect(listKnowledgeItems("lost-customer-base").items[0].occurrenceCount).toBe(1);
-    expect(callVisionModel).toHaveBeenCalledTimes(3);
+    expect(callModelPool).toHaveBeenCalledTimes(3);
 
     createFieldRun({
       recordId: "task-5-dispatch-record",
@@ -517,7 +636,7 @@ describe("field analysis executor", () => {
     });
     updateRecord("task-5-dispatch-record", { status: "failed", reviewStatus: "needs_review" });
     await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
-    expect(callVisionModel).toHaveBeenCalledTimes(4);
+    expect(callModelPool).toHaveBeenCalledTimes(4);
 
     createFieldRun({
       recordId: "task-5-dispatch-record",
@@ -528,10 +647,9 @@ describe("field analysis executor", () => {
     });
     updateRecord("task-5-dispatch-record", { status: "pending", reviewStatus: "pending" });
     await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
-    expect(callVisionModel).toHaveBeenCalledTimes(5);
+    expect(callModelPool).toHaveBeenCalledTimes(5);
 
-    vi.mocked(callVisionModel).mockImplementationOnce(async () => ({
-      content: JSON.stringify({
+    const reviewableContent = JSON.stringify({
         customerReasons: [{ knowledgeItemId: "lost-customer-item", evidence: "客户说预算只有100元", confidence: 0.9 }],
         serviceReasons: [{ knowledgeItemId: "lost-service-item", evidence: "客户询问保障但客服未回应", confidence: 0.9 }],
         demandTypes: ["价格需求"],
@@ -539,10 +657,9 @@ describe("field analysis executor", () => {
         specificDemandEvidence: "客户说预算只有100元",
         evidence: ["客户说预算只有100元"],
         confidence: 0.9,
-      }),
-      raw: '{"model":"string-demand"}',
-      usage: {},
-    }));
+      });
+    vi.mocked(callModelPool).mockImplementationOnce(async (_messages, options) =>
+      routedResponse(options.purpose, reviewableContent, '{"model":"string-demand"}'));
     createFieldRun({
       recordId: "task-5-dispatch-record",
       fieldId: "lost-attribution",
@@ -553,10 +670,11 @@ describe("field analysis executor", () => {
     updateRecord("task-5-dispatch-record", { status: "failed", reviewStatus: "needs_review" });
     const reviewed = await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
     expect(reviewed).toMatchObject({ failed: 0, skipped: 0, needsReview: 5, completed: 1 });
-    expect(callVisionModel).toHaveBeenCalledTimes(6);
+    expect(callModelPool).toHaveBeenCalledTimes(6);
+    const reviewValidator = vi.mocked(callModelPool).mock.calls.at(-1)?.[1].validate;
+    expect(reviewValidator?.(reviewableContent)).toEqual({ valid: true });
 
-    vi.mocked(callVisionModel).mockImplementationOnce(async () => ({
-      content: JSON.stringify({
+    const malformedContent = JSON.stringify({
         customerReasons: [],
         serviceReasons: [],
         demandTypes: [42],
@@ -564,18 +682,27 @@ describe("field analysis executor", () => {
         specificDemandEvidence: "",
         evidence: [],
         confidence: 0.9,
-      }),
-      raw: '{"model":"malformed-demand"}',
-      usage: {},
-    }));
+      });
+    vi.mocked(callModelPool).mockImplementationOnce(async (_messages, options) => {
+      expect(options.validate?.(malformedContent)).toEqual({ valid: false });
+      throw new ModelPoolError("invalid_output", "模型输出未通过本地校验", [{
+        modelConfigId: "text-model-id",
+        model: "text-model",
+        status: "failed",
+        errorCode: "invalid_output",
+        durationMs: 7,
+      }]);
+    });
     await analyzeField("task-5-dispatch-record", "task-5-dispatch", "未成交归因");
+    const malformedValidator = vi.mocked(callModelPool).mock.calls.at(-1)?.[1].validate;
+    expect(malformedValidator?.(malformedContent)).toEqual({ valid: false });
     const failedRaw = db.prepare(`
       SELECT status, raw_response FROM analysis_field_runs
       WHERE record_id = ? AND field_id = 'lost-attribution'
       ORDER BY rowid DESC LIMIT 1
     `).get("task-5-dispatch-record") as { status: string; raw_response: string | null };
-    expect(failedRaw).toEqual({ status: "failed", raw_response: '{"model":"malformed-demand"}' });
-    expect(callVisionModel).toHaveBeenCalledTimes(7);
+    expect(failedRaw).toEqual({ status: "failed", raw_response: malformedContent });
+    expect(callModelPool).toHaveBeenCalledTimes(7);
 
     const descendantRunsBefore = (db.prepare(`
       SELECT COUNT(*) AS count
@@ -589,11 +716,11 @@ describe("field analysis executor", () => {
       WHERE record_id = ? AND field_id IN ('lost-attribution', 'lost-customer', 'lost-service', 'lost-demand', 'lost-script')
     `).get("task-5-dispatch-record") as { count: number }).count;
 
-    expect(callVisionModel).toHaveBeenCalledTimes(9);
+    expect(callModelPool).toHaveBeenCalledTimes(9);
     expect(descendantRunsAfter - descendantRunsBefore).toBe(5);
   });
 
-  it("stops model fallback after a permanent authentication error", async () => {
+  it("records a router authentication failure without local fallback", async () => {
     const timestamp = "2026-09-15T00:00:00.000Z";
     db.prepare(`
       INSERT INTO analysis_sections (
@@ -621,69 +748,11 @@ describe("field analysis executor", () => {
       ) VALUES (?, 'task-5-dispatch', 'textAi', '普通 AI', 'string', '普通 AI', '[]',
         0, 0, '[]', 0, 'ai', 1, 15, 1, ?, ?)
     `).run("task-5-text", timestamp, timestamp);
-    vi.mocked(getModelsForPurpose).mockReturnValue([
-      { id: "first", name: "first", baseUrl: "https://first.example/v1", apiKey: "x", maskedApiKey: "***", model: "first", purpose: "text", supportsVision: false, temperature: 0, maxTokens: 100, isDefault: false, isPurposeDefault: true, isEnabled: true },
-      { id: "second", name: "second", baseUrl: "https://second.example/v1", apiKey: "x", maskedApiKey: "***", model: "second", purpose: "text", supportsVision: false, temperature: 0, maxTokens: 100, isDefault: false, isPurposeDefault: false, isEnabled: true },
-    ]);
-    vi.mocked(callVisionModel).mockRejectedValue(new Error("401 unauthorized"));
+    vi.mocked(callModelPool).mockRejectedValueOnce(new Error("401 unauthorized"));
 
     await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
 
-    expect(callVisionModel).toHaveBeenCalledTimes(1);
-  });
-
-  it("caps model fallback attempts for one record at the bounded budget", async () => {
-    const timestamp = "2026-09-15T00:00:00.000Z";
-    db.prepare(`
-      INSERT INTO analysis_sections (
-        id, parent_id, name, prompt, output_schema_json, source_fields_json,
-        sort_order, is_enabled, image_enabled, created_at, updated_at
-      ) VALUES (?, NULL, ?, '', '[]', '[]', 99, 1, 0, ?, ?)
-    `).run("task-5-dispatch", "记录预算", timestamp, timestamp);
-    db.prepare(`
-      INSERT INTO jobs (
-        id, original_filename, source_path, status, total_records,
-        completed_records, failed_records, created_at, updated_at
-      ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
-    `).run("task-5-dispatch-job", timestamp, timestamp);
-    db.prepare(`
-      INSERT INTO records (
-        id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
-        image_path, status, review_status, review_note, created_at, updated_at
-      ) VALUES (?, ?, 'Sheet1', 2, '{}', '{}', '', 'pending', 'pending', '', ?, ?)
-    `).run("task-5-dispatch-record", "task-5-dispatch-job", timestamp, timestamp);
-    db.prepare(`
-      INSERT INTO analysis_fields (
-        id, section_id, key, label, field_type, prompt, options_json,
-        is_required, image_enabled, depends_on_json, sort_order, execution_type,
-        export_enabled, candidate_limit, is_enabled, created_at, updated_at
-      ) VALUES (?, 'task-5-dispatch', 'textAi', '普通 AI', 'string', '普通 AI', '[]',
-        0, 0, '[]', 0, 'ai', 1, 15, 1, ?, ?)
-    `).run("task-5-text", timestamp, timestamp);
-    vi.mocked(getModelsForPurpose).mockReturnValue(Array.from({ length: 6 }, (_, index) => ({
-      id: `model-${index}`,
-      name: `model-${index}`,
-      baseUrl: "https://model.example/v1",
-      apiKey: "x",
-      maskedApiKey: "***",
-      model: `model-${index}`,
-      purpose: "text" as const,
-      supportsVision: false,
-      temperature: 0,
-      maxTokens: 100,
-      isDefault: false,
-      isPurposeDefault: index === 0,
-      isEnabled: true,
-    })));
-    vi.mocked(callVisionModel).mockImplementation(async () => {
-      const { currentModelBudget } = await import("../ai/model-budget");
-      currentModelBudget()?.consume();
-      throw new Error("network failure");
-    });
-
-    await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
-
-    expect(callVisionModel).toHaveBeenCalledTimes(6);
+    expect(callModelPool).toHaveBeenCalledTimes(1);
   });
 
   it("allows an unrelated board with five AI fields to execute one request per field", async () => {
@@ -718,15 +787,11 @@ describe("field analysis executor", () => {
       insertField.run(`task-5-ai-${index}`, `ai${index}`, `AI ${index}`, `分析字段 ${index}`, index, timestamp, timestamp);
     }
     let calls = 0;
-    vi.mocked(callVisionModel).mockImplementation(async () => {
+    vi.mocked(callModelPool).mockImplementation(async (_messages, options) => {
       const { currentModelBudget } = await import("../ai/model-budget");
       currentModelBudget()?.consume();
       calls++;
-      return {
-        content: JSON.stringify({ [`ai${calls}`]: `结果 ${calls}` }),
-        raw: "{}",
-        usage: {},
-      };
+      return routedResponse(options.purpose, JSON.stringify({ [`ai${calls}`]: `结果 ${calls}` }));
     });
 
     await expect(analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch")).resolves.toEqual({
@@ -736,7 +801,7 @@ describe("field analysis executor", () => {
       needsReview: 0,
       skipped: 0,
     });
-    expect(callVisionModel).toHaveBeenCalledTimes(5);
+    expect(callModelPool).toHaveBeenCalledTimes(5);
   });
 
   it("records a failed field run when the field-specific model is unavailable", async () => {
@@ -767,9 +832,7 @@ describe("field analysis executor", () => {
       ) VALUES (?, 'task-5-dispatch', 'textAi', '普通 AI', 'string', '普通 AI', '[]',
         0, 0, '[]', 0, 'ai', 1, 15, 1, ?, ?)
     `).run("task-5-text", timestamp, timestamp);
-    vi.mocked(getModelsForPurpose).mockImplementationOnce(() => {
-      throw new Error("请先配置并启用默认模型");
-    });
+    vi.mocked(callModelPool).mockRejectedValueOnce(new Error("请先配置并启用默认模型"));
 
     await expect(analyzeRecordFields(
       "task-5-dispatch-record",
@@ -819,9 +882,7 @@ describe("field analysis executor", () => {
       ) VALUES (?, 'task-5-dispatch', 'textAi', '普通 AI', 'string', '普通 AI', '[]',
         0, 0, '[]', 0, 'ai', 1, 15, 1, ?, ?)
     `).run("task-5-text", timestamp, timestamp);
-    vi.mocked(getModelsForPurpose).mockImplementationOnce(() => {
-      throw new Error("首次模型失败");
-    });
+    vi.mocked(callModelPool).mockRejectedValueOnce(new Error("首次模型失败"));
 
     await expect(analyzeRecordFields(
       "task-5-dispatch-record",

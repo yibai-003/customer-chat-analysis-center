@@ -259,6 +259,61 @@ export interface AnalysisFieldRun {
   createdAt: string;
 }
 
+export type ModelPurpose = "vision" | "text";
+export type ModelBillingMode = "free" | "paid";
+export type ModelQualityTier = "A" | "B" | "C";
+
+export interface ModelProvider {
+  id: string;
+  name: string;
+  baseUrl: string;
+  maskedApiKey: string;
+  isEnabled: boolean;
+  lastTestedAt?: string;
+  lastError?: string;
+}
+
+export interface ModelPoolSettings {
+  paidDailyTokenLimit: number;
+  paidMonthlyTokenLimit: number;
+  capabilityTtlMs: number;
+}
+
+export interface ModelUsageEvent {
+  id: string;
+  modelConfigId: string;
+  providerId?: string;
+  purpose: ModelPurpose;
+  eventType: "success" | "failure" | "switch" | "quota_exhausted"
+    | "cooldown" | "paid_blocked" | "usage_unknown";
+  inputTokens?: number;
+  outputTokens?: number;
+  accountedTokens: number;
+  errorCode?: string;
+  errorMessage?: string;
+  recordId?: string;
+  fieldId?: string;
+  operation?: string;
+  durationMs?: number;
+  createdAt: string;
+}
+
+export interface ModelRouteAttempt {
+  modelConfigId: string;
+  model: string;
+  status: "success" | "failed" | "switched" | "blocked";
+  errorCode?: string;
+  durationMs: number;
+}
+
+export interface ModelRouteResult {
+  content: string;
+  raw: string;
+  usage: { prompt_tokens?: number; completion_tokens?: number };
+  model: ModelConfig;
+  attempts: ModelRouteAttempt[];
+}
+
 export interface ModelConfig {
   id: string;
   name: string;
@@ -269,11 +324,32 @@ export interface ModelConfig {
   temperature: number;
   maxTokens: number;
   isDefault: boolean;
-  purpose: "vision" | "text";
+  purpose: ModelPurpose;
   isPurposeDefault: boolean;
   isEnabled: boolean;
   capabilityStatus?: { text: boolean; json: boolean; vision: boolean; errors?: Partial<Record<"text" | "json" | "vision", string>> };
   capabilityCheckedAt?: string;
+  providerId?: string;
+  providerName?: string;
+  poolEnabled: boolean;
+  billingMode: ModelBillingMode;
+  qualityTier: ModelQualityTier;
+  priority: number;
+  thinkingMode: boolean;
+  memberType: "general" | "ocr";
+  quotaTotalTokens?: number;
+  quotaUsedTokens: number;
+  quotaExpiresAt?: string;
+  quotaSafetyRatio: number;
+  quotaExhaustedAt?: string;
+  cooldownUntil?: string;
+  consecutiveFailures: number;
+  lastSuccessAt?: string;
+  lastFailureAt?: string;
+  presetKey?: string;
+  presetVersion?: number;
+  capabilityEligible: boolean;
+  quotaBlocked: boolean;
 }
 
 export interface AnalysisRun {
@@ -312,6 +388,7 @@ export interface AnalysisJobOptions {
   concurrency?: number;
   batchSize?: number;
   recordIds?: string[];
+  maxPaidTokens?: number;
 }
 
 export interface AnalysisCapacityMetrics {

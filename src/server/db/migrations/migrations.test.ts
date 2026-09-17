@@ -5,13 +5,14 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { appliedMigrations, migrations, runMigrations } from "./index";
+import { appliedMigrations, currentSchemaVersion, migrations, runMigrations } from "./index";
 import { applyLegacyBaseline } from "./002-legacy-baseline";
 import { applyLostDealKnowledgeMetadata } from "./007-lost-deal-knowledge-metadata";
 import { applyReceptionQualityConfiguration } from "./009-reception-quality-normalization";
 import { applyUnifiedReceptionQualityConfiguration } from "./010-unified-reception-quality";
 import { applyOptimizedReceptionQualityConfiguration } from "./011-optimized-reception-quality-prompts";
 import { applyReceptionExcelSchemaConfiguration } from "./013-reception-excel-schema";
+import { applyModelPools } from "./014-model-pools";
 
 let dir: string;
 let db: any;
@@ -23,7 +24,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -31,6 +32,78 @@ describe("versioned migrations", () => {
     runMigrations(db);
     expect(JSON.stringify(appliedMigrations(db))).toBe(before);
     expect(fs.readdirSync(path.join(dir, "backups/migrations"))).toHaveLength(1);
+  });
+  it("groups legacy model configs by base URL and ciphertext without rewriting credentials", () => {
+    applyLegacyBaseline(db);
+    const insert = db.prepare(`
+      INSERT INTO model_configs (
+        id, name, base_url, api_key_ciphertext, model, purpose, is_purpose_default,
+        supports_vision, temperature, max_tokens, is_default, is_enabled, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 0.2, 1500, ?, 1, '2026-09-16T00:00:00.000Z', '2026-09-16T00:00:00.000Z')
+    `);
+    const dashScopeBaseUrl = "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    insert.run("qwen-vision", "旧千问视觉", dashScopeBaseUrl, "cipher-shared", "qwen-vl-max", "vision", 1, 1);
+    insert.run("qwen-text", "旧千问文本", dashScopeBaseUrl, "cipher-shared", "qwen-plus", "text", 1, 0);
+    insert.run("qwen-other-key", "旧千问另一密钥", dashScopeBaseUrl, "cipher-other", "qwen-max", "text", 0, 0);
+    insert.run(
+      "qwen-other-url",
+      "旧千问另一地址",
+      "https://dashscope.aliyuncs.com/compatible-mode/v2",
+      "cipher-shared",
+      "qwen-turbo",
+      "text",
+      0,
+      0,
+    );
+    insert.run("other", "其他模型", "https://example.com/v1", "cipher-other", "other-model", "text", 1, 0);
+    const originalCiphertextById = Object.fromEntries(
+      (db.prepare("SELECT id, api_key_ciphertext FROM model_configs").all() as Array<{ id: string; api_key_ciphertext: string }>)
+        .map((row) => [row.id, row.api_key_ciphertext]),
+    );
+
+    runMigrations(db);
+
+    expect(currentSchemaVersion).toBe(14);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    const qwenRows = db.prepare(`
+      SELECT
+        model.provider_id,
+        model.id,
+        model.base_url,
+        model.api_key_ciphertext,
+        provider.base_url AS provider_base_url,
+        provider.api_key_ciphertext AS provider_api_key_ciphertext
+      FROM model_configs model
+      JOIN model_providers provider ON provider.id = model.provider_id
+      WHERE model.base_url LIKE '%dashscope.aliyuncs.com%'
+      ORDER BY model.id
+    `).all() as Array<{
+      provider_id: string;
+      id: string;
+      base_url: string;
+      api_key_ciphertext: string;
+      provider_base_url: string;
+      provider_api_key_ciphertext: string;
+    }>;
+    expect(qwenRows).toHaveLength(4);
+    const qwenById = Object.fromEntries(qwenRows.map((row) => [row.id, row]));
+    expect(qwenById["qwen-vision"].provider_id).toBe(qwenById["qwen-text"].provider_id);
+    expect(qwenById["qwen-other-key"].provider_id).not.toBe(qwenById["qwen-vision"].provider_id);
+    expect(qwenById["qwen-other-url"].provider_id).not.toBe(qwenById["qwen-vision"].provider_id);
+    expect(qwenRows.every((row) => row.api_key_ciphertext === originalCiphertextById[row.id])).toBe(true);
+    expect(qwenRows.every((row) => row.provider_base_url === row.base_url)).toBe(true);
+    expect(qwenRows.every((row) => row.provider_api_key_ciphertext === row.api_key_ciphertext)).toBe(true);
+    expect(db.prepare("SELECT COUNT(*) count FROM model_pool_settings").get()).toEqual({ count: 1 });
+    expect(db.prepare("SELECT paid_daily_token_limit FROM model_pool_settings WHERE id='default'").get())
+      .toEqual({ paid_daily_token_limit: 0 });
+    expect(db.prepare("SELECT name FROM model_providers WHERE id = ?").get(qwenById["qwen-vision"].provider_id))
+      .toEqual({ name: "千问百炼" });
+
+    runMigrations(db);
+    applyModelPools(db);
+
+    expect(db.prepare("SELECT COUNT(*) count FROM model_providers").get()).toEqual({ count: 4 });
+    expect(db.prepare("SELECT COUNT(*) count FROM model_pool_settings").get()).toEqual({ count: 1 });
   });
   it("replaces legacy reception prompts with compact structured protocols", () => {
     applyLegacyBaseline(db);

@@ -173,3 +173,71 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .detail-scroll{scrollbar-gutter:stable}
 @media(max-width:1050px){.content-header{align-items:flex-start;flex-direction:column}.content-actions{width:100%}.content-actions .button{min-height:38px}.detail{min-height:420px}}
 @media(max-width:700px){.content-header h1{font-size:24px;overflow-wrap:anywhere}.content-actions{display:grid;grid-template-columns:1fr 1fr}.content-actions select{grid-column:1/-1;width:100%}.content-actions .button{justify-content:center;width:100%}.detail-scroll{padding:24px 16px}.detail figure img{max-height:300px}.modal{padding:20px}.config-item{align-items:flex-start;flex-wrap:wrap}.config-item>span{min-width:calc(100% - 50px)}.config-item button,.config-item em{margin-top:4px}}
+
+/* Model pool operations console */
+.model-console-modal .modal{width:min(1180px,calc(100vw - 32px));padding:24px;overflow:hidden}
+.model-console-modal .modal>header{margin-bottom:0}
+.model-console-tabs{display:flex;gap:0;border-bottom:2px solid var(--pixel-ink)}
+.model-console-tabs button{min-width:112px;padding:11px 16px;border:0;border-right:1px solid var(--pixel-line);background:#eef2ed;color:#637169;font-size:11px;font-weight:700;transition:background-color .12s steps(2,end),color .12s steps(2,end)}
+.model-console-tabs button:hover{background:#fff}
+.model-console-tabs button.active{background:var(--pixel-ink);color:#fff}
+.model-console-tabs button:focus-visible,.model-purpose-tabs button:focus-visible,.model-console-command:focus-visible,.model-console-panel button:focus-visible,.model-console-panel input:focus-visible,.model-console-panel select:focus-visible{outline:3px solid var(--pixel-orange);outline-offset:2px}
+.model-console-panel{max-height:calc(90dvh - 150px);overflow:auto;scrollbar-gutter:stable}
+.model-console-panel section{width:100%;padding:18px 0 4px}
+.model-console-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;padding-bottom:14px}
+.model-console-section-head h3{margin:0;color:var(--pixel-ink);font-size:16px}
+.model-console-section-head p{max-width:68ch;margin:5px 0 0;color:#718078;font-size:10px;line-height:1.55}
+.model-console-command,.provider-actions button,.provider-form-actions button,.model-pool-table button,.model-pool-settings button{min-height:30px;padding:5px 9px;border:1px solid var(--pixel-ink);border-radius:0;background:#fff;color:var(--pixel-ink);font-size:10px;font-weight:700}
+.model-console-command.primary{border-width:2px;background:var(--pixel-green);box-shadow:2px 2px 0 var(--pixel-shadow)}
+.model-console-command:disabled,.model-console-panel button:disabled{cursor:not-allowed;opacity:.5}
+.model-console-error,.model-console-message{margin:12px 0 0;padding:9px 11px;border-left:4px solid var(--pixel-orange);background:#fbefe9;color:#8d513d;font-size:10px;line-height:1.5}
+.model-console-message{border-left-color:#789f43;background:#eef6e5;color:#536b42}
+.model-console-empty{padding:34px 12px!important;text-align:center;color:#87948d;font-size:11px}
+.provider-list{border-top:2px solid var(--pixel-ink)}
+.provider-row{display:grid;grid-template-columns:minmax(190px,1.4fr) minmax(110px,.7fr) 76px minmax(150px,1fr) auto;gap:14px;align-items:center;padding:12px 8px;border-bottom:1px solid var(--pixel-line)}
+.provider-row>div{min-width:0}
+.provider-row small,.provider-row code,.provider-row span,.provider-row em{display:block}
+.provider-row small{margin-bottom:4px;color:#849188;font:8px "Cascadia Mono","Consolas",monospace;text-transform:uppercase}
+.provider-row strong{font-size:12px}
+.provider-row code{overflow:hidden;color:#66756c;font:9px "Cascadia Mono","Consolas",monospace;text-overflow:ellipsis;white-space:nowrap}
+.provider-row span{font-size:10px}
+.provider-row em{margin-top:3px;color:#a55f46;font-size:9px;font-style:normal;overflow-wrap:anywhere}
+.provider-actions{display:flex;gap:5px}
+.provider-form{display:grid;grid-template-columns:minmax(130px,.7fr) minmax(220px,1.4fr) minmax(180px,1fr) auto;gap:10px;align-items:end;padding:14px 8px;border-bottom:2px solid var(--pixel-ink);background:#eef2ed}
+.provider-form label,.model-pool-settings label,.usage-filters label{color:#718078;font-size:9px}
+.provider-form input,.model-pool-settings input,.usage-filters select,.model-pool-table input,.model-pool-table select{display:block;width:100%;height:32px;margin-top:5px;padding:0 7px;border:1px solid var(--pixel-line);border-radius:0;background:#fff;color:var(--pixel-ink);font-size:10px;outline:none}
+.provider-form .model-console-check{display:flex;align-items:center;gap:6px;height:32px;color:var(--pixel-ink);white-space:nowrap}
+.provider-form .model-console-check input,.model-row-toggles input{width:auto;height:auto;margin:0;accent-color:#789f43}
+.provider-form-actions{display:flex;grid-column:1/-1;justify-content:flex-end;gap:7px}
+.model-purpose-tabs{display:inline-flex;margin-bottom:12px;border:1px solid var(--pixel-ink)}
+.model-purpose-tabs button{min-width:96px;padding:7px 12px;border:0;border-right:1px solid var(--pixel-ink);background:#fff;color:#617068;font-size:10px}
+.model-purpose-tabs button:last-child{border-right:0}
+.model-purpose-tabs button.active{background:var(--pixel-ink);color:#fff}
+.model-table-scroll{width:100%;overflow-x:auto;border-top:2px solid var(--pixel-ink);border-bottom:2px solid var(--pixel-ink)}
+.model-pool-table,.model-usage-table{width:100%;min-width:1080px;border-collapse:collapse;table-layout:fixed;font-variant-numeric:tabular-nums}
+.model-pool-table{min-width:1320px}
+.model-pool-table th,.model-usage-table th{padding:8px 7px;border-bottom:1px solid var(--pixel-ink);background:#eef2ed;color:#65736b;font:8px "Cascadia Mono","Consolas","Microsoft YaHei",monospace;text-align:left;white-space:nowrap}
+.model-pool-table td,.model-usage-table td{padding:9px 7px;border-bottom:1px solid var(--pixel-line);color:#45564c;font-size:9px;line-height:1.4;vertical-align:top;overflow-wrap:anywhere}
+.model-pool-table tbody tr:last-child td,.model-usage-table tbody tr:last-child td{border-bottom:0}
+.model-pool-table tbody tr:hover,.model-usage-table tbody tr:hover{background:#f5f8f2}
+.model-pool-table th:nth-child(1){width:180px}.model-pool-table th:nth-child(2){width:62px}.model-pool-table th:nth-child(3){width:72px}.model-pool-table th:nth-child(4){width:190px}.model-pool-table th:nth-child(5){width:86px}.model-pool-table th:nth-child(6){width:160px}.model-pool-table th:nth-child(7){width:78px}.model-pool-table th:nth-child(8){width:150px}.model-pool-table th:nth-child(9){width:78px}.model-pool-table th:nth-child(10){width:100px}.model-pool-table th:nth-child(11){width:100px}
+.model-name-cell strong,.model-name-cell code,.model-name-cell small,.model-usage-table td:first-child strong,.model-usage-table td:first-child small{display:block}
+.model-name-cell strong,.model-usage-table td:first-child strong{color:var(--pixel-ink);font-size:10px}
+.model-name-cell code{margin-top:3px;color:#60746a;font:9px "Cascadia Mono","Consolas",monospace}
+.model-name-cell small,.model-usage-table td:first-child small{margin-top:3px;color:#8b9891;font-size:8px}
+.model-row-toggles{display:flex;gap:8px;margin-top:7px}
+.model-row-toggles label{display:flex;align-items:center;gap:3px;color:#55685d;font-size:8px;white-space:nowrap}
+.model-inline-inputs{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.model-pool-table input,.model-pool-table select{height:27px;margin:0;padding:0 4px;font:9px "Cascadia Mono","Consolas",monospace}
+.model-row-actions{display:flex;gap:4px}
+.model-status,.usage-event{display:inline-block;padding:3px 5px;border-left:3px solid currentColor;background:#eef2ed;font-size:8px;font-weight:700;white-space:nowrap}
+.model-status.ready,.usage-event.success{color:#547638;background:#edf5e4}
+.model-status.paid,.usage-event.switch{color:#3b7067;background:#e8f4f1}
+.model-status.warning,.usage-event.cooldown,.usage-event.usage_unknown{color:#946027;background:#fbf1e3}
+.model-status.danger,.usage-event.failure,.usage-event.quota_exhausted,.usage-event.paid_blocked{color:#9d543f;background:#f9e9e3}
+.model-status.muted{color:#707d76;background:#edf0ee}
+.model-pool-settings{display:grid;grid-template-columns:repeat(3,minmax(140px,1fr)) auto;gap:10px;align-items:end;padding:14px 8px;background:#eef2ed}
+.model-pool-settings button{height:32px}
+.usage-filters{display:grid;grid-template-columns:repeat(3,minmax(160px,220px));gap:10px;margin-bottom:12px}
+.model-usage-table th:nth-child(1){width:160px}.model-usage-table th:nth-child(2){width:130px}.model-usage-table th:nth-child(3){width:100px}.model-usage-table th:nth-child(4),.model-usage-table th:nth-child(5){width:90px}.model-usage-table th:nth-child(6){width:110px}.model-usage-table th:nth-child(7){width:160px}.model-usage-table th:nth-child(8){width:80px}.model-usage-table th:nth-child(9){width:170px}
+@media(max-width:760px){.model-console-modal .modal{width:calc(100vw - 16px);padding:14px}.model-console-tabs{overflow-x:auto}.model-console-tabs button{min-width:102px}.model-console-section-head{flex-direction:column}.provider-row{grid-template-columns:1fr 1fr}.provider-identity{grid-column:1/-1}.provider-actions{justify-content:flex-end}.provider-form{grid-template-columns:1fr}.provider-form-actions{grid-column:auto}.model-pool-settings,.usage-filters{grid-template-columns:1fr}.model-console-panel{max-height:calc(90dvh - 128px)}}

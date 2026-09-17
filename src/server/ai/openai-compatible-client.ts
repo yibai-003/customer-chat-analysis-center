@@ -4,23 +4,65 @@ export interface DecryptedModelConfig {
   baseUrl: string; apiKey: string; model: string; temperature: number; maxTokens: number;
 }
 
-export function classifyModelError(error: unknown) {
+export interface ClassifiedModelError {
+  code: "auth" | "quota_exhausted" | "rate_limit" | "timeout" | "network"
+    | "service" | "configuration" | "budget" | "cancelled" | "model";
+  message: string;
+  retryable: boolean;
+  httpStatus?: number;
+}
+
+export function classifyModelError(error: unknown): ClassifiedModelError {
   const message = error instanceof Error ? error.message : String(error);
   const httpStatus = Number(/\((\d{3})\)/.exec(message)?.[1] ?? 0);
-  if (httpStatus === 401 || httpStatus === 403) return { code: "auth", message: "模型鉴权失败，请检查 API Key", retryable: false };
-  if (httpStatus === 408 || httpStatus === 429 || httpStatus >= 500) return { code: "service", message, retryable: true };
-  if (httpStatus >= 400) return { code: "configuration", message, retryable: false };
-  if (/总预算/i.test(message)) return { code: "budget", message, retryable: false };
-  if (/abort|timeout/i.test(message)) return { code: "timeout", message: "模型请求超时，请稍后重试", retryable: true };
-  if (/401|403|api.?key|unauthor/i.test(message)) return { code: "auth", message: "模型鉴权失败，请检查 API Key", retryable: false };
-  if (/429|rate.?limit/i.test(message)) return { code: "rate_limit", message: "模型请求过于频繁，请稍后重试", retryable: true };
+  const status = httpStatus || undefined;
+  const name = error instanceof Error ? error.name : "";
+  if (/总预算|付费 Token 预算/i.test(message)) {
+    return { code: "budget", message, retryable: false, httpStatus: status };
+  }
+  if (name === "AbortError" || /任务已取消|cancelled/i.test(message)) {
+    return { code: "cancelled", message: "模型请求已取消", retryable: false, httpStatus: status };
+  }
+  if (/insufficient_quota|quota exhausted|free quota|余额不足|额度用尽/i.test(message)) {
+    return { code: "quota_exhausted", message, retryable: false, httpStatus: status };
+  }
+  if (httpStatus === 401 || httpStatus === 403 || /401|403|api.?key|unauthor/i.test(message)) {
+    return {
+      code: "auth",
+      message: "模型鉴权失败，请检查 API Key",
+      retryable: false,
+      httpStatus: status,
+    };
+  }
+  if (name === "TimeoutError" || httpStatus === 408 || /timed?\s*out|timeout/i.test(message)) {
+    return { code: "timeout", message: "模型请求超时，请稍后重试", retryable: true, httpStatus: status };
+  }
+  if (httpStatus === 429 || /429|rate.?limit/i.test(message)) {
+    return {
+      code: "rate_limit",
+      message: "模型请求过于频繁，请稍后重试",
+      retryable: true,
+      httpStatus: status,
+    };
+  }
+  if (httpStatus >= 500) {
+    return { code: "service", message, retryable: true, httpStatus: status };
+  }
   if (/fetch failed|network|ECONN|ENOTFOUND|ETIMEDOUT/i.test(message)) {
-    return { code: "network", message: "模型服务连接失败，请检查接口地址", retryable: true };
+    return {
+      code: "network",
+      message: "模型服务连接失败，请检查接口地址",
+      retryable: true,
+      httpStatus: status,
+    };
   }
-  if (/400|404|model.+(?:not found|does not exist)|不支持图片|接口地址返回了网页/i.test(message)) {
-    return { code: "configuration", message, retryable: false };
+  if (httpStatus === 400 || httpStatus === 404 || /model.+(?:not found|does not exist)|不支持图片/i.test(message)) {
+    return { code: "model", message, retryable: false, httpStatus: status };
   }
-  return { code: "model", message, retryable: false };
+  if (httpStatus >= 400 || /接口地址返回了网页|OpenAI 兼容 API 地址/i.test(message)) {
+    return { code: "configuration", message, retryable: false, httpStatus: status };
+  }
+  return { code: "model", message, retryable: false, httpStatus: status };
 }
 
 export function extractMessageContent(message: any): string {
@@ -79,6 +121,21 @@ export function buildChatCompletionsUrl(baseUrl: string) {
   return `${normalized}/v1/chat/completions`;
 }
 
+function normalizeUsage(usage: unknown): {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+} {
+  const source = usage && typeof usage === "object" ? usage as Record<string, unknown> : {};
+  const result: { prompt_tokens?: number; completion_tokens?: number } = {};
+  if (Number.isSafeInteger(source.prompt_tokens) && Number(source.prompt_tokens) >= 0) {
+    result.prompt_tokens = Number(source.prompt_tokens);
+  }
+  if (Number.isSafeInteger(source.completion_tokens) && Number(source.completion_tokens) >= 0) {
+    result.completion_tokens = Number(source.completion_tokens);
+  }
+  return result;
+}
+
 export async function callVisionModel(config: DecryptedModelConfig, messages: unknown[], options: TransportOptions = {}) {
   return withModelBudget(() => callWithinBudget(config, messages, options), { signal: options.signal });
 }
@@ -134,5 +191,5 @@ async function callWithinBudget(config: DecryptedModelConfig, messages: unknown[
     ].filter(Boolean).join("; ");
     throw new Error(`模型响应缺少文本内容（${shape}）`);
   }
-  return { content, raw: JSON.stringify(body), usage: body.usage ?? {} };
+  return { content, raw: JSON.stringify(body), usage: normalizeUsage(body.usage) };
 }

@@ -144,7 +144,15 @@ export default function App() {
 
       {dialog === "model" && <ModelConfigDialog models={models} close={() => setDialog(null)} saved={() => { setDialog(null); refresh(); }} />}
       {dialog === "section" && <SectionConfigDialog sections={sections} close={() => setDialog(null)} saved={() => { setDialog(null); refresh(); }} />}
-      {analysisCapacity && <AnalysisRunDialog capacity={analysisCapacity} onCancel={() => setAnalysisCapacity(null)} onConfirm={(options) => void startBatchAnalysis(options)} />}
+      {analysisCapacity && <AnalysisRunDialog
+        capacity={analysisCapacity}
+        onCancel={() => setAnalysisCapacity(null)}
+        onConfirm={(options) => void startBatchAnalysis({
+          concurrency: options.concurrency,
+          batchSize: options.batchSize,
+          maxPaidTokens: options.maxPaidTokens,
+        })}
+      />}
       {previewImage && <ImagePreviewDialog {...previewImage} onClose={() => setPreviewImage(null)} />}
       {selectingImportFile && <ImportSectionDialog file={selectingImportFile} sections={sections} busy={busy} error={notice} onCancel={() => setSelectingImportFile(null)} onConfirm={(sectionId) => void previewImport(selectingImportFile, sectionId)} />}
       {importPreview && pendingImportFile && <ImportPreviewDialog preview={importPreview} busy={busy} onCancel={() => { const file = pendingImportFile; setImportPreview(null); setPendingImportFile(null); setSelectingImportFile(file); }} onConfirm={async () => { const file = pendingImportFile; const sectionId = importPreview.sectionId; if (!sectionId) return; setImportPreview(null); setPendingImportFile(null); await commitImport(file, sectionId); }} />}

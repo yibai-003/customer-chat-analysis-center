@@ -1,16 +1,15 @@
 import fs from "node:fs/promises";
 import { db } from "../db/client";
 import { assertAnalysisActive } from "./analysis-cancellation";
-import { checkModelBudget, withModelBudget } from "../ai/model-budget";
+import { withModelBudget } from "../ai/model-budget";
 import { withSingleAnalysisRun } from "./single-analysis-run";
-import { getModelsForPurpose } from "./model-config-service";
 import { assertJobSection, getRecord, getSection, updateJobSection, updateRecord } from "../db/repositories";
 import { listFields, topologicalFields } from "./field-config-service";
 import { buildFieldMessages } from "../ai/field-prompt-builder";
-import { callVisionModel } from "../ai/openai-compatible-client";
 import { classifyModelError } from "../ai/openai-compatible-client";
 import { validateFieldResult } from "../ai/result-validator";
 import { createFieldRun, getFieldResultContext } from "./field-run-service";
+import { callModelPool, ModelPoolError } from "./model-pool-service";
 import { matchKnowledgeItem } from "./knowledge/knowledge-match-service";
 import { extractKnowledgeValue } from "./knowledge/knowledge-extract-service";
 import { captureHotTopicQuestions } from "./knowledge/hot-topic-service";
@@ -106,6 +105,28 @@ function dependencyValues(
   return Object.fromEntries(field.dependsOn.map((key) => [key, context[key] ?? sourceFields[key]]));
 }
 
+function routedModelSnapshot(routed: Awaited<ReturnType<typeof callModelPool>>) {
+  return {
+    id: routed.model.id,
+    name: routed.model.name,
+    model: routed.model.model,
+    purpose: routed.model.purpose,
+    attempts: routed.attempts,
+  };
+}
+
+function failedRouteSnapshot(error: unknown) {
+  if (!(error instanceof ModelPoolError)) return {};
+  const lastAttempt = error.attempts.at(-1);
+  return {
+    ...(lastAttempt ? {
+      id: lastAttempt.modelConfigId,
+      model: lastAttempt.model,
+    } : {}),
+    attempts: error.attempts,
+  };
+}
+
 async function runAiField(
   recordId: string,
   sectionName: string,
@@ -116,10 +137,8 @@ async function runAiField(
 ) {
   const dependencies = dependencyValues(field, record.sourceFields, context);
   const started = Date.now();
-  let model: Awaited<ReturnType<typeof getModelsForPurpose>>[number] | undefined;
+  let routed: Awaited<ReturnType<typeof callModelPool>> | undefined;
   try {
-    const models = getModelsForPurpose(field.imageEnabled ? "vision" : "text");
-    if (!models.length) throw new Error("请先配置并启用默认模型");
     const messages = buildFieldMessages({
       field,
       sectionName,
@@ -127,31 +146,23 @@ async function runAiField(
       dependencyResults: dependencies,
       imageDataUrl: field.imageEnabled && image ? imageDataUrl(record.imagePath, image) : "",
     });
-    let response: Awaited<ReturnType<typeof callVisionModel>> | undefined;
-    let lastError: unknown;
-    for (const candidate of models) {
-      assertAnalysisActive(); checkModelBudget();
-      try {
-        if (field.imageEnabled && !candidate.supportsVision) throw new Error("当前模型不支持图片解析");
-        response = await callVisionModel(candidate, messages, { attempts: 1 });
-        model = candidate;
-        break;
-      } catch (error) {
-        lastError = error;
-        if (!classifyModelError(error).retryable) throw error;
-      }
-    }
-    if (!response || !model) throw lastError ?? new Error("模型请求失败");
-    const checked = validateFieldResult(response.content, field);
+    routed = await callModelPool(messages, {
+      purpose: field.imageEnabled ? "vision" : "text",
+      recordId,
+      fieldId: field.id,
+      operation: field.executionType ?? "ai",
+    });
+    assertAnalysisActive();
+    const checked = validateFieldResult(routed.content, field);
     const status = checked.valid ? "completed" : "needs_review";
     const run = createFieldRun({
       recordId, fieldId: field.id, status, result: checked.result,
       evidence: typeof checked.result.evidence === "string" ? checked.result.evidence : undefined,
       dependencies,
       promptSnapshot: field.prompt, fieldSnapshot: field,
-      modelConfigSnapshot: { name: model.name, model: model.model, baseUrl: model.baseUrl },
-      rawResponse: response.raw, errorMessage: checked.error ?? undefined,
-      durationMs: Date.now() - started, usage: response.usage,
+      modelConfigSnapshot: routedModelSnapshot(routed),
+      rawResponse: routed.raw, errorMessage: checked.error ?? undefined,
+      durationMs: Date.now() - started, usage: routed.usage,
     });
     return { result: checked.result, status, errorMessage: checked.error ?? undefined, run };
   } catch (error) {
@@ -161,7 +172,8 @@ async function runAiField(
       recordId, fieldId: field.id, status: "failed", result: {},
       dependencies,
       promptSnapshot: field.prompt, fieldSnapshot: field,
-      modelConfigSnapshot: model ? { name: model.name, model: model.model } : {},
+      modelConfigSnapshot: routed ? routedModelSnapshot(routed) : failedRouteSnapshot(error),
+      rawResponse: routed?.raw,
       errorMessage: message, durationMs: Date.now() - started,
     });
     return { result: {}, status: "failed" as const, errorMessage: message, run };
@@ -177,8 +189,9 @@ async function runKnowledgeMatch(
 ) {
   const dependencies = dependencyValues(field, record.sourceFields, context);
   const started = Date.now();
+  let matched: Awaited<ReturnType<typeof matchKnowledgeItem>> | undefined;
   try {
-    const matched = await matchKnowledgeItem({
+    matched = await matchKnowledgeItem({
       recordId,
       field,
       sectionName,
@@ -192,9 +205,13 @@ async function runKnowledgeMatch(
       dependencies,
       promptSnapshot: field.prompt,
       fieldSnapshot: field,
-      modelConfigSnapshot: { purpose: "text" },
+      modelConfigSnapshot: matched.route
+        ? routedModelSnapshot(matched.route)
+        : matched.cached ? { purpose: "text", cached: true } : { purpose: "text" },
+      rawResponse: matched.route?.raw,
       errorMessage: matched.errorMessage,
       durationMs: Date.now() - started,
+      usage: matched.route?.usage,
     });
     return {
       result: matched.result,
@@ -213,7 +230,7 @@ async function runKnowledgeMatch(
       dependencies,
       promptSnapshot: field.prompt,
       fieldSnapshot: field,
-      modelConfigSnapshot: { purpose: "text" },
+      modelConfigSnapshot: failedRouteSnapshot(error),
       errorMessage: message,
       durationMs: Date.now() - started,
     });
@@ -278,8 +295,8 @@ async function runLostDealAttribution(
 ) {
   const dependencies = dependencyValues(field, record.sourceFields, context);
   const started = Date.now();
-  let model: Awaited<ReturnType<typeof getModelsForPurpose>>[number] | undefined;
-  let rawResponse: string | undefined;
+  let routed: Awaited<ReturnType<typeof callModelPool>> | undefined;
+  let invalidResponse: string | undefined;
   try {
     const candidates = loadLostDealKnowledgeCandidates(field);
     if (!candidates.customerReasons.length || !candidates.serviceReasons.length) {
@@ -294,29 +311,32 @@ async function runLostDealAttribution(
       sourceFields: record.sourceFields,
       candidates,
     });
-    let response: Awaited<ReturnType<typeof callVisionModel>> | undefined;
-    let lastError: unknown;
-    for (const candidate of getModelsForPurpose("text")) {
-      assertAnalysisActive(); checkModelBudget();
-      try {
-        response = await callVisionModel(candidate, messages, { attempts: 1 });
-        rawResponse = response.raw;
-        model = candidate;
-        break;
-      } catch (error) {
-        lastError = error;
-        if (!classifyModelError(error).retryable) throw error;
-      }
-    }
-    if (!response || !model) throw lastError ?? new Error("模型请求失败");
-    const selectedModel = model;
-    const attribution = parseLostDealAttribution(response.content, candidates, {
+    const parseContext = {
       summary,
       sourceFields: record.sourceFields,
+    };
+    routed = await callModelPool(messages, {
+      purpose: "text",
+      recordId,
+      fieldId: field.id,
+      operation: field.executionType ?? "lost_deal_attribution",
+      validate: (content) => {
+        invalidResponse = content;
+        try {
+          parseLostDealAttribution(content, candidates, parseContext);
+          invalidResponse = undefined;
+          return { valid: true };
+        } catch {
+          return { valid: false };
+        }
+      },
     });
+    assertAnalysisActive();
+    const attribution = parseLostDealAttribution(routed.content, candidates, parseContext);
     const result = { [field.key]: attribution };
     const status = attribution.reviewRequired ? "needs_review" as const : "completed" as const;
     const errorMessage = attribution.reviewRequired ? "归因证据不足或置信度偏低，请人工复核" : undefined;
+    const selectedRoute = routed;
     const run = db.transaction(() => {
       const created = createFieldRun({
       recordId,
@@ -327,11 +347,11 @@ async function runLostDealAttribution(
       dependencies,
       promptSnapshot: field.prompt,
       fieldSnapshot: field,
-      modelConfigSnapshot: { name: selectedModel.name, model: selectedModel.model, baseUrl: selectedModel.baseUrl },
-      rawResponse: response.raw,
+      modelConfigSnapshot: routedModelSnapshot(selectedRoute),
+      rawResponse: selectedRoute.raw,
       errorMessage,
       durationMs: Date.now() - started,
-      usage: response.usage,
+      usage: selectedRoute.usage,
       });
       replaceLostDealReasonLinks(recordId, field.id, attribution, Boolean(field.knowledgeSyncEnabled));
       return created;
@@ -348,8 +368,8 @@ async function runLostDealAttribution(
       dependencies,
       promptSnapshot: field.prompt,
       fieldSnapshot: field,
-      modelConfigSnapshot: model ? { name: model.name, model: model.model } : {},
-      rawResponse,
+      modelConfigSnapshot: routed ? routedModelSnapshot(routed) : failedRouteSnapshot(error),
+      rawResponse: routed?.raw ?? invalidResponse,
       errorMessage: message,
       durationMs: Date.now() - started,
     });
@@ -432,33 +452,35 @@ async function runReceptionQualityAnalysis(
 ) {
   const dependencies = dependencyValues(field, record.sourceFields, context);
   const started = Date.now();
-  let model: Awaited<ReturnType<typeof getModelsForPurpose>>[number] | undefined;
-  let rawResponse: string | undefined;
+  let routed: Awaited<ReturnType<typeof callModelPool>> | undefined;
+  let invalidResponse: string | undefined;
   try {
     const messages = buildReceptionQualityMessages({
       field,
       screenshotFacts: dependencies["截图内容总结"],
       sourceFields: record.sourceFields,
     });
-    let response: Awaited<ReturnType<typeof callVisionModel>> | undefined;
-    let lastError: unknown;
-    for (const candidate of getModelsForPurpose("text")) {
-      assertAnalysisActive();
-      checkModelBudget();
-      try {
-        response = await callVisionModel(candidate, messages, { attempts: 1 });
-        rawResponse = response.raw;
-        model = candidate;
-        break;
-      } catch (error) {
-        lastError = error;
-        if (!classifyModelError(error).retryable) throw error;
-      }
-    }
-    if (!response || !model) throw lastError ?? new Error("模型请求失败");
-    const quality = parseReceptionQuality(response.content, field.key, {
+    const parseOptions = {
       screenshotFacts: dependencies["截图内容总结"],
+    };
+    routed = await callModelPool(messages, {
+      purpose: "text",
+      recordId,
+      fieldId: field.id,
+      operation: field.executionType ?? "reception_quality_analysis",
+      validate: (content) => {
+        invalidResponse = content;
+        try {
+          parseReceptionQuality(content, field.key, parseOptions);
+          invalidResponse = undefined;
+          return { valid: true };
+        } catch {
+          return { valid: false };
+        }
+      },
     });
+    assertAnalysisActive();
+    const quality = parseReceptionQuality(routed.content, field.key, parseOptions);
     const result = { [field.key]: quality };
     const status = quality.reviewRequired ? "needs_review" as const : "completed" as const;
     const errorMessage = quality.reviewRequired ? "质检场景或部分项目证据不足，请人工复核" : undefined;
@@ -472,11 +494,11 @@ async function runReceptionQualityAnalysis(
       dependencies,
       promptSnapshot: field.prompt,
       fieldSnapshot: field,
-      modelConfigSnapshot: { name: model.name, model: model.model, baseUrl: model.baseUrl },
-      rawResponse: response.raw,
+      modelConfigSnapshot: routedModelSnapshot(routed),
+      rawResponse: routed.raw,
       errorMessage,
       durationMs: Date.now() - started,
-      usage: response.usage,
+      usage: routed.usage,
     });
     return { result, status, errorMessage, run };
   } catch (error) {
@@ -490,8 +512,8 @@ async function runReceptionQualityAnalysis(
       dependencies,
       promptSnapshot: field.prompt,
       fieldSnapshot: field,
-      modelConfigSnapshot: model ? { name: model.name, model: model.model } : {},
-      rawResponse,
+      modelConfigSnapshot: routed ? routedModelSnapshot(routed) : failedRouteSnapshot(error),
+      rawResponse: routed?.raw ?? invalidResponse,
       errorMessage: message,
       durationMs: Date.now() - started,
     });

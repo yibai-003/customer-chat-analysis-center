@@ -520,6 +520,7 @@ describe("App record pagination", () => {
       sectionId: "reception",
       concurrency: 4,
       batchSize: 40,
+      maxPaidTokens: 0,
     });
   });
 

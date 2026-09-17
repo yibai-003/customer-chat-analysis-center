@@ -7,10 +7,10 @@ import type {
   AnalysisField,
   KnowledgeCandidate,
   KnowledgeMatchResult,
+  ModelRouteResult,
 } from "../../../shared/types";
 import { buildKnowledgeMatchMessages } from "../../ai/knowledge-match-prompt-builder";
-import { callVisionModel, classifyModelError } from "../../ai/openai-compatible-client";
-import { getModelsForPurpose } from "../model-config-service";
+import { callModelPool } from "../model-pool-service";
 import { getKnowledgeBase } from "./knowledge-repository";
 import { searchKnowledge } from "./knowledge-search-service";
 
@@ -62,12 +62,19 @@ function filterPromptCandidates(
 function reviewResult(
   fieldKey: string,
   errorMessage?: string,
-): KnowledgeMatchResult {
+  route?: ModelRouteResult,
+): KnowledgeMatchExecutionResult {
   return {
     status: "needs_review",
     result: { [fieldKey]: "" },
     ...(errorMessage ? { errorMessage } : {}),
+    ...(route ? { route } : {}),
   };
+}
+
+export interface KnowledgeMatchExecutionResult extends KnowledgeMatchResult {
+  route?: ModelRouteResult;
+  cached?: boolean;
 }
 
 export async function matchKnowledgeItem(input: {
@@ -75,7 +82,7 @@ export async function matchKnowledgeItem(input: {
   field: AnalysisField;
   sectionName: string;
   dependencies: Record<string, unknown>;
-}): Promise<KnowledgeMatchResult> {
+}): Promise<KnowledgeMatchExecutionResult> {
   return withModelBudget(() => matchKnowledgeWithinBudget(input));
 }
 
@@ -126,28 +133,32 @@ async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledg
     candidates: filterPromptCandidates(candidates, promptColumns),
   });
   let selected = cachedCandidate;
-  let response: Awaited<ReturnType<typeof callVisionModel>> | undefined;
+  let response: Awaited<ReturnType<typeof callModelPool>> | undefined;
   if (!selected) {
-    const models = getModelsForPurpose("text");
-    if (!models.length) return reviewResult(input.field.key, "请先配置并启用默认模型");
-    let lastError: unknown;
-    for (const model of models) {
-      assertAnalysisActive(); checkModelBudget();
-      try {
-        response = await callVisionModel(model, messages, { attempts: 1 });
-        if (response) break;
-      } catch (error) {
-        lastError = error;
-        if (!classifyModelError(error).retryable) throw error;
-      }
-    }
-    if (!response) throw lastError ?? new Error("模型请求失败");
+    const candidateIds = new Set(candidates.map((candidate) => candidate.itemId));
+    response = await callModelPool(messages, {
+      purpose: "text",
+      recordId: input.recordId,
+      fieldId: input.field.id,
+      operation: "knowledge_match",
+      validate: (content) => {
+        const knowledgeItemId = parseKnowledgeItemId(content);
+        return {
+          valid: knowledgeItemId !== undefined
+            && (knowledgeItemId === "" || candidateIds.has(knowledgeItemId)),
+        };
+      },
+    });
     assertAnalysisActive();
     const knowledgeItemId = parseKnowledgeItemId(response.content);
-    if (knowledgeItemId === "") return reviewResult(input.field.key);
-    if (knowledgeItemId === undefined) return reviewResult(input.field.key, "模型返回不是合法的知识候选 JSON");
+    if (knowledgeItemId === "") return reviewResult(input.field.key, undefined, response);
+    if (knowledgeItemId === undefined) {
+      return reviewResult(input.field.key, "模型返回不是合法的知识候选 JSON", response);
+    }
     selected = candidates.find((candidate) => candidate.itemId === knowledgeItemId);
-    if (!selected) return reviewResult(input.field.key, "模型返回了候选范围外的知识条目 ID");
+    if (!selected) {
+      return reviewResult(input.field.key, "模型返回了候选范围外的知识条目 ID", response);
+    }
     matchCache.set(cacheKey, { itemId: selected.itemId, expiresAt: Date.now() + MATCH_CACHE_TTL_MS });
   }
 
@@ -176,5 +187,6 @@ async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledg
     status: "completed",
     result: { [input.field.key]: selected.itemId },
     snapshotId,
+    ...(response ? { route: response } : { cached: true }),
   };
 }

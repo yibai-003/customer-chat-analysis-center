@@ -20,6 +20,7 @@ import {
 import { analyzeRecordFields } from "./field-analysis-service";
 import { listFields, upsertField } from "./field-config-service";
 import { createFieldRun } from "./field-run-service";
+import { paidTokensRemaining } from "../ai/model-budget";
 import {
   analyzeJob,
   retryFailedJob,
@@ -176,23 +177,69 @@ describe("batch analysis scheduling", () => {
     expect(resolveAnalysisRunOptions()).toEqual({
       concurrency: 2,
       batchSize: 20,
+      maxPaidTokens: 0,
       recordIds: undefined,
     });
 
     expect(resolveAnalysisRunOptions(
       { concurrency: 6, batchSize: 100 },
       { concurrency: 2, batchSize: 20 },
-    )).toEqual({ concurrency: 6, batchSize: 100, recordIds: undefined });
+    )).toEqual({ concurrency: 6, batchSize: 100, maxPaidTokens: 0, recordIds: undefined });
+
+    expect(resolveAnalysisRunOptions(
+      { maxPaidTokens: 100_000_000 },
+      { concurrency: 2, batchSize: 20 },
+    )).toEqual({ concurrency: 2, batchSize: 20, maxPaidTokens: 100_000_000, recordIds: undefined });
+
+    expect(resolveAnalysisRunOptions(
+      { maxPaidTokens: 100_001 },
+      { concurrency: 2, batchSize: 20 },
+    )).toEqual({ concurrency: 2, batchSize: 20, maxPaidTokens: 100_001, recordIds: undefined });
 
     expect(resolveAnalysisRunOptions(
       { concurrency: 0, batchSize: 101 },
       { concurrency: 2, batchSize: 20 },
-    )).toEqual({ concurrency: 2, batchSize: 20, recordIds: undefined });
+    )).toEqual({ concurrency: 2, batchSize: 20, maxPaidTokens: 0, recordIds: undefined });
 
     expect(resolveAnalysisRunOptions(
       { concurrency: 1.5, batchSize: Number.NaN },
       { concurrency: 3, batchSize: 30 },
-    )).toEqual({ concurrency: 3, batchSize: 30, recordIds: undefined });
+    )).toEqual({ concurrency: 3, batchSize: 30, maxPaidTokens: 0, recordIds: undefined });
+
+    expect(resolveAnalysisRunOptions(
+      { maxPaidTokens: -1 },
+      { concurrency: 3, batchSize: 30 },
+    )).toEqual({ concurrency: 3, batchSize: 30, maxPaidTokens: 0, recordIds: undefined });
+
+    expect(resolveAnalysisRunOptions(
+      { maxPaidTokens: 1.5 },
+      { concurrency: 3, batchSize: 30 },
+    )).toEqual({ concurrency: 3, batchSize: 30, maxPaidTokens: 0, recordIds: undefined });
+
+    expect(resolveAnalysisRunOptions(
+      { maxPaidTokens: 100_000_001 },
+      { concurrency: 3, batchSize: 30 },
+    )).toEqual({ concurrency: 3, batchSize: 30, maxPaidTokens: 0, recordIds: undefined });
+  });
+
+  it("runs the prepared batch inside the requested paid-token budget", async () => {
+    const job = createJob("paid-budget.xlsx", "paid-budget.xlsx", {
+      id: "refund",
+      name: "付费预算",
+    });
+    addRecords(job.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 1,
+      anchor: {},
+      sourceFields: {},
+      imagePath: "paid-budget.png",
+    }]);
+    vi.mocked(analyzeRecordFields).mockImplementation(async () => {
+      expect(paidTokensRemaining()).toBe(1234);
+      return { total: 0, completed: 0, failed: 0, needsReview: 0, skipped: 0 };
+    });
+
+    await analyzeJob(job.id, "refund", { concurrency: 1, batchSize: 5, maxPaidTokens: 1234 });
   });
 
   it("rebuilds progress from records and latest field runs before batch analysis", async () => {
@@ -439,7 +486,7 @@ describe("batch analysis scheduling", () => {
 });
 
 describe("batch analysis API", () => {
-  it("forwards per-run concurrency and batch size to analyzeJob", async () => {
+  it("forwards per-run concurrency, batch size, and paid-token budget to analyzeJob", async () => {
     const calls: unknown[][] = [];
     const analyzeJobRunner = vi.fn(async (...args: unknown[]) => {
       calls.push(args);
@@ -457,7 +504,7 @@ describe("batch analysis API", () => {
       const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/analyze`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ sectionId: "refund", concurrency: 4, batchSize: 40 }),
+        body: JSON.stringify({ sectionId: "refund", concurrency: 4, batchSize: 40, maxPaidTokens: 5000 }),
       });
       await new Promise<void>((resolve) => setImmediate(resolve));
 
@@ -465,7 +512,7 @@ describe("batch analysis API", () => {
       expect(calls).toEqual([[
         job.id,
         "refund",
-        { concurrency: 4, batchSize: 40 },
+        { concurrency: 4, batchSize: 40, maxPaidTokens: 5000 },
       ]]);
     } finally {
       await new Promise<void>((resolve, reject) => {

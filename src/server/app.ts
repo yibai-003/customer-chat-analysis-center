@@ -13,7 +13,7 @@ import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSection
 import { analyzeRecord } from "./services/analysis-service";
 import { analyzeJob, retryFailedJob } from "./services/batch-analysis-service";
 import { exportJob } from "./services/excel-export-service";
-import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig, getModelsForPurpose, modelVerification } from "./services/model-config-service";
+import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig, getModelReadinessChecks } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
 import { listFields, upsertField, deleteField } from "./services/field-config-service";
 import { analyzeField, retryField } from "./services/field-analysis-service";
@@ -22,6 +22,7 @@ import { createKnowledgeRouter } from "./routes/knowledge-routes";
 import { getAnalysisCapacity } from "./services/analysis-capacity-service";
 import { initializeKnowledgeSync, type KnowledgeSync } from "./services/knowledge/knowledge-sync-service";
 import { setHotTopicKnowledgeSync } from "./services/knowledge/hot-topic-service";
+import { createModelPoolRouter } from "./routes/model-pool-router";
 
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
@@ -82,7 +83,7 @@ export function createApp(dependencies: AppDependencies = {}) {
     try {
       const disk = fs.statfsSync(config.dataDir);
       const freeDiskMb = Math.floor(Number(disk.bavail) * Number(disk.bsize) / 1024 / 1024);
-      const checks = { vision: modelVerification(getModelsForPurpose("vision")[0]), text: modelVerification(getModelsForPurpose("text")[0]) };
+      const checks = getModelReadinessChecks();
       const vision = checks.vision.verified;
       const text = checks.text.verified;
       const ready = freeDiskMb >= config.minFreeDiskMb && vision && text;
@@ -178,6 +179,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       void (dependencies.analyzeJobRunner ?? analyzeJob)(req.params.id, req.body.sectionId, {
         concurrency: req.body.concurrency,
         batchSize: req.body.batchSize,
+        maxPaidTokens: req.body.maxPaidTokens,
       }).catch((error) => console.error("批量解析失败", error));
       return ok(res, getJob(req.params.id));
     } catch (error) { return fail(res, error); }
@@ -218,6 +220,7 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.post("/api/model-configs/:id/test", async (req, res) => { try { return ok(res, await testModelConnection(req.params.id)); } catch (error) { return fail(res, error); } });
   app.post("/api/model-configs/:id/test-capabilities", async (req, res) => { try { return ok(res, await testModelCapabilities(req.params.id)); } catch (error) { return fail(res, error); } });
   app.use("/api", createKnowledgeRouter(upload));
+  app.use("/api", createModelPoolRouter());
   app.use(express.static(path.join(projectRoot, "dist")));
   app.use((
     error: unknown,

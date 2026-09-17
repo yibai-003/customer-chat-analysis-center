@@ -14,7 +14,7 @@ interface NavigationToken {
   jobId: string;
 }
 
-type AnalysisRunOptions = Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize">>;
+type AnalysisRunOptions = Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize" | "maxPaidTokens">>;
 
 export function useWorkspaceController() {
   const headerRef = useRef<HTMLElement>(null);

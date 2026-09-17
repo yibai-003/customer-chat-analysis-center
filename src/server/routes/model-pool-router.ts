@@ -1,0 +1,210 @@
+import express from "express";
+import { z, ZodError } from "zod";
+import {
+  createModelProvider,
+  listModelProviders,
+  safeBaseUrlSchema,
+  testModelProvider,
+  updateModelProvider,
+} from "../services/model-provider-service";
+import {
+  getModelPoolSettings,
+  getPoolSummary,
+  installQianwenFreePool,
+  listModelUsageEvents,
+  listPoolMembers,
+  updateModelPoolSettings,
+  updatePoolMember,
+  verifyPoolMembers,
+} from "../services/model-pool-admin-service";
+
+const idSchema = z.string().min(1).max(200);
+
+const providerCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  baseUrl: safeBaseUrlSchema,
+  apiKey: z.string().min(1).max(4096),
+  isEnabled: z.boolean().optional(),
+}).strict();
+
+const providerPatchSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  baseUrl: safeBaseUrlSchema.optional(),
+  apiKey: z.string().min(1).max(4096).optional(),
+  isEnabled: z.boolean().optional(),
+}).strict();
+
+const poolListQuerySchema = z.object({
+  purpose: z.enum(["vision", "text"]).optional(),
+}).strict();
+
+const poolMemberPatchSchema = z.object({
+  isEnabled: z.boolean().optional(),
+  poolEnabled: z.boolean().optional(),
+  billingMode: z.enum(["free", "paid"]).optional(),
+  qualityTier: z.enum(["A", "B", "C"]).optional(),
+  priority: z.number().int().min(0).max(1_000_000).optional(),
+  quotaTotalTokens: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).nullable().optional(),
+  quotaUsedTokens: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  quotaExpiresAt: z.string().datetime({ offset: true }).nullable().optional(),
+  quotaSafetyRatio: z.number().positive().max(1).optional(),
+}).strict();
+
+const verificationSchema = z.object({
+  ids: z.array(idSchema).max(50),
+  enablePassed: z.boolean().optional().default(false),
+}).strict();
+
+const settingsPatchSchema = z.object({
+  paidDailyTokenLimit: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  paidMonthlyTokenLimit: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  capabilityTtlMs: z.number().int().positive().max(Number.MAX_SAFE_INTEGER).optional(),
+}).strict();
+
+const usageFilterSchema = z.object({
+  purpose: z.enum(["vision", "text"]).optional(),
+  eventType: z.enum([
+    "success",
+    "failure",
+    "switch",
+    "quota_exhausted",
+    "cooldown",
+    "paid_blocked",
+    "usage_unknown",
+  ]).optional(),
+  modelConfigId: idSchema.optional(),
+  cursor: z.string().datetime({ offset: true }).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+}).strict();
+
+function routeId(value: string | string[]) {
+  return idSchema.parse(Array.isArray(value) ? value[0] : value);
+}
+
+function errorStatus(error: unknown) {
+  if (error instanceof ZodError) return 400;
+  if (
+    error instanceof Error
+    && (error.message === "模型供应商不存在" || error.message === "模型池成员不存在")
+  ) {
+    return 404;
+  }
+  return 400;
+}
+
+export function createModelPoolRouter(): express.Router {
+  const router = express.Router();
+  const ok = (res: express.Response, data: unknown) => (
+    res.json({ success: true, data, error: null })
+  );
+  const fail = (res: express.Response, error: unknown, status = errorStatus(error)) => (
+    res.status(status).json({
+      success: false,
+      data: null,
+      error: error instanceof ZodError
+        ? "请求参数无效"
+        : error instanceof Error
+          ? error.message
+          : String(error || "请求失败"),
+    })
+  );
+
+  router.get("/model-providers", (_req, res) => ok(res, listModelProviders()));
+
+  router.post("/model-providers", (req, res) => {
+    try {
+      return ok(res, createModelProvider(providerCreateSchema.parse(req.body)));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.patch("/model-providers/:id", (req, res) => {
+    try {
+      return ok(res, updateModelProvider(
+        routeId(req.params.id),
+        providerPatchSchema.parse(req.body),
+      ));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.post("/model-providers/:id/test", async (req, res) => {
+    try {
+      return ok(res, await testModelProvider(routeId(req.params.id)));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.get("/model-pools", (req, res) => {
+    try {
+      const query = poolListQuerySchema.parse(req.query);
+      return ok(res, {
+        members: listPoolMembers(query.purpose),
+        summary: getPoolSummary(),
+      });
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.patch("/model-pool-members/:id", (req, res) => {
+    try {
+      return ok(res, updatePoolMember(
+        routeId(req.params.id),
+        poolMemberPatchSchema.parse(req.body),
+      ));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.post("/model-pools/qianwen-free/install", (_req, res) => {
+    try {
+      return ok(res, installQianwenFreePool());
+    } catch (error) {
+      const missingProvider = error instanceof Error
+        && error.message === "请先配置并启用千问服务商凭证";
+      return fail(res, error, missingProvider ? 409 : errorStatus(error));
+    }
+  });
+
+  router.post("/model-pools/qianwen-free/verify", async (req, res) => {
+    try {
+      const input = verificationSchema.parse(req.body);
+      return ok(res, await verifyPoolMembers(input.ids, {
+        enablePassed: input.enablePassed,
+      }));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.get("/model-pool-settings", (_req, res) => {
+    try {
+      return ok(res, getModelPoolSettings());
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.patch("/model-pool-settings", (req, res) => {
+    try {
+      return ok(res, updateModelPoolSettings(settingsPatchSchema.parse(req.body)));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.get("/model-usage-events", (req, res) => {
+    try {
+      return ok(res, listModelUsageEvents(usageFilterSchema.parse(req.query)));
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  return router;
+}

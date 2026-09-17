@@ -60,7 +60,7 @@ describe("dynamic reason knowledge flow", () => {
     generatedDirectories.clear();
   });
 
-  it("parses a screenshot, matches one knowledge path, extracts three values, and exports only public results", async () => {
+  it("fails over one text route, writes one match snapshot, and exports only public results", async () => {
     upsertSection({
       id: sectionId,
       parentId: null,
@@ -182,22 +182,67 @@ describe("dynamic reason knowledge flow", () => {
       temperature: 0,
       maxTokens: 500,
     });
-    const textModel = createModelConfig({
-      name: "task-9-text",
-      baseUrl: "https://text.example/v1",
-      apiKey: "text-key",
-      model: "text-model",
+    const firstTextModel = createModelConfig({
+      name: "task-9-text-first",
+      baseUrl: "https://text-first.example/v1",
+      apiKey: "text-first-key",
+      model: "text-first-model",
+      supportsVision: false,
+      purpose: "text",
+      temperature: 0,
+      maxTokens: 500,
+    });
+    const secondTextModel = createModelConfig({
+      name: "task-9-text-second",
+      baseUrl: "https://text-second.example/v1",
+      apiKey: "text-second-key",
+      model: "text-second-model",
       supportsVision: false,
       purpose: "text",
       temperature: 0,
       maxTokens: 500,
     });
     setDefaultModel(visionModel.id, "vision");
-    setDefaultModel(textModel.id, "text");
+    setDefaultModel(firstTextModel.id, "text");
+    const capabilityCheckedAt = Date.now();
+    const quotaExpiresAt = "2026-10-01T00:00:00.000Z";
+    const enablePoolMember = db.prepare(`
+      UPDATE model_configs
+      SET pool_enabled=1, billing_mode='free', priority=?,
+          quota_total_tokens=10000, quota_used_tokens=0, quota_expires_at=?,
+          capability_json=?, capability_checked_at=?
+      WHERE id=?
+    `);
+    enablePoolMember.run(
+      1,
+      quotaExpiresAt,
+      JSON.stringify({ text: true, json: true, vision: true, errors: {} }),
+      capabilityCheckedAt,
+      visionModel.id,
+    );
+    enablePoolMember.run(
+      1,
+      quotaExpiresAt,
+      JSON.stringify({ text: true, json: true, vision: false, errors: {} }),
+      capabilityCheckedAt,
+      firstTextModel.id,
+    );
+    enablePoolMember.run(
+      2,
+      quotaExpiresAt,
+      JSON.stringify({ text: true, json: true, vision: false, errors: {} }),
+      capabilityCheckedAt,
+      secondTextModel.id,
+    );
 
     vi.spyOn(globalThis, "fetch").mockImplementation(async (_input, init) => {
       const request = JSON.parse(String(init?.body));
       const serialized = JSON.stringify(request.messages);
+      if (request.model === "text-first-model") {
+        return new Response(JSON.stringify({
+          error: { message: "rate limited" },
+        }), { status: 429, headers: { "Content-Type": "application/json" } });
+      }
       const content = serialized.includes("image_url")
         ? JSON.stringify({ screenshotContent: "面板弹簧片掉落" })
         : JSON.stringify({ knowledgeItemId: item.id });
@@ -250,7 +295,7 @@ describe("dynamic reason knowledge flow", () => {
     await analyzeField(recordId, sectionId, "level3");
 
     const fetchMock = vi.mocked(globalThis.fetch);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
     const modelCalls = fetchMock.mock.calls.map(([input, init]) => ({
       url: String(input),
       body: JSON.parse(String(init?.body)) as {
@@ -273,9 +318,22 @@ describe("dynamic reason knowledge flow", () => {
         }),
       },
       {
-        url: "https://text.example/v1/chat/completions",
+        url: "https://text-first.example/v1/chat/completions",
         body: expect.objectContaining({
-          model: "text-model",
+          model: "text-first-model",
+          messages: expect.not.arrayContaining([
+            expect.objectContaining({
+              content: expect.arrayContaining([
+                expect.objectContaining({ type: "image_url" }),
+              ]),
+            }),
+          ]),
+        }),
+      },
+      {
+        url: "https://text-second.example/v1/chat/completions",
+        body: expect.objectContaining({
+          model: "text-second-model",
           messages: expect.not.arrayContaining([
             expect.objectContaining({
               content: expect.arrayContaining([
@@ -288,6 +346,33 @@ describe("dynamic reason knowledge flow", () => {
     ]);
     expect(db.prepare("SELECT COUNT(*) AS count FROM knowledge_match_snapshots WHERE record_id = ?").get(recordId))
       .toEqual({ count: 1 });
+    expect(db.prepare(`
+      SELECT event_type, model_config_id, error_code
+      FROM model_usage_events
+      WHERE record_id = ? AND field_id = 'task-9-match' AND operation = 'knowledge_match'
+      ORDER BY rowid
+    `).all(recordId)).toEqual([
+      {
+        event_type: "failure",
+        model_config_id: firstTextModel.id,
+        error_code: "rate_limit",
+      },
+      {
+        event_type: "cooldown",
+        model_config_id: firstTextModel.id,
+        error_code: null,
+      },
+      {
+        event_type: "switch",
+        model_config_id: firstTextModel.id,
+        error_code: "rate_limit",
+      },
+      {
+        event_type: "success",
+        model_config_id: secondTextModel.id,
+        error_code: null,
+      },
+    ]);
     expect(db.prepare("SELECT COUNT(*) AS count FROM analysis_field_runs WHERE field_id IN ('task-9-level1', 'task-9-level2', 'task-9-level3') AND model_config_snapshot_json = '{}'").get())
       .toEqual({ count: 6 });
 
