@@ -68,7 +68,7 @@ npm.cmd ping
 
 ## 依赖审计待办
 
-后续更新：下述初次审计的 7 项已在依赖安全单元中定向修复，当前 Vitest 4.1.11 / uuid 11.1.1 的全部与运行依赖审计均为 0；54 个文件、341 项测试通过。原始发现保留作为记录，详见 [依赖漏洞修复与验收](dependency-security-remediation.md)。当前 `npm ci` 安装 332 个本机适用包，运行测试使用 `npm test`，无需旧 `--minWorkers` 参数。
+后续更新：下述初次审计的 7 项已在依赖安全单元中定向修复，当前 Vitest 4.1.11 / uuid 11.1.1 的全部与运行依赖审计均为 0；54 个文件、341 项测试通过。原始发现保留作为记录，详见 [依赖漏洞修复与验收](../archive/dependency-security-remediation.md)。当前 `npm ci` 安装 332 个本机适用包，运行测试使用 `npm test`，无需旧 `--minWorkers` 参数。
 
 本次 `npm audit` 返回 7 项：5 moderate、1 high、1 critical。其中 `--omit=dev` 的运行依赖为 ExcelJS/uuid 链路 2 项 moderate；其余属于 Vitest 及其嵌套 Vite/esbuild/mocker/vite-node 工具链。原始报告保留在隔离目录 `audit-all.json`、`audit-production.json`。级别是 npm 审计结果，是否可利用仍需结合调用路径评估。
 

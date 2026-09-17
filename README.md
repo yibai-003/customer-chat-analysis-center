@@ -13,29 +13,29 @@ npm run dev
 
 打开 `http://localhost:8787`。
 
-本机访问防护、`.env` 配置优先级及可迁移启动脚本说明见 [本地启动指南](docs/local-access-and-startup.md)。Node.js 要求 22.12 或更新版本。
+本机访问防护、`.env` 配置优先级及可迁移启动脚本说明见 [本地启动指南](docs/guides/local-access-and-startup.md)。Node.js 要求 22.12 或更新版本。
 
-依赖使用官方 npm 源并启用证书校验；新环境请使用 `npm ci` 按锁文件安装。安装步骤、证书和原生依赖排查见 [可复现安装指南](docs/reproducible-installation.md)。
+依赖使用官方 npm 源并启用证书校验；新环境请使用 `npm ci` 按锁文件安装。安装步骤、证书和原生依赖排查见 [可复现安装指南](docs/guides/reproducible-installation.md)。
 
-2026-09-13 依赖漏洞定向修复后，全部与运行依赖审计均为 0，341 项测试通过；后续更新仍需重新审计。版本与验证见 [依赖安全记录](docs/dependency-security-remediation.md)。
+2026-09-13 依赖漏洞定向修复后，全部与运行依赖审计均为 0，341 项测试通过；后续更新仍需重新审计。版本与验证见 [依赖安全记录](docs/archive/dependency-security-remediation.md)。
 
-分析取消、暂停和模型请求总预算见 [取消链路与模型预算](docs/cancellation-and-model-budget.md)。
+分析取消、暂停和模型请求总预算见 [取消链路与模型预算](docs/guides/cancellation-and-model-budget.md)。
 
-服务端输入边界见 [服务端输入约束](docs/server-input-validation.md)。
+服务端输入边界见 [服务端输入约束](docs/guides/server-input-validation.md)。
 
-配置 Schema 和热点技术失败/业务复核区分见 [配置与热点错误分类](docs/configuration-and-hot-topic-validation.md)。
+配置 Schema 和热点技术失败/业务复核区分见 [配置与热点错误分类](docs/archive/configuration-and-hot-topic-validation.md)。
 
-XLSX 关系、CRC 和图片资源限制见 [XLSX 资源校验](docs/xlsx-resource-validation.md)。
+XLSX 关系、CRC 和图片资源限制见 [XLSX 资源校验](docs/guides/xlsx-resource-validation.md)。
 
-上传与后台 Excel 导入共享未写入空间预算，避免并发重复占用余量；见 [共享磁盘预留](docs/shared-disk-reservations.md)。
+上传与后台 Excel 导入共享未写入空间预算，避免并发重复占用余量；见 [共享磁盘预留](docs/guides/shared-disk-reservations.md)。
 
-前端导入、分页详情、轮询与复核保存已拆为实际使用的 hooks，结构与回归证据见 [前端状态模块](docs/frontend-state-modules.md)。
+前端导入、分页详情、轮询与复核保存已拆为实际使用的 hooks，结构与回归证据见 [前端状态模块](docs/archive/frontend-state-modules.md)。
 
-知识快照导出失败会保留数据库修改与待同步状态，页面提供重试入口；快照生成不等于 GitHub 推送。详见 [知识同步失败恢复](docs/knowledge-sync-recovery.md)。
+知识快照导出失败会保留数据库修改与待同步状态，页面提供重试入口；快照生成不等于 GitHub 推送。详见 [知识同步失败恢复](docs/guides/knowledge-sync-recovery.md)。
 
-新环境自动生成独立本地加密密钥。旧默认密钥环境需先备份、停止服务，再运行 `npm run keys:migrate -- --apply`；检查用 `npm run keys:migrate -- --status`。模型凭据恢复需单独保管密钥文件，详见 [密钥管理与迁移](docs/encryption-key-management.md)。
+新环境自动生成独立本地加密密钥。旧默认密钥环境需先备份、停止服务，再运行 `npm run keys:migrate -- --apply`；检查用 `npm run keys:migrate -- --status`。模型凭据恢复需单独保管密钥文件，详见 [密钥管理与迁移](docs/guides/encryption-key-management.md)。
 
-Excel 上传会检查压缩包结构、实际解压量和磁盘余量；资源上限、错误提示及当前边界见 [上传安全说明](docs/upload-safety.md)。
+Excel 上传会检查压缩包结构、实际解压量和磁盘余量；资源上限、错误提示及当前边界见 [上传安全说明](docs/guides/upload-safety.md)。
 
 服务存活检查为 `/api/health`；业务就绪检查为 `/api/ready`，后者会同时检查数据库、磁盘空间以及视觉/文本默认模型。
 
@@ -58,12 +58,12 @@ npm run backup
 
 完整恢复包保存在 `data/backups/full-*`，包含数据库、知识配置和引用的 Excel/截图，验证成功后默认保留最近 7 份。手动与定时备份使用同一机制，旧版数据库备份不会自动清理。
 可通过 `BACKUP_RETENTION` 调整保留数量，使用 `npm run restore -- <备份目录> --to <新的恢复目录>` 恢复。
-完整命令、密钥保管和切换步骤见 [备份与恢复指南](docs/backup-and-recovery.md)。
+完整命令、密钥保管和切换步骤见 [备份与恢复指南](docs/guides/backup-and-recovery.md)。
 检查数据库完整性和知识库统计使用 `npm run db:check`。恢复知识库配置使用 `npm run knowledge:restore`；
 查看数据库迁移版本使用 `npm run db:migrations`。
-迁移已按版本执行，升级前生成保护备份；官方启动入口禁止同一数据库双实例，崩溃重启会恢复遗留运行状态。详见 [数据库迁移与恢复](docs/database-migrations-and-recovery.md)。
+迁移已按版本执行，升级前生成保护备份；官方启动入口禁止同一数据库双实例，崩溃重启会恢复遗留运行状态。详见 [数据库迁移与恢复](docs/guides/database-migrations-and-recovery.md)。
 清理预览使用 `npm run maintenance`，默认不删除文件。先备份、停止服务，再用 `npm run maintenance -- --apply` 实际清理无引用的过期临时文件，默认保留 14 天。
-官方启动命令自动将服务日志写入 `DATA_DIR/logs`，默认每路 10 MiB、保留 7 份归档，按大小/日期轮换。详见 [安全清理与日志指南](docs/safe-maintenance-and-logs.md)。
+官方启动命令自动将服务日志写入 `DATA_DIR/logs`，默认每路 10 MiB、保留 7 份归档，按大小/日期轮换。详见 [安全清理与日志指南](docs/guides/safe-maintenance-and-logs.md)。
 该命令不会恢复聊天任务和模型 API Key。
 
 ## 知识库随 GitHub 同步

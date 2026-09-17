@@ -66,7 +66,7 @@
 **实施顺序**
 
 - [x] 新增 `src/server/db/migrations/migrations-immutability.test.ts`：对 006 至 014 源文件计算 sha256 并与仓库内基线文件比对；基线文件初始记录当前哈希，后续新增迁移必须在同一提交中追加基线。
-- [x] 在 `docs/database-migrations-and-recovery.md` 与 `docs/knowledge-sync-recovery.md` 写明：结构变更只能走“新增迁移”；`knowledge/catalog.json` 定位为导出快照与恢复源，禁止手工编辑已提交快照。
+- [x] 在 `docs/guides/database-migrations-and-recovery.md` 与 `docs/guides/knowledge-sync-recovery.md` 写明：结构变更只能走“新增迁移”；`knowledge/catalog.json` 定位为导出快照与恢复源，禁止手工编辑已提交快照。
 - [x] `npm run knowledge:restore` 输出补充提示：将覆盖本地知识配置、备份位置与适用场景。
 - [x] 在临时库验证：手工改快照后启动应按既有冲突流程拦截，不静默覆盖。
 
@@ -74,7 +74,7 @@
 
 - 迁移哈希测试通过，且修改任一冻结迁移即测试失败。
 - 文档明确规则后，仓库内不再出现“迁移被修改”的提交。
-- 冲突路径行为与 `docs/knowledge-sync-recovery.md` 描述一致。
+- 冲突路径行为与 `docs/guides/knowledge-sync-recovery.md` 描述一致。
 
 ### T2 模型池首启可行动
 
@@ -151,21 +151,22 @@
 
 ### T7 文档治理
 
-- [ ] 根目录 5 份 `task-*-report.md` 与一次性验收记录移入 `docs/archive/`。
-- [ ] 新增 `docs/README.md` 索引，按启动、配置、同步、迁移、备份、维护、安全、模型池 8 个主题组织。
-- [ ] 后续文档统一使用“目的 / 实施顺序 / 验收 / 回退”模板，不再新增流水账式报告。
+- [x] 根目录 5 份 `task-*-report.md` 与一次性验收记录移入 `docs/archive/`（共 12 份）。
+- [x] 长期指南移入 `docs/guides/`（14 份），根目录只保留索引、活跃计划与流程。
+- [x] 新增 `docs/README.md` 索引，按启动、配置、同步、迁移、备份、维护、安全、模型池 8 个主题组织。
+- [x] 后续文档统一使用“目的 / 实施顺序 / 验收 / 回退”模板，不再新增流水账式报告。
 
 **验收标准**
 
-- `docs/` 根目录常青文档不超过 10 篇，每篇可从索引到达。
-- 仓库内无失效相对链接。
+- `docs/` 根目录文档不超过 10 篇（当前 4 篇：索引、实施计划、进度账本、开发流程），每篇可从索引到达。
+- 仓库内无失效相对链接（73 份 markdown，0 处失效）。
 
 ### T8 实例锁与平台健壮性
 
 保持确定性端口（换端口会破坏“同库互斥”语义），只改善诊断与文档：
 
 - [ ] 占用冲突时补充诊断：Windows 下解析占用进程并提示“可能是其他数据库实例或无关软件占用”。
-- [ ] `docs/local-access-and-startup.md` 补充确认与处置步骤。
+- [ ] `docs/guides/local-access-and-startup.md` 补充确认与处置步骤。
 - [ ] 新增“端口被占用时错误信息包含端口与排查建议”的测试；测试统一使用随机临时路径。
 
 **验收标准**
@@ -215,5 +216,5 @@ npm run db:check
 | `useWorkspaceController.ts` | 484 行 | 不超过 150 行 |
 | 执行类型清单与分派 | 6 个活代码文件各自维护 | 常量派生 + 注册表注册（每类型一处） |
 | 新增板块改动面（评估） | 约 8 个文件 | 不超过 3 个文件 + 1 个迁移 |
-| `docs/` 根目录文档 | 35 篇 | 不超过 10 篇 + `archive/` |
+| `docs/` 根目录文档 | 35 篇 | 根目录 4 篇 + `guides/` 14 篇 + `archive/` 12 篇 |
 | 质量闸门 | 无 lint、无冒烟 | `npm run lint` 0 error + 可复跑冒烟 |
