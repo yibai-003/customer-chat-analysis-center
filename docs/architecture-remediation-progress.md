@@ -2,14 +2,14 @@
 
 **计划：** `docs/architecture-remediation-plan-2026-09-17.md`
 
-**最后更新：** 2026-09-17（T6 阻塞：eslint 等待 npm 网络恢复）
+**最后更新：** 2026-09-17（T7 进行中；T6 eslint 仍阻塞）
 
 ## 恢复入口
 
-- 当前任务：T6（质量闸门，阻塞中）
-- 当前步骤：冒烟脚本已完成并提交；eslint 依赖安装失败
-- 下一步：网络/证书恢复后执行 `npm install -D eslint typescript-eslint eslint-plugin-react-hooks`，再补最小规则集与 `npm run lint`
-- 工作区状态：T6 冒烟部分已提交；eslint 未开始编码
+- 当前任务：T7（文档治理）
+- 当前步骤：盘点根目录文档与跨文档引用
+- 下一步：归档一次性记录并建立 `docs/README.md` 索引
+- 工作区状态：T6 冒烟部分已提交；eslint 待网络恢复；T7 未开始编码
 - 恢复方法：读本入口 → 打开计划文档查看该任务未勾选步骤 → 继续执行，无需通读项目
 
 ## 任务计划表
@@ -24,7 +24,7 @@
 | T4 结构化对象字段抽象 | 已完成 | - | - | 新增 `structured.ts` 工厂与探针测试；未成交/接待 5 个 handler 收敛为 3 个 definition；现有断言不改全部通过（559 项）；前台新增 `StructuredResultView` 且 DOM 不变 | - |
 | T5 前端工作区分层 | 已完成 | - | - | `useWorkspaceController.ts` 484 → 117 行；新增 `useJobSelection`（273 行）、`useAnalysisActions`（174 行）、`useSectionCatalog`（22 行）；App 与 hook 测试断言不改全部通过；全量 559 项通过 | - |
 | T6 质量闸门 | 阻塞 | 冒烟脚本完成；eslint 依赖安装失败 | 网络恢复后安装 eslint 并补规则集 | `npm run smoke` 通过（3 秒，可复跑，`ready:false` 符合空库预期） | npm 证书错误 `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`，不绕过证书 |
-| T7 文档治理 | 未开始 | - | - | - | - |
+| T7 文档治理 | 进行中 | 盘点文档与引用 | 归档并建立索引 | - | - |
 | T8 实例锁与平台健壮性 | 未开始 | - | - | - | - |
 
 ## 时间线日志
