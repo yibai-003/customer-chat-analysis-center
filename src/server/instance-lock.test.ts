@@ -1,12 +1,51 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { once } from "node:events";
 import { describe, expect, it } from "vitest";
-import { acquireInstanceLock } from "./instance-lock";
+import { acquireInstanceLock, describePortOwner } from "./instance-lock";
 
 describe("process ownership", () => {
+  it("reports the occupied port, the owning process and the next steps", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "instance-conflict-"));
+    const databasePath = path.join(dir, "app.db");
+    const first = await acquireInstanceLock(databasePath);
+    try {
+      const failure = await acquireInstanceLock(databasePath).catch((error: unknown) => error);
+      expect(failure).toBeInstanceOf(Error);
+      const message = (failure as Error).message;
+      expect(message).toContain(String(first.port));
+      expect(message).toContain("另一个数据库实例");
+      expect(message).toContain("未修改数据库");
+      if (process.platform === "win32") expect(message).toContain(String(process.pid));
+    } finally {
+      await first.release();
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("identifies the process listening on a lock port", async () => {
+    const server = net.createServer(socket => socket.destroy());
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(0, "127.0.0.1", resolve);
+    });
+    const address = server.address();
+    const port = address && typeof address === "object" ? address.port : 0;
+    try {
+      const owner = describePortOwner(port);
+      if (process.platform === "win32") {
+        expect(owner).toContain(`PID ${process.pid}`);
+      } else {
+        expect(owner).toBe("");
+      }
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
   it("blocks a second process for the same database and releases automatically on crash", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "instance-ownership-"));
     const databasePath = path.join(dir, "app.db");

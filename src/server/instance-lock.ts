@@ -2,6 +2,27 @@ import net from "node:net";
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
+
+export function describePortOwner(port: number): string {
+  if (process.platform !== "win32") return "";
+  try {
+    const output = execFileSync("netstat", ["-ano"], { encoding: "utf8", windowsHide: true, timeout: 3000 });
+    const line = output.split(/\r?\n/).find((entry) =>
+      entry.includes(`:${port} `) && /LISTENING/i.test(entry));
+    const pid = line?.trim().split(/\s+/).at(-1);
+    if (!pid || !/^\d+$/.test(pid)) return "";
+    const task = execFileSync("tasklist", ["/FI", `PID eq ${pid}`, "/FO", "CSV", "/NH"], {
+      encoding: "utf8",
+      windowsHide: true,
+      timeout: 3000,
+    });
+    const name = /^"([^"]+)"/.exec(task.trim())?.[1];
+    return name ? `${name}（PID ${pid}）` : `PID ${pid}`;
+  } catch {
+    return "";
+  }
+}
 
 /** OS-owned loopback socket: automatically released on process crash, with no stale PID file. */
 export async function acquireInstanceLock(databasePath: string) {
@@ -18,7 +39,11 @@ export async function acquireInstanceLock(databasePath: string) {
     });
   } catch {
     lock.close();
-    throw new Error(`该数据库已有服务运行，或本机保护端口 ${port} 被占用。请检查现有进程，未修改数据库。`);
+    const owner = describePortOwner(port);
+    const detail = owner
+      ? `占用进程：${owner}。请确认它是另一个数据库实例还是无关软件。`
+      : "请检查现有进程，确认它是另一个数据库实例还是无关软件。";
+    throw new Error(`该数据库已有服务运行，或本机保护端口 ${port} 被占用。${detail}未修改数据库。`);
   }
   lock.unref();
   let closed = false;

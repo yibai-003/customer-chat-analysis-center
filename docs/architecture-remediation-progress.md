@@ -2,14 +2,14 @@
 
 **计划：** `docs/architecture-remediation-plan-2026-09-17.md`
 
-**最后更新：** 2026-09-17（T8 进行中；T6 eslint 仍阻塞）
+**最后更新：** 2026-09-17（T8 已完成；T1–T5、T7、T8 完成；仅 T6 eslint 待网络恢复）
 
 ## 恢复入口
 
-- 当前任务：T8（实例锁与平台健壮性）
-- 当前步骤：梳理 `instance-lock.ts` 与现有互斥测试
-- 下一步：补充占用诊断、文档处置步骤与测试
-- 工作区状态：T7 已提交并推送；T8 未开始编码
+- 当前任务：无
+- 当前步骤：无
+- 下一步：npm 证书/网络恢复后安装 eslint 并补齐 T6 规则集；随后做整体收尾校验
+- 工作区状态：T8 已提交
 - 恢复方法：读本入口 → 打开计划文档查看该任务未勾选步骤 → 继续执行，无需通读项目
 
 ## 任务计划表
@@ -25,12 +25,13 @@
 | T5 前端工作区分层 | 已完成 | - | - | `useWorkspaceController.ts` 484 → 117 行；新增 `useJobSelection`（273 行）、`useAnalysisActions`（174 行）、`useSectionCatalog`（22 行）；App 与 hook 测试断言不改全部通过；全量 559 项通过 | - |
 | T6 质量闸门 | 阻塞 | 冒烟脚本完成；eslint 依赖安装失败 | 网络恢复后安装 eslint 并补规则集 | `npm run smoke` 通过（3 秒，可复跑，`ready:false` 符合空库预期） | npm 证书错误 `UNABLE_TO_GET_ISSUER_CERT_LOCALLY`，不绕过证书 |
 | T7 文档治理 | 已完成 | - | - | 根目录 25 → 4 篇；14 篇指南移入 `guides/`，12 份一次性记录移入 `archive/`；新增 `docs/README.md` 八主题索引；README 15 处链接更新；73 份 markdown 0 失效链接 | - |
-| T8 实例锁与平台健壮性 | 进行中 | 梳理锁实现与互斥测试 | 补充占用诊断、文档与测试 | - | - |
+| T8 实例锁与平台健壮性 | 已完成 | - | - | `describePortOwner` 在 Windows 下解析占用进程名与 PID；错误信息含端口与处置提示；启动指南新增排查步骤；新增 2 项测试；全量 561 项通过 | - |
 
 ## 时间线日志
 
 按时间倒序追加，每条格式：日期 / 任务 / 事件 / 证据。
 
+- 2026-09-17 / T8 / 完成实例锁占用诊断 / `describePortOwner` 在 Windows 下解析占用进程名与 PID，冲突错误信息含端口与处置提示，锁语义与确定性端口不变；启动指南新增确认与处置步骤；新增 2 项测试；全量 561 项通过；`typecheck`、`build`、`db:check` 通过
 - 2026-09-17 / T7 / 完成文档治理 / 根目录文档 25 → 4（索引、实施计划、进度账本、开发流程）；`guides/` 收纳 14 篇长期指南，`archive/` 收纳 12 份一次性记录（含 5 份根目录 task 报告）；新增 `docs/README.md` 八主题索引并更新 README 15 处链接；链接检查 73 份 markdown、0 失效
 - 2026-09-17 / T6 / 冒烟脚本完成，eslint 阻塞 / 新增 `scripts/smoke-local.mjs` 与 `npm run smoke`：临时数据目录启动子进程，校验 health/静态页/ready/knowledge-sync，3 秒通过且可复跑；eslint 安装因 npm 证书错误失败，未绕过校验
 - 2026-09-17 / T5 / 完成前端工作区分层 / 控制器 484 → 117 行；会话与操作令牌、轮询、刷新迁入 `useJobSelection`，分析/任务操作迁入 `useAnalysisActions`，板块字段加载迁入 `useSectionCatalog`；分页筛选复用既有 `useRecordWorkspace`；App 33 项与 hook 8 项断言不改通过；全量 559 项通过；`typecheck`、`build` 通过
