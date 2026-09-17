@@ -14,8 +14,10 @@
     "backup": "tsx src/server/backup-cli.ts",
     "restore": "tsx src/server/restore-cli.ts",
     "db:check": "tsx src/server/db-check-cli.ts",
+    "db:init": "tsx src/server/db-init-cli.ts",
     "db:migrations": "tsx src/server/db-migration-cli.ts",
     "maintenance": "tsx src/server/maintenance-cli.ts",
+    "bootstrap:admin": "tsx src/server/bootstrap-admin-cli.ts",
     "keys:migrate": "tsx src/server/key-cli.ts"
   },
   "type": "module",
@@ -28,6 +30,7 @@
     "multer": "^2.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "tsx": "^4.20.6",
     "unzipper": "^0.12.5",
     "zod": "^4.5.4"
   },
@@ -46,7 +49,6 @@
     "@vitejs/plugin-react": "^6.1.1",
     "jsdom": "^24.1.3",
     "oxlint": "^1.83.0",
-    "tsx": "^4.20.6",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "4.1.11"
