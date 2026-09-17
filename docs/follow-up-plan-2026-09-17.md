@@ -112,16 +112,46 @@ git push origin main
 - 修改 `package-lock.json`；
 - 绕过 GitHub 网络或证书校验问题。
 
+## 2026-09-17 实施结果
+
+### 主线拆分提交
+
+工作区改动已按功能边界拆分为 5 个提交：
+
+1. `8199eb6 feat: add lost-deal attribution board and reason knowledge bases`；
+2. `1425f8c feat: add unified reception quality analysis board`；
+3. `bd78ebb feat: wire lost-deal and reception boards into the analysis pipeline`；
+4. `c4565af feat: extend Excel import and export for the new analysis boards`；
+5. `0989dae feat: surface new analysis results in the workspace`。
+
+共享文件（`catalog.json`、`types.ts`、迁移索引、字段分析服务等）同时承载两个板块，无法按文件进一步拆分，已归入接线提交并在提交信息中说明。
+
+### 免费模型池合并
+
+`feat/model-pool` 分支在独立 worktree 中重新执行了全量测试和类型检查；发现并修复了一个依赖真实系统时间的测试（`99f1220 test: freeze pool status clock`），随后 537 项测试全部通过。
+
+合并决策与结果：
+
+- 分支基线快照与主线改动同源，模型池路由与未成交/接待接线可以共存；
+- 迁移保持 `006` 至 `014` 顺序，无重复或覆盖；
+- 冲突集中在字段分析服务、模型预算、迁移测试和 Excel 导出测试，按“模型池路由 + 主线修复波次”语义逐项合并；
+- 合并提交 `22fbe82 Merge branch 'feat/model-pool'`；
+- 合并后全量回归：72 个测试文件、549 项测试通过；`typecheck`、`build` 通过；`db:check` 完整性 `ok`，支持版本 `14`，本地数据库启动时自动迁移。
+
+### 推送状态
+
+截至本次验证，`github.com:443` 仍无法连接，`git push origin main` 失败。网络恢复后需重新执行；不要绕过网络或证书校验。
+
 ## 交付检查表
 
-- [ ] 依赖树恢复正常
-- [ ] 全量测试通过
-- [ ] 类型检查通过
-- [ ] 构建通过
-- [ ] 数据库完整性检查通过
-- [ ] 未成交分析完成专项复核
-- [ ] 接待流程质检完成专项复核
-- [ ] Excel 导出回读通过
-- [ ] 工作区按功能拆分提交
-- [ ] 主线提交成功推送
-- [ ] 模型池分支完成合并决策
+- [x] 依赖树恢复正常
+- [x] 全量测试通过
+- [x] 类型检查通过
+- [x] 构建通过
+- [x] 数据库完整性检查通过
+- [x] 未成交分析完成专项复核
+- [x] 接待流程质检完成专项复核
+- [x] Excel 导出回读通过
+- [x] 工作区按功能拆分提交
+- [ ] 主线提交成功推送（网络仍无法连接 `github.com:443`，待网络恢复）
+- [x] 模型池分支完成合并决策（已合并，`22fbe82`）
