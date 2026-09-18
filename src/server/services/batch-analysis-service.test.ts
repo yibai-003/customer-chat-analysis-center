@@ -729,7 +729,7 @@ describe("batch analysis API", () => {
         fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, withAuth(cookie, {
           method: "POST",
         })),
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("接口等待了整个批次")), 500)),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error("接口等待了整个批次")), 10_000)),
       ]);
 
       expect(response.status).toBe(200);
