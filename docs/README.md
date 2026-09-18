@@ -11,6 +11,7 @@
 ### 局域网部署与运维
 - [局域网部署与单实例运行](guides/lan-deployment.md)
 - [局域网运维手册](guides/lan-operations.md)
+- [局域网现场验收执行手册](guides/lan-acceptance-runbook.md)
 
 ### CI
 - [CI 质量闸门与发布工件](guides/ci-quality-gates.md)

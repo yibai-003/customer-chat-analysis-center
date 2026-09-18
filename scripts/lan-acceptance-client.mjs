@@ -1,7 +1,8 @@
 // LAN release acceptance client. Runs on a workstation against the internal HTTPS
-// entry (self-signed certificate accepted only for this drill) and exercises the
-// five-role permission matrix, shared data, audit trail and administrator-only
-// operations. Output is machine-readable JSON for the orchestrating PowerShell script.
+// entry and exercises the five-role permission matrix, shared data, audit trail and
+// administrator-only operations. `ACCEPTANCE_TLS_VERIFY=true` enforces the real
+// internal certificate (required for field acceptance); the default accepts the
+// drill's self-signed certificate. Output is machine-readable JSON.
 import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
@@ -9,7 +10,9 @@ import crypto from "node:crypto";
 
 const HOST = process.env.ACCEPTANCE_HOST ?? "chat.example.lan";
 const PORT = Number(process.env.ACCEPTANCE_PORT ?? 8443);
-const ORIGIN = `https://${HOST}`;
+const CONNECT_HOST = process.env.ACCEPTANCE_CONNECT_HOST ?? HOST;
+const TLS_VERIFY = process.env.ACCEPTANCE_TLS_VERIFY === "true";
+const ORIGIN = process.env.ACCEPTANCE_ORIGIN ?? `https://${HOST}`;
 const SAMPLE = process.env.ACCEPTANCE_SAMPLE ?? "sample-chat.xlsx";
 const ADMIN = {
   username: process.env.ACCEPTANCE_ADMIN_USERNAME ?? "admin",
@@ -47,12 +50,12 @@ function sleep(ms) {
 function rawRequest({ method = "GET", path: requestPath, cookie, headers = {}, body, contentType }) {
   return new Promise((resolve, reject) => {
     const request = https.request({
-      host: "127.0.0.1",
+      host: CONNECT_HOST,
       port: PORT,
       method,
       path: requestPath,
       servername: HOST,
-      rejectUnauthorized: false,
+      rejectUnauthorized: TLS_VERIFY,
       headers: {
         Host: HOST,
         Origin: ORIGIN,
@@ -68,6 +71,7 @@ function rawRequest({ method = "GET", path: requestPath, cookie, headers = {}, b
         status: response.statusCode,
         headers: response.headers,
         buffer: Buffer.concat(chunks),
+        certificate: response.socket?.getPeerCertificate?.() ?? null,
       }));
     });
     request.on("error", reject);
@@ -88,7 +92,18 @@ async function jsonRequest(method, requestPath, options = {}) {
   });
   let body = {};
   try { body = JSON.parse(response.buffer.toString("utf8")); } catch { body = {}; }
-  return { status: response.status, body, headers: response.headers };
+  return { status: response.status, body, headers: response.headers, certificate: response.certificate };
+}
+
+function certificateEvidence(certificate) {
+  if (!certificate || !certificate.subject) return null;
+  return {
+    subject: certificate.subject?.CN ?? null,
+    issuer: certificate.issuer?.CN ?? null,
+    validFrom: certificate.valid_from ?? null,
+    validTo: certificate.valid_to ?? null,
+    fingerprint256: certificate.fingerprint256 ?? null,
+  };
 }
 
 async function login(username, password) {
@@ -131,7 +146,11 @@ await step("https-health", async () => {
   const response = await jsonRequest("GET", "/api/health");
   requireStatus(response, 200, "health");
   if (response.body?.data?.status !== "ok") throw new Error("健康状态不是 ok");
-  return { status: response.body.data.status };
+  return {
+    status: response.body.data.status,
+    entry: { host: HOST, port: PORT, origin: ORIGIN, tlsVerified: TLS_VERIFY },
+    certificate: certificateEvidence(response.certificate),
+  };
 });
 
 await step("admin-login", async () => {
@@ -147,7 +166,14 @@ await step("create-role-accounts", async () => {
       cookie: state.cookies.admin,
       body: { username: account.username, password: account.password, displayName: account.displayName, role: account.role },
     });
-    requireStatus(created, 200, `创建 ${account.role}`);
+    if (created.status !== 200) {
+      const session = await login(account.username, account.password);
+      if (session.status !== 200 || !session.cookie) {
+        throw new Error(`${account.role} 创建失败（${created.status}）且无法用既定验收账号登录（${session.status}）：${JSON.stringify(created.body).slice(0, 200)}`);
+      }
+      state.cookies[account.role] = session.cookie;
+      continue;
+    }
     const session = await login(account.username, account.password);
     if (session.status !== 200 || !session.cookie) throw new Error(`${account.role} 登录失败：${session.status}`);
     state.cookies[account.role] = session.cookie;
@@ -287,12 +313,14 @@ await step("analysis-lifecycle", async () => {
 });
 
 await step("account-disable", async () => {
+  const username = `acceptance-temp-${Date.now().toString(36)}`;
+  const password = "acceptance-temp-123";
   const created = await jsonRequest("POST", "/api/admin/users", {
     cookie: state.cookies.admin,
-    body: { username: "acceptance-temp", password: "acceptance-temp-123", displayName: "临时账号", role: "operator" },
+    body: { username, password, displayName: "临时账号", role: "operator" },
   });
   requireStatus(created, 200, "创建临时账号");
-  const session = await login("acceptance-temp", "acceptance-temp-123");
+  const session = await login(username, password);
   requireStatus(session, 200, "临时账号登录");
   requireStatus(await jsonRequest("PATCH", `/api/admin/users/${created.body.data.id}`, { cookie: state.cookies.admin, body: { isEnabled: false } }), 200, "停用临时账号");
   requireStatus(await jsonRequest("GET", "/api/jobs", { cookie: session.cookie }), 401, "停用后会话失效");
@@ -346,5 +374,5 @@ await step("audit-trail", async () => {
 });
 
 const ok = steps.every((item) => item.ok);
-console.log(JSON.stringify({ ok, host: HOST, origin: ORIGIN, steps, backupName: state.backupName, auditEventCount: state.auditEvents.length }, null, 2));
+console.log(JSON.stringify({ ok, host: HOST, port: PORT, origin: ORIGIN, tlsVerified: TLS_VERIFY, steps, backupName: state.backupName, auditEventCount: state.auditEvents.length }, null, 2));
 process.exitCode = ok ? 0 : 1;

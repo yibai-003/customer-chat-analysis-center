@@ -75,7 +75,7 @@
 
 1. 在另一台局域网工作站打开 `https://<内网域名>`，用管理员登录，确认证书受信、页面与图片正常。
 2. 现场抽查操作人员可导入/发起解析、审核人员可复核/导出、只读人员无修改入口，并确认服务端对越权请求返回 403。
-3. 在真实主机上执行 `scripts/verify-lan-acceptance.ps1`（或等效操作）并保存证据 JSON。
+3. 在真实主机上用 `scripts/verify-lan-acceptance.ps1 -ExternalEntry https://<内部域名> -EvidencePath <证据文件>` 执行跨机验收（不要加 `-AllowSelfSigned`），完整步骤见 [局域网现场验收执行手册](../guides/lan-acceptance-runbook.md)。
 4. 用真实模型凭据完成一次解析闭环，并把结果补记到本文件。
 
 （CI 运行与工件追溯已于 2026-09-18 完成，见“首次真实 CI 与发布工件”。）

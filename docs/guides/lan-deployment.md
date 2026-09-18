@@ -51,6 +51,8 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-lan-runtime.ps1
 
 脚本执行：镜像构建 → 首次启动并等待健康 → 健康响应检查（无内部路径）→ 非 root 身份 → 数据库/托管密钥/知识快照生成 → 删除并重建容器验证数据仍在 → 同容器再次启动入口必须被拒绝 → Compose 配置校验。返回码 `0` 通过、`1` 失败、`2` 表示本机没有可用 Docker（跳过）。
 
+真实内网环境的跨工作站现场验收使用 `scripts/verify-lan-acceptance.ps1 -ExternalEntry https://<内部域名>`：脚本校验真实证书、执行五角色权限矩阵并输出脱敏证据，完整步骤见 [局域网现场验收执行手册](lan-acceptance-runbook.md)。
+
 ## 升级与回滚
 
 1. 构建并打标签：`docker build -t customer-chat-analysis:lan-<日期> .`，同时更新 `deploy/.env` 的 `APP_IMAGE`。

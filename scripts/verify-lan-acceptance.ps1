@@ -3,6 +3,12 @@
   [int]$ProxyPort = 8443,
   [string]$HostName = "chat.example.lan",
   [string]$AdminPassword = "acceptance-admin-123",
+  [string]$AdminUsername = "admin",
+  [string]$ExternalEntry = "",
+  [string]$ConnectHost = "",
+  [string]$EvidencePath = "",
+  [switch]$SkipDnsCheck,
+  [switch]$AllowSelfSigned,
   [switch]$Keep
 )
 
@@ -44,6 +50,81 @@ function Invoke-ContainerCli([string]$Command) {
   $output = (docker exec $script:appContainer sh -c $Command 2>&1) -join "`n"
   if ($LASTEXITCODE -ne 0) { Fail "容器命令失败：$Command`n$output" }
   return $output
+}
+function Invoke-FieldAcceptance {
+  $uri = [Uri]$ExternalEntry
+  if ($uri.Scheme -ne "https") { Fail "ExternalEntry 必须使用 https://（真实内网证书入口）" }
+  $hostName = $uri.Host
+  $port = if ($uri.IsDefaultPort) { 443 } else { $uri.Port }
+  $origin = if ($uri.IsDefaultPort) { "https://$hostName" } else { "https://${hostName}:$port" }
+  $tlsVerify = -not $AllowSelfSigned
+
+  $dnsRecords = @()
+  if ($SkipDnsCheck) {
+    Write-Host "WARN: 已跳过 DNS 检查（仅用于预演，不作为现场证据）"
+  } else {
+    try {
+      $dnsRecords = @(Resolve-DnsName -Name $hostName -Type A -ErrorAction Stop | ForEach-Object {
+        @{ name = $_.Name; type = $_.Type; address = $_.IPAddress }
+      })
+    } catch {
+      Fail "内网 DNS 未解析 $hostName：$($_.Exception.Message)"
+    }
+  }
+
+  $dockerVersion = ""
+  try { $dockerVersion = (docker version --format "{{.Server.Version}}" 2>$null) } catch { $dockerVersion = "" }
+
+  $evidence = [ordered]@{
+    collectedAt = (Get-Date).ToString("o")
+    mode = "field"
+    entry = $ExternalEntry
+    tlsVerified = $tlsVerify
+    workstation = @{
+      computer = $env:COMPUTERNAME
+      user = $env:USERNAME
+      os = [System.Environment]::OSVersion.VersionString
+      docker = $dockerVersion
+    }
+    dns = $dnsRecords
+  }
+
+  $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  $connectHost = if ($ConnectHost) { $ConnectHost } else { $hostName }
+  $env:ACCEPTANCE_HOST = $hostName
+  $env:ACCEPTANCE_PORT = "$port"
+  $env:ACCEPTANCE_ORIGIN = $origin
+  $env:ACCEPTANCE_CONNECT_HOST = $connectHost
+  $env:ACCEPTANCE_TLS_VERIFY = if ($tlsVerify) { "true" } else { "false" }
+  $env:ACCEPTANCE_ADMIN_USERNAME = $AdminUsername
+  $env:ACCEPTANCE_ADMIN_PASSWORD = $AdminPassword
+  $env:ACCEPTANCE_SAMPLE = (Join-Path $repoRoot "sample-chat.xlsx")
+
+  Write-Host "== 现场验收 $ExternalEntry（TLS 校验：$tlsVerify）"
+  $started = Get-Date
+  $text = (node (Join-Path $repoRoot "scripts/lan-acceptance-client.mjs")) -join "`n"
+  $seconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
+  $client = $text | ConvertFrom-Json
+  if (-not $client) { Fail "验收客户端未输出结果：$text" }
+  $client.steps | ForEach-Object { Write-Host ("   [{0}] {1}" -f ($(if ($_.ok) { "OK" } else { "FAIL" })), $_.name) }
+  $evidence.acceptance = @{
+    ok = $client.ok
+    seconds = $seconds
+    tlsVerified = $client.tlsVerified
+    steps = $client.steps
+    backupName = $client.backupName
+    auditEventCount = $client.auditEventCount
+  }
+  $path = if ($EvidencePath) { $EvidencePath } else { Join-Path $env:TEMP "lan-field-acceptance-evidence.json" }
+  [IO.File]::WriteAllText($path, ($evidence | ConvertTo-Json -Depth 8))
+  Write-Host "证据文件：$path"
+  if (-not $client.ok) { Fail "现场验收未通过（见证据文件）" }
+  Write-Host "FIELD ACCEPTANCE OK"
+}
+
+if ($ExternalEntry) {
+  Invoke-FieldAcceptance
+  exit 0
 }
 
 docker info --format "{{.ServerVersion}}" | Out-Null
@@ -121,7 +202,7 @@ server {
   docker run -d --name $appContainer --network $network `
     -e "LISTEN_HOST=0.0.0.0" `
     -e "ALLOWED_HOSTS=$HostName" `
-    -e "ALLOWED_ORIGINS=https://$HostName" `
+    -e "ALLOWED_ORIGINS=https://$HostName,https://${HostName}:$ProxyPort" `
     -e "SESSION_COOKIE_SECURE=true" `
     -e "FIRST_ADMIN_USERNAME=admin" `
     -e "FIRST_ADMIN_PASSWORD=$AdminPassword" `
@@ -150,6 +231,9 @@ server {
   Write-Host "== 执行五角色权限与审计验收（HTTPS）"
   $env:ACCEPTANCE_HOST = $HostName
   $env:ACCEPTANCE_PORT = "$ProxyPort"
+  $env:ACCEPTANCE_ORIGIN = "https://$HostName"
+  $env:ACCEPTANCE_CONNECT_HOST = "127.0.0.1"
+  $env:ACCEPTANCE_TLS_VERIFY = "false"
   $env:ACCEPTANCE_ADMIN_USERNAME = "admin"
   $env:ACCEPTANCE_ADMIN_PASSWORD = $AdminPassword
   $env:ACCEPTANCE_SAMPLE = (Join-Path $repoRoot "sample-chat.xlsx")
@@ -178,7 +262,7 @@ server {
   docker run -d --name $appContainer --network $network `
     -e "LISTEN_HOST=0.0.0.0" `
     -e "ALLOWED_HOSTS=$HostName" `
-    -e "ALLOWED_ORIGINS=https://$HostName" `
+    -e "ALLOWED_ORIGINS=https://$HostName,https://${HostName}:$ProxyPort" `
     -e "SESSION_COOKIE_SECURE=true" `
     -v "${dataDir}:/app/data" -v "${knowledgeDir}:/app/knowledge" $upgradeTag | Out-Null
   if (-not (Wait-Healthy $appContainer)) { Fail "升级预演后健康检查未通过" }
@@ -192,7 +276,7 @@ server {
   docker run -d --name $appContainer --network $network `
     -e "LISTEN_HOST=0.0.0.0" `
     -e "ALLOWED_HOSTS=$HostName" `
-    -e "ALLOWED_ORIGINS=https://$HostName" `
+    -e "ALLOWED_ORIGINS=https://$HostName,https://${HostName}:$ProxyPort" `
     -e "SESSION_COOKIE_SECURE=true" `
     -v "${dataDir}:/app/data" -v "${knowledgeDir}:/app/knowledge" $Image | Out-Null
   if (-not (Wait-Healthy $appContainer)) { Fail "镜像回滚后健康检查未通过" }
