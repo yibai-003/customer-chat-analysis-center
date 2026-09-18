@@ -137,3 +137,15 @@ docker exec customer-chat-analysis npm run restore:verify -- /tmp/recovery-20260
 - 审计覆盖：登录成败、登出、账号增改/停用/重置、配置与知识库变更、模型池操作、导入、解析生命周期、复核、导出、备份与恢复，以及所有权限拒绝。
 - 审计事件为追加写入，存储层拒绝修改与删除；包含操作者、动作、目标、结果、时间与请求关联标识（`x-request-id`），不保存密码、会话与 API Key。
 - 审计仅管理员可查；日常追溯按时间范围与动作过滤，导出结论时保留原始时间与 ID。
+
+## 12. 模型池基线收敛
+
+- 目的：明确正式供应商、正式文本模型和正式视觉模型；测试供应商、桩模型和临时验收模型不得参与正式路由。
+- 盘点（脱敏）：`$env:BASELINE_BASE_URL="https://<入口>"; $env:BASELINE_ADMIN_PASSWORD="<管理员密码>"; node scripts/model-pool-baseline.mjs`。输出供应商、模型、默认标记、池启用、能力检测、用量计数与 `/api/ready` 状态；只显示掩码 Key，管理员密码只从环境变量读取。
+- 收敛（先备份）：同上命令加 `--apply`。先 `POST /api/admin/backups` 创建可验证备份，再把名称含“测试/验收/桩/stub/test/acceptance”或地址指向 `localhost`/`host.docker.internal` 的模型与供应商停用并移出路由池，最后为已验证的正式模型设置默认。全部通过公开 API 完成，不直接修改 SQLite；变更自动进入审计。
+- 阻塞判定：若某用途没有“已启用 + 已验证 + 在池内 + 非测试”的正式模型，命令打印阻塞说明并以退出码 1 结束；不得把测试模型或桩模型标记为正式通过。
+- 隔离规则：测试/桩模型如需保留用于回归演练，必须保持停用状态、移出路由池且名称可辨识；正式路由只使用通过能力检测且未过期的正式模型。
+- 变更后检查：`/api/ready` 返回 200、默认文本/视觉模型指向正式模型、新解析的 `model-usage-events` 落在正式模型上；审计可查到 `config.create_model`、`config.test_model`、`config.set_default_model`、`pool.verify`、`pool.update_member`、`pool.update_provider`。
+- 回退：记录盘点输出中的 `backup` 名称；需要回退时按第 5 节恢复该备份并重启，或在配置页面重新启用原正式模型并设回默认。
+- 备用策略：正式供应商故障或配额不足时启用另一家正式供应商的备用模型并设为默认；备用模型同样必须能力检测通过，不能用测试模型顶替。
+- 凭据边界：正式 API Key 只保存在运行主机（配置页面或首次启动环境变量），工作站与验收脚本不持久化 Key；跨机验收需要临时输入时使用 `ACCEPTANCE_MODEL_API_KEY` 等环境变量，不写入命令历史、证据或 Git。
