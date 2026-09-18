@@ -5,7 +5,23 @@
 ## 结论
 
 - **机器等价验收通过**：在固定主机上通过独立的内网 HTTPS 入口（保留原始 Host/Origin）完成五角色权限矩阵、共享数据、拒绝、审计、镜像持久化/升级/回滚、备份与独立恢复校验、单实例保护。
-- **尚待人工确认**：真实“另一台局域网工作站”访问、组织内网 CA/DNS 与防火墙网段策略、以及首次真实 CI 运行与工件追溯。清单见文末。
+- **首次真实 CI 与发布工件追溯通过**：代码已提交并推送，GitHub Actions 干净 runner 全闸门通过并产出可下载的发布候选工件，`manifest.json` 与运行记录一致（见下节）。
+- **尚待人工确认**：真实“另一台局域网工作站”访问、组织内网 CA/DNS 与防火墙网段策略。清单见文末。
+
+## 首次真实 CI 与发布工件（2026-09-18 检查）
+
+| 项目 | 记录 |
+| --- | --- |
+| 成功运行 | [#35294240397](https://github.com/yibai-003/customer-chat-analysis-center/actions/runs/35294240397)（push 到 `main`，conclusion `success`） |
+| 提交 | `b4341f3ce74db5d9876615bac82ade72af38023c`（完整 SHA 与 manifest.commit 一致） |
+| 质量作业 | `npm ci`、`check:installation`、657 项测试、typecheck、lint、build、`db:init`、`db:check`、smoke 全部 success；node `v22.23.2`，迁移版本 17 |
+| 发布作业 | `docker build` 成功（无推送、无部署），工件上传成功 |
+| 工件名称 | `customer-chat-analysis-center-release-candidate`（artifact id `10526444673`，737551 字节，保留 30 天） |
+| 工件摘要 | `sha256:b4f6d2347edf0655c0dab1bda0f68580d15e958a76697a9b7ca530ab0637a490` |
+| 镜像 | `customer-chat-analysis-center:0.1.0-b4341f3ce74d`，镜像 ID `sha256:1b9bcff0a8e580700e750b71c7179a0cdd66421172613069a3b09a558595e294`（与 CI 日志一致） |
+| 工件内容 | `dist/`（含构建资产）、`src/server`、`src/shared`、`knowledge`、`config`、`package.json`、`package-lock.json`；不含 `node_modules`、`.env`、密钥或业务数据；manifest 标注运行要求为 `npm ci` + Node 22.12+ 或直接使用镜像 |
+
+首次运行暴露并修复了两个工件问题：`package.json` 缺少 `version` 导致镜像标签为 `undefined`；发布目录使用点开头的 `.release/` 被 `upload-artifact` 按隐藏路径跳过。修复后重新运行并通过。此前失败运行（质量闸门失败）均未产出发布候选工件，发布作业按 `needs` 依赖跳过。
 
 ## 环境
 
@@ -40,7 +56,7 @@
 
 1. **无真实第二台工作站**：本次由主机上的独立 HTTPS 客户端模拟内网工作站（真实 Host/Origin、TLS、拒绝矩阵），未跨物理机验证。跨机验收需按文末清单执行。
 2. **证书与 DNS**：使用自签名证书与虚构域名；生产必须替换为组织内网 CA 证书、内网 DNS 与防火墙网段放行。
-3. **CI 未真实运行**：本地完成全部质量命令；GitHub Actions 首跑后才能确认工件追溯（`manifest.json` 中的提交与镜像标签）。
+3. **CI 已真实验证**：首次运行曾因时区依赖断言与过紧的竞态超时失败；已在 Node 22 + `TZ=UTC` 下复现修复并重新运行通过。后续仍以 CI 为准，不以本地通过替代。
 4. **模型能力未验收**：验收库仅创建 1 个未验证的模型配置；真实解析依赖供应商凭据与能力检测，属于下一阶段线上化验证。
 5. **数据规模**：演练数据为小样本（1 条记录）；生产数据达 GB 级时需重新测量备份/恢复耗时与磁盘占用。
 6. **平台差异**：演练在 Windows + Docker Desktop；若生产主机为 Linux，需用同一脚本复跑一次。
@@ -60,5 +76,6 @@
 1. 在另一台局域网工作站打开 `https://<内网域名>`，用管理员登录，确认证书受信、页面与图片正常。
 2. 现场抽查操作人员可导入/发起解析、审核人员可复核/导出、只读人员无修改入口，并确认服务端对越权请求返回 403。
 3. 在真实主机上执行 `scripts/verify-lan-acceptance.ps1`（或等效操作）并保存证据 JSON。
-4. 触发一次 CI 运行，确认质量作业与发布工件均成功、工件内 `manifest.json` 指向本次发布提交。
-5. 用真实模型凭据完成一次解析闭环，并把结果补记到本文件。
+4. 用真实模型凭据完成一次解析闭环，并把结果补记到本文件。
+
+（CI 运行与工件追溯已于 2026-09-18 完成，见“首次真实 CI 与发布工件”。）

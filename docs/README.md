@@ -43,6 +43,10 @@
 - 免费模型池实施计划（`superpowers/plans/2026-09-16-model-pool.md`）
 - 免费模型池设计（`superpowers/specs/2026-09-16-model-pool-design.md`）
 
+## 项目规范
+
+- [项目目录结构与后续开发规范](project-structure-and-development-guidelines.md)
+
 ## 活跃计划与流程
 
 - [架构与结构性重复治理实施计划](architecture-remediation-plan-2026-09-17.md)
