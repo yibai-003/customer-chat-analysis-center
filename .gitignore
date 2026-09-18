@@ -18,3 +18,7 @@ knowledge/*.tmp
 install*.out
 install*.err
 project-files.txt
+
+# 过程性目录与打包产物
+.tmp/
+artifacts/
