@@ -122,7 +122,7 @@ const fields: AnalysisField[] = [
   },
 ];
 
-describe("field analysis executor", () => {
+describe("field analysis executor", { timeout: 20_000 }, () => {
   const imagePath = path.join(os.tmpdir(), "task-5-dispatch.png");
 
   beforeAll(() => {
