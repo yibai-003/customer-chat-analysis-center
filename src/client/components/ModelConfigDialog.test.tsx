@@ -231,7 +231,7 @@ describe("ModelConfigDialog", () => {
       billingMode: "paid",
       quotaUsedTokens: 250000,
       quotaTotalTokens: 1200000,
-      quotaExpiresAt: "2026-12-30T04:30:00.000Z",
+      quotaExpiresAt: new Date("2026-12-30T12:30").toISOString(),
       priority: 17,
       isEnabled: false,
       poolEnabled: false,
