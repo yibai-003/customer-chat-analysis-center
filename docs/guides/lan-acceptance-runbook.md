@@ -74,14 +74,21 @@ sudo ss -tlnp | grep -E ':(443|8787)'
 
 ## 步骤 5：跨机自动验收（Issue 11-5/6/8）
 
-在另一台真实工作站上执行（最终证据必须 TLS 校验开启，不要加 `-AllowSelfSigned`）：
+在另一台真实工作站上执行（最终证据必须 TLS 校验开启，不要加 `-AllowSelfSigned`；真实模型凭据必须提供并加 `-RequireRealModel`）：
 
 ```powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify-lan-acceptance.ps1 `
   -ExternalEntry "https://<内部域名>" `
   -AdminPassword "<验收管理员密码>" `
+  -RequireRealModel `
+  -ModelBaseUrl "https://<模型网关>/v1" `
+  -ModelApiKey "<真实 API Key>" `
+  -ModelName "<视觉模型名>" `
+  -TextModelName "<文本模型名>" `
   -EvidencePath ".\lan-field-evidence.json"
 ```
+
+API Key 也可以通过环境变量 `ACCEPTANCE_MODEL_API_KEY` 等传入，避免进入命令历史；脚本只在创建模型配置的请求体中使用它，证据文件与日志不会写入密钥。
 
 脚本自动完成：
 
@@ -89,7 +96,22 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify-lan-acceptance.ps1 
 - 真实证书校验（`ACCEPTANCE_TLS_VERIFY=true`）并记录证书主体、颁发者、有效期与 SHA-256 指纹；
 - 五类角色登录与完整权限矩阵（读取、导入、解析、复核、导出、配置、模型池、账号、审计、备份），越权必须 403；
 - 共享任务/记录/图片读取、匿名拒绝；
+- 真实模型闭环：创建并验证视觉/文本模型、设为默认、连通性与能力检测（文本/JSON/视觉）、导入脱敏 Excel、执行一次真实模型解析并断言模型输出与用量事件，全程校验响应/审计/用量不泄漏 API Key；
 - 审计不泄漏凭据、关联 ID 贯通、备份 API 创建成功。
+
+### 5.1 用桩模型预演（可选，不作为签署证据）
+
+正式提交真实 Key 前，可在工作站本地启动桩模型预热流程，确认脚本、防火墙与容器到主机的网络通路正常：
+
+```powershell
+node scripts/lan-acceptance-stub-model.mjs   # 监听 0.0.0.0:8788
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify-lan-acceptance.ps1 `
+  -ExternalEntry "https://<内部域名>" -RequireRealModel `
+  -ModelBaseUrl "http://host.docker.internal:8788/v1" `
+  -ModelApiKey "stub-model-secret" -ModelName "stub-vision" -TextModelName "stub-text"
+```
+
+桩模型只返回固定的探测值与占位解析结果，**不得**用于最终签署；正式证据必须使用真实模型供应商。
 
 浏览器侧人工抽查（同机）：
 
@@ -97,7 +119,8 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/verify-lan-acceptance.ps1 
 2. 管理员登录 → 退出 → 用另一浏览器会话确认旧会话已失效；
 3. 打开一条记录图片，确认原图可查看；
 4. 用另一个账号确认共享任务/记录可读取；
-5. 抽查五类角色入口显隐，并确认越权操作返回服务端拒绝。
+5. 抽查五类角色入口显隐，并确认越权操作返回服务端拒绝；
+6. 在配置界面重新检测一次真实视觉/文本模型，确认能力检测通过且列表只显示掩码后的 Key。
 
 ## 步骤 6：主机侧容器检查（Issue 11-7）
 
@@ -136,11 +159,11 @@ docker exec customer-chat-analysis npm run restore:verify -- /tmp/field-restore
 
 任何证据不得包含：密码、会话 Cookie、API Key、加密密钥、私钥、完整业务数据文件。
 
-更新 [发布验收记录](../archive/lan-release-acceptance-2026-09-17.md) 中“真实第二台工作站”与基础设施待办，并回填 Issue 11 检查项。
+更新 [发布验收记录](../archive/lan-release-acceptance-2026-09-17.md) 中“真实第二台工作站”与基础设施待办，并回填 Issue 11、Issue 12 检查项。
 
 ## 通过标准
 
-- 步骤 5 输出 `FIELD ACCEPTANCE OK` 且 `tlsVerified: true`；
+- 步骤 5 输出 `FIELD ACCEPTANCE OK`，证据中 `tlsVerified: true` 且 `realModel.configured: true`、`acceptance.modelEvidence` 至少记录一次真实模型调用成功；
 - 浏览器侧抽查全部通过，越权请求均被服务端拒绝；
 - 步骤 6 重启后数据可用且第二实例被拒绝，`restore:verify` 全部通过；
 - 证据齐全且脱敏。

@@ -24,10 +24,22 @@ const ACCOUNTS = [
   { role: "reviewer", username: "acceptance-reviewer", password: "acceptance-reviewer-123", displayName: "验收审核" },
   { role: "readonly", username: "acceptance-readonly", password: "acceptance-readonly-123", displayName: "验收只读" },
 ];
-const SECRETS = [ADMIN.password, ...ACCOUNTS.map((account) => account.password), "acceptance-secret-key-123", "password_hash", "cc_sid"];
+// Real model provider credentials. When provided, the client configures and verifies
+// the models through the API and proves a real model call completed an analysis. The
+// API key only ever leaves the workstation as the create request body; it is never
+// written to evidence or echoed back by the assertions below.
+const MODEL = {
+  baseUrl: process.env.ACCEPTANCE_MODEL_BASE_URL ?? "",
+  apiKey: process.env.ACCEPTANCE_MODEL_API_KEY ?? "",
+  visionModel: process.env.ACCEPTANCE_MODEL_NAME ?? "",
+  textModel: process.env.ACCEPTANCE_TEXT_MODEL_NAME || process.env.ACCEPTANCE_MODEL_NAME || "",
+  supportsVision: process.env.ACCEPTANCE_MODEL_SUPPORTS_VISION !== "false",
+};
+const REAL_MODEL = Boolean(MODEL.baseUrl && MODEL.apiKey && MODEL.visionModel && MODEL.textModel);
+const SECRETS = [ADMIN.password, ...ACCOUNTS.map((account) => account.password), "acceptance-secret-key-123", "password_hash", "cc_sid", ...(REAL_MODEL ? [MODEL.apiKey] : [])];
 
 const steps = [];
-const state = { cookies: {}, jobId: "", recordId: "", backupName: "", auditEvents: [] };
+const state = { cookies: {}, jobId: "", recordId: "", backupName: "", auditEvents: [], models: {} };
 
 function record(name, ok, detail) {
   steps.push({ name, ok, detail: detail ?? null });
@@ -295,6 +307,70 @@ await step("configuration-and-pool", async () => {
   return { configWrites: "config/admin only" };
 });
 
+await step("real-model-configure", async () => {
+  if (!REAL_MODEL) {
+    return { skipped: true, reason: "未提供 ACCEPTANCE_MODEL_BASE_URL/API_KEY/NAME，跳过真实模型配置" };
+  }
+  const prior = await jsonRequest("GET", "/api/model-configs", { cookie: state.cookies.config });
+  for (const model of prior.body?.data ?? []) {
+    if (model.name === "验收视觉模型" || model.name === "验收文本模型") {
+      await jsonRequest("DELETE", `/api/model-configs/${model.id}`, { cookie: state.cookies.config });
+    }
+  }
+  const quotaExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  const created = {};
+  for (const [purpose, model] of [["vision", MODEL.visionModel], ["text", MODEL.textModel]]) {
+    const response = await jsonRequest("POST", "/api/model-configs", {
+      cookie: state.cookies.config,
+      body: {
+        name: `验收${purpose === "vision" ? "视觉" : "文本"}模型`,
+        baseUrl: MODEL.baseUrl,
+        apiKey: MODEL.apiKey,
+        model,
+        purpose,
+        supportsVision: purpose === "vision" && MODEL.supportsVision,
+      },
+    });
+    requireStatus(response, 200, `创建${purpose}模型`);
+    created[purpose] = response.body.data.id;
+  }
+  for (const purpose of ["vision", "text"]) {
+    requireStatus(await jsonRequest("POST", `/api/model-configs/${created[purpose]}/default`, {
+      cookie: state.cookies.config,
+      body: { purpose },
+    }), 200, `设为默认${purpose}模型`);
+    const tested = await jsonRequest("POST", `/api/model-configs/${created[purpose]}/test`, { cookie: state.cookies.config });
+    requireStatus(tested, 200, `${purpose}模型连通性`);
+    if (tested.body?.data?.success !== true) throw new Error(`${purpose}模型连通性检测未通过`);
+  }
+  const verified = await jsonRequest("POST", "/api/model-pool-members/verify", {
+    cookie: state.cookies.config,
+    body: { ids: [created.vision, created.text], enablePassed: true },
+  });
+  requireStatus(verified, 200, "模型能力验证");
+  const failing = (verified.body.data ?? []).filter((item) => !item.passed);
+  if (failing.length) throw new Error(`模型能力验证未通过：${JSON.stringify(failing).slice(0, 300)}`);
+  for (const purpose of ["vision", "text"]) {
+    requireStatus(await jsonRequest("PATCH", `/api/model-pool-members/${created[purpose]}`, {
+      cookie: state.cookies.config,
+      body: { poolEnabled: true, billingMode: "free", quotaTotalTokens: 1_000_000, quotaExpiresAt },
+    }), 200, `${purpose}模型池配置`);
+  }
+  const listed = await jsonRequest("GET", "/api/model-configs", { cookie: state.cookies.readonly });
+  requireStatus(listed, 200, "只读模型列表");
+  if (JSON.stringify(listed.body).includes(MODEL.apiKey)) throw new Error("模型配置响应泄漏真实 API Key");
+  state.models = created;
+  return {
+    configured: true,
+    vision: created.vision,
+    text: created.text,
+    visionModel: MODEL.visionModel,
+    textModel: MODEL.textModel,
+    supportsVision: MODEL.supportsVision,
+    verified: (verified.body.data ?? []).map((item) => ({ purpose: item.purpose, passed: item.passed, capabilities: item.capabilities })),
+  };
+});
+
 await step("analysis-lifecycle", async () => {
   for (const role of ["config", "reviewer", "readonly"]) {
     requireStatus(await jsonRequest("POST", `/api/jobs/${state.jobId}/pause`, { cookie: state.cookies[role] }), 403, `${role} 暂停拒绝`);
@@ -310,6 +386,81 @@ await step("analysis-lifecycle", async () => {
     return job.body?.data?.status !== "processing" ? true : undefined;
   }, 90_000, "解析运行结束");
   return { startedBy: "operator" };
+});
+
+await step("real-model-parse", async () => {
+  if (!REAL_MODEL) {
+    return { skipped: true, reason: "未提供真实模型，无法验证模型解析闭环" };
+  }
+  const sectionId = `acceptance-model-${Date.now().toString(36)}`;
+  const fieldKey = "acceptanceConclusion";
+  requireStatus(await jsonRequest("POST", "/api/sections", {
+    cookie: state.cookies.config,
+    body: { id: sectionId, name: "验收模型解析", prompt: "验收专用板块：用一句话给出结论。" },
+  }), 200, "创建验收解析板块");
+  requireStatus(await jsonRequest("POST", `/api/sections/${sectionId}/fields`, {
+    cookie: state.cookies.config,
+    body: { key: fieldKey, label: "验收结论", type: "string", prompt: "请用一句话给出客服聊天结论。", required: true, imageEnabled: false },
+  }), 200, "创建验收解析字段");
+  try {
+    const upload = multipart(SAMPLE, { sectionId });
+    const imported = await rawRequest({
+      method: "POST",
+      path: "/api/jobs/import",
+      cookie: state.cookies.operator,
+      body: upload.body,
+      contentType: upload.contentType,
+    });
+    let created = {};
+    try { created = JSON.parse(imported.buffer.toString("utf8")); } catch { created = {}; }
+    if (imported.status !== 200 || !created?.data?.id) {
+      throw new Error(`验收解析导入失败：${imported.status} ${JSON.stringify(created).slice(0, 200)}`);
+    }
+    const finished = await waitFor(async () => {
+      const status = await jsonRequest("GET", `/api/import-jobs/${created.data.id}`, { cookie: state.cookies.operator });
+      return status.body?.data && ["completed", "failed"].includes(status.body.data.status) ? status.body.data : undefined;
+    }, 90_000, "验收解析导入");
+    if (finished.status !== "completed") throw new Error(`验收解析导入状态 ${finished.status}：${finished.errorMessage ?? ""}`);
+    const records = await jsonRequest("GET", `/api/jobs/${finished.jobId}/records?page=1&pageSize=1`, { cookie: state.cookies.operator });
+    const recordId = records.body?.data?.items?.[0]?.id;
+    if (!recordId) throw new Error("验收解析任务没有记录");
+    requireStatus(await jsonRequest("POST", `/api/records/${recordId}/analyze`, {
+      cookie: state.cookies.operator,
+      body: { sectionId },
+    }), 200, "真实模型单条解析");
+    const detail = await jsonRequest("GET", `/api/records/${recordId}`, { cookie: state.cookies.admin });
+    requireStatus(detail, 200, "验收解析记录详情");
+    const runs = detail.body?.data?.fieldRuns ?? [];
+    const modelRun = runs.find((run) => run.fieldKey === fieldKey && run.status === "completed");
+    const output = modelRun?.result?.[fieldKey];
+    if (!output || typeof output !== "string" || !output.trim()) {
+      throw new Error(`字段 ${fieldKey} 未产生模型输出：${JSON.stringify(modelRun?.result ?? null).slice(0, 200)}`);
+    }
+    const usage = await jsonRequest(
+      "GET",
+      `/api/model-usage-events?modelConfigId=${state.models.text}&eventType=success&limit=50`,
+      { cookie: state.cookies.config },
+    );
+    requireStatus(usage, 200, "模型调用用量");
+    const events = usage.body?.data ?? [];
+    if (!events.length) throw new Error("未记录到真实文本模型调用成功事件");
+    const serialized = JSON.stringify(detail.body) + JSON.stringify(usage.body);
+    if (serialized.includes(MODEL.apiKey)) throw new Error("解析结果或用量事件泄漏真实 API Key");
+    const tokens = events.reduce((sum, event) => sum + (event.inputTokens ?? 0) + (event.outputTokens ?? 0), 0);
+    return {
+      recordStatus: detail.body?.data?.status,
+      modelField: fieldKey,
+      outputPreview: output.slice(0, 60),
+      modelCalls: events.length,
+      accountedTokens: tokens,
+    };
+  } finally {
+    const fields = await jsonRequest("GET", `/api/sections/${sectionId}/fields`, { cookie: state.cookies.config });
+    for (const field of fields.body?.data ?? []) {
+      await jsonRequest("DELETE", `/api/fields/${field.id}`, { cookie: state.cookies.config });
+    }
+    await jsonRequest("DELETE", `/api/sections/${sectionId}`, { cookie: state.cookies.config });
+  }
 });
 
 await step("account-disable", async () => {
@@ -353,6 +504,7 @@ await step("audit-trail", async () => {
     "config.create_model",
     "pool.update_settings",
     "backup.create",
+    ...(REAL_MODEL ? ["config.test_model", "config.set_default_model", "pool.verify"] : []),
   ];
   const actions = new Set(events.map((event) => event.action));
   const missing = required.filter((action) => !actions.has(action));
@@ -374,5 +526,6 @@ await step("audit-trail", async () => {
 });
 
 const ok = steps.every((item) => item.ok);
-console.log(JSON.stringify({ ok, host: HOST, port: PORT, origin: ORIGIN, tlsVerified: TLS_VERIFY, steps, backupName: state.backupName, auditEventCount: state.auditEvents.length }, null, 2));
+const modelStep = steps.find((item) => item.name === "real-model-parse");
+console.log(JSON.stringify({ ok, host: HOST, port: PORT, origin: ORIGIN, tlsVerified: TLS_VERIFY, realModel: REAL_MODEL, modelEvidence: modelStep?.detail ?? null, steps, backupName: state.backupName, auditEventCount: state.auditEvents.length }, null, 2));
 process.exitCode = ok ? 0 : 1;

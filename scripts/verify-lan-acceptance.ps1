@@ -7,6 +7,12 @@
   [string]$ExternalEntry = "",
   [string]$ConnectHost = "",
   [string]$EvidencePath = "",
+  [string]$ModelBaseUrl = "",
+  [string]$ModelApiKey = "",
+  [string]$ModelName = "",
+  [string]$TextModelName = "",
+  [string]$ModelSupportsVision = "true",
+  [switch]$RequireRealModel,
   [switch]$SkipDnsCheck,
   [switch]$AllowSelfSigned,
   [switch]$Keep
@@ -50,6 +56,23 @@ function Invoke-ContainerCli([string]$Command) {
   $output = (docker exec $script:appContainer sh -c $Command 2>&1) -join "`n"
   if ($LASTEXITCODE -ne 0) { Fail "容器命令失败：$Command`n$output" }
   return $output
+}
+function Set-ModelEnv {
+  $baseUrl = if ($ModelBaseUrl) { $ModelBaseUrl } else { $env:ACCEPTANCE_MODEL_BASE_URL }
+  $apiKey = if ($ModelApiKey) { $ModelApiKey } else { $env:ACCEPTANCE_MODEL_API_KEY }
+  $name = if ($ModelName) { $ModelName } else { $env:ACCEPTANCE_MODEL_NAME }
+  $textName = if ($TextModelName) { $TextModelName } else { $env:ACCEPTANCE_TEXT_MODEL_NAME }
+  if ($baseUrl -and $apiKey -and $name) {
+    $resolvedText = if ($textName) { $textName } else { $name }
+    $env:ACCEPTANCE_MODEL_BASE_URL = $baseUrl
+    $env:ACCEPTANCE_MODEL_API_KEY = $apiKey
+    $env:ACCEPTANCE_MODEL_NAME = $name
+    $env:ACCEPTANCE_TEXT_MODEL_NAME = $resolvedText
+    $env:ACCEPTANCE_MODEL_SUPPORTS_VISION = $ModelSupportsVision
+    return [ordered]@{ configured = $true; baseUrl = $baseUrl; visionModel = $name; textModel = $resolvedText; supportsVision = ($ModelSupportsVision -ne "false") }
+  }
+  Remove-Item Env:ACCEPTANCE_MODEL_BASE_URL, Env:ACCEPTANCE_MODEL_API_KEY, Env:ACCEPTANCE_MODEL_NAME, Env:ACCEPTANCE_TEXT_MODEL_NAME, Env:ACCEPTANCE_MODEL_SUPPORTS_VISION -ErrorAction SilentlyContinue
+  return [ordered]@{ configured = $false }
 }
 function Invoke-FieldAcceptance {
   $uri = [Uri]$ExternalEntry
@@ -99,8 +122,13 @@ function Invoke-FieldAcceptance {
   $env:ACCEPTANCE_ADMIN_USERNAME = $AdminUsername
   $env:ACCEPTANCE_ADMIN_PASSWORD = $AdminPassword
   $env:ACCEPTANCE_SAMPLE = (Join-Path $repoRoot "sample-chat.xlsx")
+  $modelInfo = Set-ModelEnv
+  if ($RequireRealModel -and -not $modelInfo.configured) {
+    Fail "现场签署要求 -RequireRealModel，但未提供真实模型凭据（-ModelBaseUrl/-ModelApiKey/-ModelName 或 ACCEPTANCE_MODEL_* 环境变量）"
+  }
+  $evidence.realModel = $modelInfo
 
-  Write-Host "== 现场验收 $ExternalEntry（TLS 校验：$tlsVerify）"
+  Write-Host "== 现场验收 $ExternalEntry（TLS 校验：$tlsVerify，真实模型：$($modelInfo.configured)）"
   $started = Get-Date
   $text = (node (Join-Path $repoRoot "scripts/lan-acceptance-client.mjs")) -join "`n"
   $seconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
@@ -111,6 +139,8 @@ function Invoke-FieldAcceptance {
     ok = $client.ok
     seconds = $seconds
     tlsVerified = $client.tlsVerified
+    realModel = $client.realModel
+    modelEvidence = $client.modelEvidence
     steps = $client.steps
     backupName = $client.backupName
     auditEventCount = $client.auditEventCount
@@ -237,13 +267,15 @@ server {
   $env:ACCEPTANCE_ADMIN_USERNAME = "admin"
   $env:ACCEPTANCE_ADMIN_PASSWORD = $AdminPassword
   $env:ACCEPTANCE_SAMPLE = (Join-Path $repoRoot "sample-chat.xlsx")
+  $modelInfo = Set-ModelEnv
+  $evidence.realModel = $modelInfo
   $clientStarted = Get-Date
   $clientText = (node (Join-Path $repoRoot "scripts/lan-acceptance-client.mjs")) -join "`n"
   $clientSeconds = [math]::Round(((Get-Date) - $clientStarted).TotalSeconds, 1)
   $client = $clientText | ConvertFrom-Json
   if (-not $client) { Fail "验收客户端未输出结果：$clientText" }
   $client.steps | ForEach-Object { Write-Host ("   [{0}] {1}" -f ($(if ($_.ok) { "OK" } else { "FAIL" })), $_.name) }
-  $evidence.acceptanceClient = @{ ok = $client.ok; seconds = $clientSeconds; steps = $client.steps; backupName = $client.backupName; auditEventCount = $client.auditEventCount }
+  $evidence.acceptanceClient = @{ ok = $client.ok; seconds = $clientSeconds; realModel = $client.realModel; modelEvidence = $client.modelEvidence; steps = $client.steps; backupName = $client.backupName; auditEventCount = $client.auditEventCount }
   if (-not $client.ok) { throw "五角色验收未通过" }
 
   Write-Host "== 独立目录恢复与密钥校验"
