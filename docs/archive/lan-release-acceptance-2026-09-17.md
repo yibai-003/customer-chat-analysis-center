@@ -6,7 +6,7 @@
 
 - **机器等价验收通过**：在固定主机上通过独立的内网 HTTPS 入口（保留原始 Host/Origin）完成五角色权限矩阵、共享数据、拒绝、审计、镜像持久化/升级/回滚、备份与独立恢复校验、单实例保护。
 - **首次真实 CI 与发布工件追溯通过**：代码已提交并推送，GitHub Actions 干净 runner 全闸门通过并产出可下载的发布候选工件，`manifest.json` 与运行记录一致（见下节）。
-- **尚待人工确认**：真实“另一台局域网工作站”访问、组织内网 CA/DNS 与防火墙网段策略。清单见文末。
+- **尚待人工确认**：组织内网 CA/DNS、防火墙网段策略、固定发布主机与五角色物理工作站抽查。真实跨机业务（HTTP 入口）已于 2026-09-18 通过，见 [局域网真实业务验收记录](lan-real-business-acceptance-2026-09-18.md)。
 
 ## Issue 11/12 验收工具加固（2026-09-18）
 
@@ -38,6 +38,20 @@
 | 工件内容 | `dist/`（含构建资产）、`src/server`、`src/shared`、`knowledge`、`config`、`package.json`、`package-lock.json`；不含 `node_modules`、`.env`、密钥或业务数据；manifest 标注运行要求为 `npm ci` + Node 22.12+ 或直接使用镜像 |
 
 首次运行暴露并修复了两个工件问题：`package.json` 缺少 `version` 导致镜像标签为 `undefined`；发布目录使用点开头的 `.release/` 被 `upload-artifact` 按隐藏路径跳过。修复后重新运行并通过。此前失败运行（质量闸门失败）均未产出发布候选工件，发布作业按 `needs` 依赖跳过。
+
+## 发布候选同步与部署（2026-09-18 更新）
+
+| 项目 | 记录 |
+| --- | --- |
+| 同步状态 | 本地 `main` 与 `origin/main` 一致，HEAD `ebc4946d045542dc0884a96e2ba5d94deafb283e`（提交时间 2026-09-18 15:20 +08:00） |
+| 成功运行 | [#35318943347](https://github.com/yibai-003/customer-chat-analysis-center/actions/runs/35318943347)；`Quality gates (clean checkout)` 与 `Release artifact` 两个作业均 success |
+| 本地质量闸门 | `check:installation`、673 项测试、`typecheck`、`lint`（0 error）、`build`、`db:init`/`db:check`（迁移 17）、`smoke` 全部通过 |
+| 工件 | `customer-chat-analysis-center-release-candidate`（artifact id `10536003885`，739,900 字节）：`manifest.json` + 源码包 `customer-chat-analysis-center-0.1.0-ebc4946d0455.tar.gz`（721.8 KB，218 个条目） |
+| manifest 一致性 | version `0.1.0`、commit `ebc4946d0455…`、runId `35318943347`、镜像 `customer-chat-analysis-center:0.1.0-ebc4946d0455`、CI 镜像 ID `sha256:63f119b10717ce87c37336b6841fc5fca4e766f67eab667f8765e3fbfa54f93e`、Node `v22.23.2`，与运行记录一致 |
+| 工件内容检查 | 无 `node_modules`、`.env`、密钥、数据库、备份或业务 Excel |
+| 局域网部署 | 在同一提交上本地重建镜像（本地 ID `sha256:08ec9a76e1da37554759992d334f3ef1e4cbace5c365cf60d5ff2437ef14698a`；构建环境与 CI 不同，ID 不一致，来源同一提交），容器 `lan-preview` 运行于 `http://172.16.20.178:8788`，数据卷 `E:\CustomerChatAnalysisData\lan-preview` |
+| 部署后验证 | 健康检查 healthy；管理员登录成功（11 项能力）；`/api/ready` 200 且视觉/文本 `passed`；默认模型 `qwen3-vl-plus`/`qwen-plus` 启用且在池；任务 10 条记录、91 条审计、52 个已验证模型与原图哈希 `29cc13035742e02a`（365,623 字节）均不变 |
+| 回滚 | 旧容器保留为 `lan-preview-previous`（镜像 `customer-chat-analysis:lan-preview-2026-09-18-r1`，ID `sha256:d062422c…`）：`docker rm -f lan-preview; docker rename lan-preview-previous lan-preview; docker start lan-preview` |
 
 ## 环境
 
@@ -73,7 +87,7 @@
 1. **无真实第二台工作站**：本次由主机上的独立 HTTPS 客户端模拟内网工作站（真实 Host/Origin、TLS、拒绝矩阵），未跨物理机验证。跨机验收需按文末清单执行。
 2. **证书与 DNS**：使用自签名证书与虚构域名；生产必须替换为组织内网 CA 证书、内网 DNS 与防火墙网段放行。
 3. **CI 已真实验证**：首次运行曾因时区依赖断言与过紧的竞态超时失败；已在 Node 22 + `TZ=UTC` 下复现修复并重新运行通过。后续仍以 CI 为准，不以本地通过替代。
-4. **模型能力未验收**：验收库仅创建 1 个未验证的模型配置；真实解析依赖供应商凭据与能力检测，属于下一阶段线上化验证。
+4. **模型能力已验收（2026-09-18）**：千问百炼正式模型完成真实解析并产出用量证据，模型池基线已收敛（桩模型停用并移出路由池）；详见 [局域网真实业务验收记录](lan-real-business-acceptance-2026-09-18.md)。
 5. **数据规模**：演练数据为小样本（1 条记录）；生产数据达 GB 级时需重新测量备份/恢复耗时与磁盘占用。
 6. **平台差异**：演练在 Windows + Docker Desktop；若生产主机为 Linux，需用同一脚本复跑一次。
 7. **审计保留**：审计为追加写入且不可修改删除，长期运行需要容量与归档策略。
@@ -92,6 +106,6 @@
 1. 在另一台局域网工作站打开 `https://<内网域名>`，用管理员登录，确认证书受信、页面与图片正常。
 2. 现场抽查操作人员可导入/发起解析、审核人员可复核/导出、只读人员无修改入口，并确认服务端对越权请求返回 403。
 3. 在真实主机上用 `scripts/verify-lan-acceptance.ps1 -ExternalEntry https://<内部域名> -EvidencePath <证据文件>` 执行跨机验收（不要加 `-AllowSelfSigned`），完整步骤见 [局域网现场验收执行手册](../guides/lan-acceptance-runbook.md)。
-4. 用真实模型凭据完成一次解析闭环，并把结果补记到本文件。
+4. ~~用真实模型凭据完成一次解析闭环，并把结果补记到本文件。~~ 已于 2026-09-18 完成，见 [局域网真实业务验收记录](lan-real-business-acceptance-2026-09-18.md)。
 
-（CI 运行与工件追溯已于 2026-09-18 完成，见“首次真实 CI 与发布工件”。）
+（CI 运行与工件追溯已于 2026-09-18 完成；发布候选部署见“发布候选同步与部署”。）

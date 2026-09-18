@@ -2,14 +2,14 @@
 
 **计划：** `docs/architecture-remediation-plan-2026-09-17.md`
 
-**最后更新：** 2026-09-17（T1–T8 全部完成）
+**最后更新：** 2026-09-18（T1–T8 全部完成并推送；局域网发布收口按 `.scratch/lan-release-closure` 工单 01–03 跟踪）
 
 ## 恢复入口
 
 - 当前任务：无
 - 当前步骤：无
-- 下一步：最终收尾（推送全部提交并总结）
-- 工作区状态：T6/T8 待提交
+- 下一步：无（T1–T8 已推送并由 CI 验证；局域网收口见工单 01–03 与验收记录）
+- 工作区状态：干净且与 `origin/main` 同步，HEAD `ebc4946d045542dc0884a96e2ba5d94deafb283e`
 - 恢复方法：读本入口 → 打开计划文档查看该任务未勾选步骤 → 继续执行，无需通读项目
 
 ## 任务计划表
@@ -31,6 +31,8 @@
 
 按时间倒序追加，每条格式：日期 / 任务 / 事件 / 证据。
 
+- 2026-09-18 / 发布收口 / 模型池基线、真实业务验收与 CI 工件部署完成 / 桩模型与测试供应商停用并移出路由池，默认改为 `qwen3-vl-plus`/`qwen-plus`，`/api/ready` 200；第二台电脑导入 10 条记录并用千问真实模型解析（含失败→冷却→切换），导出 4 次成功；备份 + 独立恢复 5/5、容器重启持久化通过；CI 运行 [#35318943347](https://github.com/yibai-003/customer-chat-analysis-center/actions/runs/35318943347)（提交 `ebc4946d0455`）双作业 success，工件 manifest 与运行一致且无敏感文件；局域网容器已替换为同提交镜像并验证数据与模型池不变；详见 [局域网真实业务验收记录](archive/lan-real-business-acceptance-2026-09-18.md) 与 [发布验收记录](archive/lan-release-acceptance-2026-09-17.md)
+- 2026-09-18 / T6+T8 / 工作区收尾推送 / `main` 与 `origin/main` 同步（此前“T6/T8 待提交”状态已过期）；本地质量闸门 `check:installation`、673 项测试、`typecheck`、`lint`、`build`、`db:check`、`smoke` 全部通过
 - 2026-09-17 / T6 / 完成静态 lint 闸门（oxlint）与收尾 / `npm run lint` 0 error、违规注入即报错退出 1；修复 `SectionConfigDialog` 条件 Hook；`npm run smoke` 保持 3 秒可复跑；全量 561 项、`typecheck`、`build`、`db:check` 通过
 - 2026-09-17 / T8 / 完成实例锁占用诊断 / `describePortOwner` 在 Windows 下解析占用进程名与 PID，冲突错误信息含端口与处置提示，锁语义与确定性端口不变；启动指南新增确认与处置步骤；新增 2 项测试；全量 561 项通过；`typecheck`、`build`、`db:check` 通过
 - 2026-09-17 / T7 / 完成文档治理 / 根目录文档 25 → 4（索引、实施计划、进度账本、开发流程）；`guides/` 收纳 14 篇长期指南，`archive/` 收纳 12 份一次性记录（含 5 份根目录 task 报告）；新增 `docs/README.md` 八主题索引并更新 README 15 处链接；链接检查 73 份 markdown、0 失效
