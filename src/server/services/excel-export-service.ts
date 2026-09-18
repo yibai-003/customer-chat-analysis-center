@@ -17,7 +17,35 @@ export function exportColumns(sections: ReturnType<typeof listSections>) {
 }
 
 export function exportMetadataHeaders() {
-  return [] as string[];
+  return ["解析状态", "复核状态", "复核备注"];
+}
+
+function selectedReviewMetadata(
+  detail: NonNullable<ReturnType<typeof getRecord>>,
+  sections: ReturnType<typeof listSections>,
+) {
+  const selected = sections.map((section) => ({
+    section,
+    review: detail.sectionReviews?.[section.id],
+  }));
+  if (selected.length === 1) {
+    return {
+      status: selected[0].review?.reviewStatus ?? detail.reviewStatus,
+      note: selected[0].review?.reviewNote ?? detail.reviewNote,
+    };
+  }
+  const reviews = selected.map((item) => item.review);
+  if (!reviews.some(Boolean)) return { status: detail.reviewStatus, note: detail.reviewNote };
+  const status = reviews.some((review) => review?.reviewStatus === "needs_review")
+    ? "needs_review"
+    : reviews.length > 0 && reviews.every((review) => review?.reviewStatus === "confirmed")
+      ? "confirmed"
+      : "pending";
+  const note = selected
+    .filter((item) => item.review?.reviewNote)
+    .map((item) => `${item.section.name}：${item.review!.reviewNote}`)
+    .join("；");
+  return { status, note };
 }
 
 export async function exportJob(jobId: string, sectionIds: string[]) {
@@ -64,9 +92,10 @@ export async function exportJob(jobId: string, sectionIds: string[]) {
         }
       }
       if (metadata.length >= 3) {
+        const review = selectedReviewMetadata(detail, plans.map((plan) => plan.section));
         row.getCell(metadata[0].column).value = detail.status;
-        row.getCell(metadata[1].column).value = detail.reviewStatus;
-        row.getCell(metadata[2].column).value = detail.reviewNote;
+        row.getCell(metadata[1].column).value = review.status;
+        row.getCell(metadata[2].column).value = review.note;
       }
     }
   }

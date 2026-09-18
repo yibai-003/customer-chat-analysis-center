@@ -5,6 +5,7 @@ import { createApp } from "../app";
 import { config } from "../config";
 import { db, initDb } from "../db/client";
 import {
+  clearDefaultModel,
   createModelConfig,
   deleteModelConfig,
   getModelReadinessActions,
@@ -92,6 +93,22 @@ describe("model configuration management", () => {
     setDefaultModel(created.id);
     deleteModelConfig(created.id);
     expect(listModelConfigs().find((model) => model.id === replacement.id)?.isPurposeDefault).toBe(true);
+  });
+
+  it("can restore a purpose to having no default model", () => {
+    const created = createModelConfig({
+      name: "清空默认测试",
+      baseUrl: "https://example.com/v1",
+      apiKey: "sk-clear-default",
+      model: "text-a",
+      purpose: "text",
+      supportsVision: false,
+    });
+    setDefaultModel(created.id, "text");
+
+    clearDefaultModel("text");
+
+    expect(listModelConfigs().find((model) => model.id === created.id)?.isPurposeDefault).toBe(false);
   });
 
   it("orders enabled models with the purpose default first", () => {

@@ -403,11 +403,14 @@ describe("dynamic reason knowledge flow", () => {
     expect(headers).not.toContain("原因路径匹配");
     expect(headers).not.toContain("截图解析");
     expect(exported.worksheets[0].getRow(2).values).toEqual([
-      ,
+      undefined,
       "面板弹簧片掉落",
       "工厂问题",
       "品质-面板故障",
       "弹簧片掉落",
+      "completed",
+      "pending",
+      "",
     ]);
   });
 });

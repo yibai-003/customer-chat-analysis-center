@@ -1,6 +1,8 @@
 import express from "express";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
+import crypto from "node:crypto";
 import { z, ZodError } from "zod";
 import { config } from "../config";
 import { db } from "../db/client";
@@ -9,6 +11,7 @@ import { auditRequest } from "../auth/audit";
 import { createUser, listUsers, resetPassword, updateUser, type AuditActor } from "../auth/identity-service";
 import { createFullBackup, positiveInteger, restoreFullBackup } from "../services/backup-service";
 import { verifyRestoredEnvironment } from "../services/restore-verification";
+import { managedKeyPath } from "../security/key-store";
 import { captureCatalog } from "../services/knowledge/knowledge-sync-service";
 import type { AuditEvent } from "../../shared/types";
 
@@ -44,6 +47,10 @@ const auditQuerySchema = z.object({
 const restoreSchema = z.object({
   name: z.string().min(1).max(300).refine((value) => path.basename(value) === value, "备份名称无效"),
   targetDir: z.string().min(1).max(1000),
+}).strict();
+
+const backupNameSchema = z.object({
+  name: z.string().min(1).max(300).refine((value) => path.basename(value) === value, "备份名称无效"),
 }).strict();
 
 const verifySchema = z.object({
@@ -99,6 +106,7 @@ export function createAdminRouter(): express.Router {
   const backupCreate = requireCapability("backup:manage", "backup.create", "backup");
   const backupRestore = requireCapability("backup:manage", "backup.restore", "backup");
   const backupVerify = requireCapability("backup:manage", "backup.verify", "backup");
+  const backupDrill = requireCapability("backup:manage", "backup.drill", "backup");
 
   const ok = (res: express.Response, data: unknown) => res.json({ success: true, data, error: null });
   const fail = (res: express.Response, error: unknown, status = 400) => res.status(status).json({
@@ -238,6 +246,38 @@ export function createAdminRouter(): express.Router {
       });
       return ok(res, result);
     } catch (error) { return fail(res, error); }
+  });
+
+  router.post("/backups/drill", backupDrill, async (req, res) => {
+    let target = "";
+    try {
+      const input = backupNameSchema.parse(req.body);
+      const root = path.resolve(backupRoot());
+      const source = path.resolve(root, input.name);
+      if (!source.startsWith(root + path.sep) || !fs.existsSync(source)) throw new Error("备份不存在");
+      target = path.join(os.tmpdir(), `customer-chat-analysis-restore-drill-${crypto.randomUUID()}`);
+      await restoreFullBackup(source, target);
+      const liveKey = managedKeyPath(config.databasePath);
+      if (fs.existsSync(liveKey)) {
+        const restoredKey = managedKeyPath(path.join(target, "data", "app.db"));
+        await fs.promises.mkdir(path.dirname(restoredKey), { recursive: true });
+        await fs.promises.copyFile(liveKey, restoredKey);
+      }
+      const result = verifyRestoredEnvironment(target, { externalKey: process.env.ENCRYPTION_KEY });
+      auditRequest(req, {
+        action: "backup.drill",
+        outcome: result.ok ? "success" : "failure",
+        targetType: "backup",
+        targetId: input.name,
+        metadata: { ok: result.ok, checks: result.checks.map((check) => check.name) },
+      });
+      return ok(res, { backup: input.name, ok: result.ok, checks: result.checks });
+    } catch (error) {
+      return fail(res, error);
+    } finally {
+      const prefix = path.join(os.tmpdir(), "customer-chat-analysis-restore-drill-");
+      if (target.startsWith(prefix)) await fs.promises.rm(target, { recursive: true, force: true });
+    }
   });
 
   return router;

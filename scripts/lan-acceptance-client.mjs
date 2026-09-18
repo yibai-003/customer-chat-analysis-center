@@ -7,39 +7,83 @@ import fs from "node:fs";
 import https from "node:https";
 import path from "node:path";
 import crypto from "node:crypto";
+import ExcelJS from "exceljs";
+import {
+  acceptanceModelConfiguration,
+  containsConfiguredSecret,
+  createAcceptanceAccounts,
+  modelEndpointEvidence,
+  shouldCreateCredentialProbe,
+  signoffEligibility,
+  validateSignoffSampleCount,
+} from "./lan-acceptance-policy.mjs";
 
 const HOST = process.env.ACCEPTANCE_HOST ?? "chat.example.lan";
 const PORT = Number(process.env.ACCEPTANCE_PORT ?? 8443);
 const CONNECT_HOST = process.env.ACCEPTANCE_CONNECT_HOST ?? HOST;
 const TLS_VERIFY = process.env.ACCEPTANCE_TLS_VERIFY === "true";
+const MODE = process.env.ACCEPTANCE_MODE === "signoff" ? "signoff" : "drill";
+const SIGNOFF = MODE === "signoff";
+const DNS_CHECKED = process.env.ACCEPTANCE_DNS_CHECKED === "true";
+const CROSS_MACHINE = process.env.ACCEPTANCE_CROSS_MACHINE === "true";
+const RUN_ID = process.env.ACCEPTANCE_RUN_ID
+  ?? `${Date.now().toString(36)}-${crypto.randomBytes(4).toString("hex")}`;
 const ORIGIN = process.env.ACCEPTANCE_ORIGIN ?? `https://${HOST}`;
 const SAMPLE = process.env.ACCEPTANCE_SAMPLE ?? "sample-chat.xlsx";
 const ADMIN = {
   username: process.env.ACCEPTANCE_ADMIN_USERNAME ?? "admin",
-  password: process.env.ACCEPTANCE_ADMIN_PASSWORD ?? "acceptance-admin-123",
+  password: process.env.ACCEPTANCE_ADMIN_PASSWORD ?? "",
 };
-const ACCOUNTS = [
-  { role: "config", username: "acceptance-config", password: "acceptance-config-123", displayName: "验收配置" },
-  { role: "operator", username: "acceptance-operator", password: "acceptance-operator-123", displayName: "验收操作" },
-  { role: "reviewer", username: "acceptance-reviewer", password: "acceptance-reviewer-123", displayName: "验收审核" },
-  { role: "readonly", username: "acceptance-readonly", password: "acceptance-readonly-123", displayName: "验收只读" },
-];
-// Real model provider credentials. When provided, the client configures and verifies
-// the models through the API and proves a real model call completed an analysis. The
-// API key only ever leaves the workstation as the create request body; it is never
-// written to evidence or echoed back by the assertions below.
+const ACCOUNTS = createAcceptanceAccounts(RUN_ID);
+// Formal sign-off references a provider already configured on the host, so its API
+// key never reaches the workstation. Drill mode may use a temporary workstation key.
 const MODEL = {
+  providerName: process.env.ACCEPTANCE_MODEL_PROVIDER ?? "",
   baseUrl: process.env.ACCEPTANCE_MODEL_BASE_URL ?? "",
   apiKey: process.env.ACCEPTANCE_MODEL_API_KEY ?? "",
   visionModel: process.env.ACCEPTANCE_MODEL_NAME ?? "",
   textModel: process.env.ACCEPTANCE_TEXT_MODEL_NAME || process.env.ACCEPTANCE_MODEL_NAME || "",
   supportsVision: process.env.ACCEPTANCE_MODEL_SUPPORTS_VISION !== "false",
 };
-const REAL_MODEL = Boolean(MODEL.baseUrl && MODEL.apiKey && MODEL.visionModel && MODEL.textModel);
-const SECRETS = [ADMIN.password, ...ACCOUNTS.map((account) => account.password), "acceptance-secret-key-123", "password_hash", "cc_sid", ...(REAL_MODEL ? [MODEL.apiKey] : [])];
+const MODEL_CONFIGURATION = acceptanceModelConfiguration({ ...MODEL, signoff: SIGNOFF });
+const REAL_MODEL = MODEL_CONFIGURATION.configured;
+const MODEL_ENDPOINT = {
+  ...modelEndpointEvidence(MODEL.baseUrl),
+  providerName: MODEL.providerName,
+  credentialSource: MODEL_CONFIGURATION.credentialSource,
+};
+const SECRETS = [
+  ADMIN.password,
+  ...ACCOUNTS.map((account) => account.password),
+  "acceptance-secret-key-123",
+  "password_hash",
+  "cc_sid",
+  ...(MODEL.apiKey ? [MODEL.apiKey] : []),
+].filter(Boolean);
 
 const steps = [];
-const state = { cookies: {}, jobId: "", recordId: "", backupName: "", auditEvents: [], models: {} };
+const state = {
+  cookies: {},
+  jobId: "",
+  recordId: "",
+  backupName: "",
+  auditEvents: [],
+  models: {},
+  createdUserIds: [],
+  createdModelIds: [],
+  createdProviderIds: [],
+  priorDefaults: {},
+  priorPoolSettings: null,
+  signoff: {
+    importedRecords: 0,
+    parsedRecords: 0,
+    reviewed: false,
+    exported: false,
+    backupCreated: false,
+    restoreVerified: false,
+    crossMachine: CROSS_MACHINE,
+  },
+};
 
 function record(name, ok, detail) {
   steps.push({ name, ok, detail: detail ?? null });
@@ -154,6 +198,50 @@ async function waitFor(test, timeoutMs, label) {
   throw new Error(`${label} 超时`);
 }
 
+function preflightFailure(reason) {
+  const signoff = signoffEligibility({
+    tlsVerified: TLS_VERIFY,
+    dnsChecked: DNS_CHECKED,
+    model: MODEL_ENDPOINT,
+    importedRecords: 0,
+    parsedRecords: 0,
+    reviewed: false,
+    exported: false,
+    backupCreated: false,
+    restoreVerified: false,
+    crossMachine: CROSS_MACHINE,
+  });
+  console.log(JSON.stringify({
+    ok: false,
+    mode: MODE,
+    host: HOST,
+    port: PORT,
+    origin: ORIGIN,
+    tlsVerified: TLS_VERIFY,
+    realModel: REAL_MODEL,
+    modelEndpoint: MODEL_ENDPOINT,
+    signoff,
+    steps: [{ name: "preflight", ok: false, detail: reason }],
+  }, null, 2));
+  process.exit(1);
+}
+
+if (!ADMIN.password) preflightFailure("必须通过 ACCEPTANCE_ADMIN_PASSWORD 提供管理员密码");
+if (!fs.existsSync(SAMPLE)) preflightFailure(`验收样本不存在：${SAMPLE}`);
+if (SIGNOFF) {
+  const missing = [];
+  if (!TLS_VERIFY) missing.push("受信 TLS");
+  if (!DNS_CHECKED) missing.push("内网 DNS 检查");
+  if (!CROSS_MACHINE) missing.push("第二台物理工作站");
+  if (MODEL_CONFIGURATION.credentialSource === "forbidden") {
+    missing.push("禁止工作站传入模型 API Key");
+  } else if (!REAL_MODEL || !MODEL_ENDPOINT.signable) {
+    missing.push("公网/正式 HTTPS 模型供应商");
+  }
+  if (!MODEL.providerName.trim()) missing.push("模型供应商名称");
+  if (missing.length) preflightFailure(`正式签收前置条件不满足：${missing.join("、")}`);
+}
+
 await step("https-health", async () => {
   const response = await jsonRequest("GET", "/api/health");
   requireStatus(response, 200, "health");
@@ -178,14 +266,8 @@ await step("create-role-accounts", async () => {
       cookie: state.cookies.admin,
       body: { username: account.username, password: account.password, displayName: account.displayName, role: account.role },
     });
-    if (created.status !== 200) {
-      const session = await login(account.username, account.password);
-      if (session.status !== 200 || !session.cookie) {
-        throw new Error(`${account.role} 创建失败（${created.status}）且无法用既定验收账号登录（${session.status}）：${JSON.stringify(created.body).slice(0, 200)}`);
-      }
-      state.cookies[account.role] = session.cookie;
-      continue;
-    }
+    requireStatus(created, 200, `${account.role} 创建唯一验收账号`);
+    state.createdUserIds.push(created.body.data.id);
     const session = await login(account.username, account.password);
     if (session.status !== 200 || !session.cookie) throw new Error(`${account.role} 登录失败：${session.status}`);
     state.cookies[account.role] = session.cookie;
@@ -285,37 +367,73 @@ await step("export-matrix", async () => {
 });
 
 await step("configuration-and-pool", async () => {
-  const section = { id: "acceptance-temp", name: "验收临时板块", prompt: "" };
+  const suffix = RUN_ID.replace(/[^a-z0-9-]/gi, "").slice(0, 32);
+  const section = { id: `acceptance-temp-${suffix}`, name: `验收临时板块 ${suffix}`, prompt: "" };
   for (const role of ["operator", "reviewer", "readonly"]) {
     requireStatus(await jsonRequest("POST", "/api/sections", { cookie: state.cookies[role], body: section }), 403, `${role} 配置拒绝`);
   }
   requireStatus(await jsonRequest("POST", "/api/sections", { cookie: state.cookies.config, body: section }), 200, "配置人员建板块");
-  requireStatus(await jsonRequest("DELETE", "/api/sections/acceptance-temp", { cookie: state.cookies.config }), 200, "配置人员删板块");
-  requireStatus(await jsonRequest("POST", "/api/model-configs", {
-    cookie: state.cookies.config,
-    body: { name: "acceptance-model", baseUrl: "https://acceptance.example/v1", apiKey: "acceptance-secret-key-123", model: "acceptance", purpose: "text" },
-  }), 200, "配置人员建模型");
+  requireStatus(await jsonRequest("DELETE", `/api/sections/${section.id}`, { cookie: state.cookies.config }), 200, "配置人员删板块");
+  const providersBefore = await jsonRequest("GET", "/api/model-providers", { cookie: state.cookies.config });
+  requireStatus(providersBefore, 200, "读取验收前供应商");
+  if (shouldCreateCredentialProbe(SIGNOFF)) {
+    const createdModel = await jsonRequest("POST", "/api/model-configs", {
+      cookie: state.cookies.config,
+      body: {
+        name: `acceptance-model-${suffix}`,
+        baseUrl: "https://acceptance.example/v1",
+        apiKey: "acceptance-secret-key-123",
+        model: "acceptance",
+        purpose: "text",
+      },
+    });
+    requireStatus(createdModel, 200, "配置人员建模型");
+    state.createdModelIds.push(createdModel.body.data.id);
+    const knownProviders = new Set((providersBefore.body?.data ?? []).map((item) => item.id));
+    if (createdModel.body.data.providerId && !knownProviders.has(createdModel.body.data.providerId)) {
+      state.createdProviderIds.push(createdModel.body.data.providerId);
+    }
+  }
   const masked = await jsonRequest("GET", "/api/model-configs", { cookie: state.cookies.readonly });
   requireStatus(masked, 200, "只读模型列表");
-  if (JSON.stringify(masked.body).includes("acceptance-secret-key-123")) throw new Error("模型响应泄漏 API Key");
+  if (containsConfiguredSecret(JSON.stringify(masked.body), "acceptance-secret-key-123")) {
+    throw new Error("模型响应泄漏 API Key");
+  }
   for (const role of ["operator", "readonly"]) {
     requireStatus(await jsonRequest("GET", "/api/model-providers", { cookie: state.cookies[role] }), 403, `${role} 模型池拒绝`);
     requireStatus(await jsonRequest("PATCH", "/api/model-pool-settings", { cookie: state.cookies[role], body: { paidDailyTokenLimit: 10 } }), 403, `${role} 池设置拒绝`);
   }
   requireStatus(await jsonRequest("GET", "/api/model-providers", { cookie: state.cookies.config }), 200, "配置人员服务商列表");
+  const settings = await jsonRequest("GET", "/api/model-pool-settings", { cookie: state.cookies.config });
+  requireStatus(settings, 200, "读取模型池设置");
+  state.priorPoolSettings = settings.body.data;
   requireStatus(await jsonRequest("PATCH", "/api/model-pool-settings", { cookie: state.cookies.config, body: { paidDailyTokenLimit: 500 } }), 200, "配置人员池设置");
-  return { configWrites: "config/admin only" };
+  return {
+    configWrites: "config/admin only",
+    credentialProbe: shouldCreateCredentialProbe(SIGNOFF) ? "temporary-drill-model" : "host-provider-only",
+  };
 });
 
 await step("real-model-configure", async () => {
   if (!REAL_MODEL) {
-    return { skipped: true, reason: "未提供 ACCEPTANCE_MODEL_BASE_URL/API_KEY/NAME，跳过真实模型配置" };
+    return { skipped: true, reason: `模型配置不完整：${MODEL_CONFIGURATION.missing.join(", ")}` };
   }
   const prior = await jsonRequest("GET", "/api/model-configs", { cookie: state.cookies.config });
-  for (const model of prior.body?.data ?? []) {
-    if (model.name === "验收视觉模型" || model.name === "验收文本模型") {
-      await jsonRequest("DELETE", `/api/model-configs/${model.id}`, { cookie: state.cookies.config });
-    }
+  requireStatus(prior, 200, "读取验收前模型配置");
+  for (const purpose of ["vision", "text"]) {
+    const currentDefault = (prior.body?.data ?? []).find((item) => item.purpose === purpose && item.isPurposeDefault);
+    state.priorDefaults[purpose] = currentDefault?.id ?? null;
+  }
+  const providers = await jsonRequest("GET", "/api/model-providers", { cookie: state.cookies.config });
+  requireStatus(providers, 200, "读取模型供应商");
+  const knownProviderIds = new Set((providers.body?.data ?? []).map((item) => item.id));
+  const normalizedBaseUrl = MODEL.baseUrl.replace(/\/+$/, "");
+  const provider = (providers.body?.data ?? []).find((item) =>
+    item.baseUrl?.replace(/\/+$/, "") === normalizedBaseUrl
+    && (!SIGNOFF || item.name === MODEL.providerName)
+  );
+  if (SIGNOFF && !provider) {
+    throw new Error(`正式签收要求预先配置名称为“${MODEL.providerName}”且地址匹配的模型供应商`);
   }
   const quotaExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   const created = {};
@@ -323,9 +441,9 @@ await step("real-model-configure", async () => {
     const response = await jsonRequest("POST", "/api/model-configs", {
       cookie: state.cookies.config,
       body: {
-        name: `验收${purpose === "vision" ? "视觉" : "文本"}模型`,
+        name: `验收${purpose === "vision" ? "视觉" : "文本"}模型 ${RUN_ID}`,
         baseUrl: MODEL.baseUrl,
-        apiKey: MODEL.apiKey,
+        ...(SIGNOFF ? { providerId: provider.id } : { apiKey: MODEL.apiKey }),
         model,
         purpose,
         supportsVision: purpose === "vision" && MODEL.supportsVision,
@@ -333,6 +451,11 @@ await step("real-model-configure", async () => {
     });
     requireStatus(response, 200, `创建${purpose}模型`);
     created[purpose] = response.body.data.id;
+    state.createdModelIds.push(response.body.data.id);
+    if (response.body.data.providerId && !knownProviderIds.has(response.body.data.providerId)
+      && !state.createdProviderIds.includes(response.body.data.providerId)) {
+      state.createdProviderIds.push(response.body.data.providerId);
+    }
   }
   for (const purpose of ["vision", "text"]) {
     requireStatus(await jsonRequest("POST", `/api/model-configs/${created[purpose]}/default`, {
@@ -358,7 +481,9 @@ await step("real-model-configure", async () => {
   }
   const listed = await jsonRequest("GET", "/api/model-configs", { cookie: state.cookies.readonly });
   requireStatus(listed, 200, "只读模型列表");
-  if (JSON.stringify(listed.body).includes(MODEL.apiKey)) throw new Error("模型配置响应泄漏真实 API Key");
+  if (containsConfiguredSecret(JSON.stringify(listed.body), MODEL.apiKey)) {
+    throw new Error("模型配置响应泄漏真实 API Key");
+  }
   state.models = created;
   return {
     configured: true,
@@ -367,6 +492,7 @@ await step("real-model-configure", async () => {
     visionModel: MODEL.visionModel,
     textModel: MODEL.textModel,
     supportsVision: MODEL.supportsVision,
+    credentialSource: MODEL_CONFIGURATION.credentialSource,
     verified: (verified.body.data ?? []).map((item) => ({ purpose: item.purpose, passed: item.passed, capabilities: item.capabilities })),
   };
 });
@@ -421,21 +547,137 @@ await step("real-model-parse", async () => {
       return status.body?.data && ["completed", "failed"].includes(status.body.data.status) ? status.body.data : undefined;
     }, 90_000, "验收解析导入");
     if (finished.status !== "completed") throw new Error(`验收解析导入状态 ${finished.status}：${finished.errorMessage ?? ""}`);
-    const records = await jsonRequest("GET", `/api/jobs/${finished.jobId}/records?page=1&pageSize=1`, { cookie: state.cookies.operator });
-    const recordId = records.body?.data?.items?.[0]?.id;
+    const importedJob = await jsonRequest("GET", `/api/jobs/${finished.jobId}`, { cookie: state.cookies.operator });
+    requireStatus(importedJob, 200, "读取验收解析任务");
+    const importedRecords = Number(importedJob.body?.data?.totalRecords ?? 0);
+    if (SIGNOFF) validateSignoffSampleCount(importedRecords);
+    state.signoff.importedRecords = importedRecords;
+    const pageSize = Math.max(importedRecords, 1);
+    const records = await jsonRequest(
+      "GET",
+      `/api/jobs/${finished.jobId}/records?page=1&pageSize=${pageSize}`,
+      { cookie: state.cookies.operator },
+    );
+    requireStatus(records, 200, "读取验收解析记录");
+    const recordItems = records.body?.data?.items ?? [];
+    const record = recordItems[0];
+    const recordId = record?.id;
     if (!recordId) throw new Error("验收解析任务没有记录");
-    requireStatus(await jsonRequest("POST", `/api/records/${recordId}/analyze`, {
-      cookie: state.cookies.operator,
-      body: { sectionId },
-    }), 200, "真实模型单条解析");
-    const detail = await jsonRequest("GET", `/api/records/${recordId}`, { cookie: state.cookies.admin });
-    requireStatus(detail, 200, "验收解析记录详情");
-    const runs = detail.body?.data?.fieldRuns ?? [];
-    const modelRun = runs.find((run) => run.fieldKey === fieldKey && run.status === "completed");
-    const output = modelRun?.result?.[fieldKey];
-    if (!output || typeof output !== "string" || !output.trim()) {
-      throw new Error(`字段 ${fieldKey} 未产生模型输出：${JSON.stringify(modelRun?.result ?? null).slice(0, 200)}`);
+    if (SIGNOFF && recordItems.length !== importedRecords) {
+      throw new Error(`验收解析记录分页不完整：读取 ${recordItems.length}，应为 ${importedRecords}`);
     }
+    if (SIGNOFF) {
+      requireStatus(await jsonRequest("POST", `/api/jobs/${finished.jobId}/analyze`, {
+        cookie: state.cookies.operator,
+        body: { sectionId },
+      }), 200, "真实模型批量解析");
+      const completedJob = await waitFor(async () => {
+        const job = await jsonRequest("GET", `/api/jobs/${finished.jobId}`, { cookie: state.cookies.operator });
+        if (job.status !== 200) return undefined;
+        const data = job.body?.data;
+        const accounted = Number(data?.completedRecords ?? 0) + Number(data?.failedRecords ?? 0);
+        return data?.status !== "processing" && accounted >= importedRecords ? data : undefined;
+      }, 30 * 60_000, "真实模型批量解析");
+      if (completedJob.failedRecords !== 0 || completedJob.completedRecords !== importedRecords) {
+        throw new Error(`真实模型批量解析未全部成功：完成 ${completedJob.completedRecords}/${importedRecords}，失败 ${completedJob.failedRecords}`);
+      }
+      state.signoff.parsedRecords = completedJob.completedRecords;
+    } else {
+      requireStatus(await jsonRequest("POST", `/api/records/${recordId}/analyze`, {
+        cookie: state.cookies.operator,
+        body: { sectionId },
+      }), 200, "真实模型单条解析");
+      state.signoff.parsedRecords = 1;
+    }
+    const verifiedRecords = [];
+    for (const item of recordItems) {
+      const detail = await jsonRequest("GET", `/api/records/${item.id}`, { cookie: state.cookies.admin });
+      requireStatus(detail, 200, `读取验收记录详情 ${item.id}`);
+      if (SIGNOFF && detail.body?.data?.status !== "completed") {
+        throw new Error(`验收记录 ${item.id} 未完成：${detail.body?.data?.status}`);
+      }
+      const runs = detail.body?.data?.fieldRuns ?? [];
+      const modelRun = runs.find((run) => run.fieldKey === fieldKey && run.status === "completed");
+      const output = modelRun?.result?.[fieldKey];
+      if (!output || typeof output !== "string" || !output.trim()) {
+        throw new Error(`记录 ${item.id} 的字段 ${fieldKey} 未产生模型输出`);
+      }
+      verifiedRecords.push({ record: item, detail, output });
+    }
+    const primary = verifiedRecords[0];
+    const detail = primary.detail;
+    const output = primary.output;
+    const reviewTargets = SIGNOFF ? verifiedRecords : [primary];
+    for (const target of reviewTargets) {
+      const reviewed = await jsonRequest("PATCH", `/api/records/${target.record.id}`, {
+        cookie: state.cookies.reviewer,
+        headers: { "x-request-id": `acceptance-model-review-${RUN_ID}` },
+        body: {
+          sectionId,
+          humanResult: { [fieldKey]: target.output },
+          reviewStatus: "confirmed",
+          reviewNote: `LAN acceptance ${RUN_ID}`,
+          status: "completed",
+        },
+      });
+      requireStatus(reviewed, 200, `真实模型结果复核 ${target.record.id}`);
+      if (reviewed.body?.data?.reviewStatus !== "confirmed") {
+        throw new Error(`真实模型结果未进入已复核状态：${target.record.id}`);
+      }
+    }
+    state.signoff.reviewed = reviewTargets.length === verifiedRecords.length;
+
+    const exported = await rawRequest({
+      path: `/api/jobs/${finished.jobId}/export?sections=${encodeURIComponent(sectionId)}`,
+      cookie: state.cookies.reviewer,
+    });
+    if (exported.status !== 200 || exported.buffer.length < 100) {
+      throw new Error(`真实模型任务导出失败：${exported.status}`);
+    }
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(exported.buffer);
+    const worksheet = workbook.getWorksheet(record.sheetName) ?? workbook.worksheets[0];
+    const headers = (worksheet?.getRow(1).values ?? []).map((value) => String(value ?? "")).filter(Boolean);
+    for (const expected of ["解析状态", "复核状态", "复核备注"]) {
+      if (!headers.includes(expected)) throw new Error(`导出缺少验收列：${expected}`);
+    }
+    if (!headers.some((header) => header.endsWith("验收结论"))) {
+      throw new Error(`导出缺少模型字段“验收结论”：${JSON.stringify(headers).slice(0, 400)}`);
+    }
+    const sourceKeys = Object.keys(detail.body?.data?.sourceFields ?? {});
+    if (sourceKeys.length && !sourceKeys.some((key) => headers.includes(key))) {
+      throw new Error("导出文件未保留任何原始字段");
+    }
+    const values = Object.fromEntries(headers.map((header, index) => [
+      header,
+      String(worksheet.getRow(record.rowNumber).getCell(index + 1).value ?? ""),
+    ]));
+    const modelHeader = headers.find((header) => header.endsWith("验收结论"));
+    if (!modelHeader || values[modelHeader] !== output) throw new Error("导出文件中的模型结果与复核结果不一致");
+    if (values["解析状态"] !== "completed") throw new Error(`导出解析状态异常：${values["解析状态"]}`);
+    if (values["复核状态"] !== "confirmed") throw new Error(`导出复核状态异常：${values["复核状态"]}`);
+    if (!values["复核备注"].includes(RUN_ID)) throw new Error("导出复核备注缺少本次验收标识");
+    if (SIGNOFF) {
+      for (const target of verifiedRecords) {
+        const targetSheet = workbook.getWorksheet(target.record.sheetName);
+        if (!targetSheet) throw new Error(`导出缺少工作表：${target.record.sheetName}`);
+        const targetValues = Object.fromEntries(headers.map((header, index) => [
+          header,
+          String(targetSheet.getRow(target.record.rowNumber).getCell(index + 1).value ?? ""),
+        ]));
+        if (targetValues["解析状态"] !== "completed") {
+          throw new Error(`记录 ${target.record.id} 导出解析状态异常`);
+        }
+        if (targetValues["复核状态"] !== "confirmed" || !targetValues["复核备注"].includes(RUN_ID)) {
+          throw new Error(`记录 ${target.record.id} 导出复核状态异常`);
+        }
+        if (targetValues[modelHeader] !== target.output) {
+          throw new Error(`记录 ${target.record.id} 导出模型结果不一致`);
+        }
+      }
+    }
+    state.signoff.exported = true;
+
     const usage = await jsonRequest(
       "GET",
       `/api/model-usage-events?modelConfigId=${state.models.text}&eventType=success&limit=50`,
@@ -445,7 +687,9 @@ await step("real-model-parse", async () => {
     const events = usage.body?.data ?? [];
     if (!events.length) throw new Error("未记录到真实文本模型调用成功事件");
     const serialized = JSON.stringify(detail.body) + JSON.stringify(usage.body);
-    if (serialized.includes(MODEL.apiKey)) throw new Error("解析结果或用量事件泄漏真实 API Key");
+    if (containsConfiguredSecret(serialized, MODEL.apiKey)) {
+      throw new Error("解析结果或用量事件泄漏真实 API Key");
+    }
     const tokens = events.reduce((sum, event) => sum + (event.inputTokens ?? 0) + (event.outputTokens ?? 0), 0);
     return {
       recordStatus: detail.body?.data?.status,
@@ -453,6 +697,11 @@ await step("real-model-parse", async () => {
       outputPreview: output.slice(0, 60),
       modelCalls: events.length,
       accountedTokens: tokens,
+      importedRecords,
+      parsedRecords: state.signoff.parsedRecords,
+      recordsVerified: verifiedRecords.length,
+      reviewed: state.signoff.reviewed,
+      exported: state.signoff.exported,
     };
   } finally {
     const fields = await jsonRequest("GET", `/api/sections/${sectionId}/fields`, { cookie: state.cookies.config });
@@ -464,13 +713,15 @@ await step("real-model-parse", async () => {
 });
 
 await step("account-disable", async () => {
-  const username = `acceptance-temp-${Date.now().toString(36)}`;
-  const password = "acceptance-temp-123";
+  const username = `acceptance-temp-${RUN_ID}`.replace(/[^a-z0-9-]/gi, "").slice(0, 64);
+  const password = crypto.randomBytes(18).toString("base64url");
+  SECRETS.push(password);
   const created = await jsonRequest("POST", "/api/admin/users", {
     cookie: state.cookies.admin,
     body: { username, password, displayName: "临时账号", role: "operator" },
   });
   requireStatus(created, 200, "创建临时账号");
+  state.createdUserIds.push(created.body.data.id);
   const session = await login(username, password);
   requireStatus(session, 200, "临时账号登录");
   requireStatus(await jsonRequest("PATCH", `/api/admin/users/${created.body.data.id}`, { cookie: state.cookies.admin, body: { isEnabled: false } }), 200, "停用临时账号");
@@ -478,11 +729,120 @@ await step("account-disable", async () => {
   return { disabledUser: created.body.data.id };
 });
 
+await step("restore-acceptance-state", async () => {
+  const failures = [];
+  const attempt = async (label, operation) => {
+    try {
+      await operation();
+    } catch (error) {
+      failures.push(`${label}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
+  for (const purpose of ["vision", "text"]) {
+    if (!Object.hasOwn(state.priorDefaults, purpose)) continue;
+    const priorId = state.priorDefaults[purpose];
+    await attempt(`恢复${purpose}默认模型`, async () => {
+      if (priorId && !state.createdModelIds.includes(priorId)) {
+        requireStatus(await jsonRequest("POST", `/api/model-configs/${priorId}/default`, {
+          cookie: state.cookies.admin,
+          body: { purpose },
+        }), 200, `恢复${purpose}默认模型`);
+      } else {
+        requireStatus(await jsonRequest("DELETE", `/api/model-configs/default/${purpose}`, {
+          cookie: state.cookies.admin,
+        }), 200, `清空${purpose}默认模型`);
+      }
+    });
+  }
+  if (state.priorPoolSettings) {
+    await attempt("恢复模型池设置", async () => {
+      requireStatus(await jsonRequest("PATCH", "/api/model-pool-settings", {
+        cookie: state.cookies.admin,
+        body: state.priorPoolSettings,
+      }), 200, "恢复模型池设置");
+    });
+  }
+  for (const modelId of [...state.createdModelIds].reverse()) {
+    await attempt(`删除验收模型 ${modelId}`, async () => {
+      requireStatus(await jsonRequest("DELETE", `/api/model-configs/${modelId}`, {
+        cookie: state.cookies.admin,
+      }), 200, `删除验收模型 ${modelId}`);
+    });
+  }
+  for (const providerId of state.createdProviderIds) {
+    await attempt(`删除验收临时供应商 ${providerId}`, async () => {
+      requireStatus(await jsonRequest("DELETE", `/api/model-providers/${providerId}`, {
+        cookie: state.cookies.admin,
+      }), 200, `删除验收临时供应商 ${providerId}`);
+    });
+  }
+  for (const userId of state.createdUserIds) {
+    await attempt(`停用验收账号 ${userId}`, async () => {
+      requireStatus(await jsonRequest("PATCH", `/api/admin/users/${userId}`, {
+        cookie: state.cookies.admin,
+        body: { isEnabled: false },
+      }), 200, `停用验收账号 ${userId}`);
+    });
+  }
+
+  const models = await jsonRequest("GET", "/api/model-configs", { cookie: state.cookies.admin });
+  requireStatus(models, 200, "验证验收模型已清理");
+  const remainingModelIds = new Set((models.body?.data ?? []).map((item) => item.id));
+  if (state.createdModelIds.some((id) => remainingModelIds.has(id))) failures.push("存在未清理的验收模型配置");
+  for (const purpose of ["vision", "text"]) {
+    if (!Object.hasOwn(state.priorDefaults, purpose)) continue;
+    const expected = state.priorDefaults[purpose];
+    const actual = (models.body?.data ?? [])
+      .find((item) => item.purpose === purpose && item.isPurposeDefault)?.id ?? null;
+    if (actual !== expected) failures.push(`${purpose} 默认模型未恢复：期望 ${expected ?? "无"}，实际 ${actual ?? "无"}`);
+  }
+  const providers = await jsonRequest("GET", "/api/model-providers", { cookie: state.cookies.admin });
+  requireStatus(providers, 200, "验证验收供应商已清理");
+  const remainingProviderIds = new Set((providers.body?.data ?? []).map((item) => item.id));
+  if (state.createdProviderIds.some((id) => remainingProviderIds.has(id))) failures.push("存在未删除的验收供应商");
+  const users = await jsonRequest("GET", "/api/admin/users", { cookie: state.cookies.admin });
+  requireStatus(users, 200, "验证验收账号已停用");
+  const userById = new Map((users.body?.data ?? []).map((item) => [item.id, item]));
+  if (state.createdUserIds.some((id) => userById.get(id)?.isEnabled !== false)) {
+    failures.push("存在仍启用的验收账号");
+  }
+  if (failures.length) {
+    throw new Error(`验收状态清理未完成：${failures.join("；")}`);
+  }
+  return {
+    disabledUsers: state.createdUserIds.length,
+    removedModels: state.createdModelIds.length,
+    removedProviders: state.createdProviderIds.length,
+    poolSettingsRestored: Boolean(state.priorPoolSettings),
+  };
+});
+
 await step("backup-through-api", async () => {
+  const cleanup = steps.find((item) => item.name === "restore-acceptance-state");
+  if (!cleanup?.ok) throw new Error("验收状态未完整清理，拒绝创建签收备份");
   const backup = await jsonRequest("POST", "/api/admin/backups", { cookie: state.cookies.admin });
   requireStatus(backup, 200, "创建备份");
   state.backupName = backup.body.data.name;
+  state.signoff.backupCreated = true;
   return { name: state.backupName, files: backup.body.data.files, references: backup.body.data.references };
+});
+
+await step("backup-restore-drill", async () => {
+  if (!state.backupName) throw new Error("缺少本次验收备份名称");
+  const drilled = await jsonRequest("POST", "/api/admin/backups/drill", {
+    cookie: state.cookies.admin,
+    body: { name: state.backupName },
+  });
+  requireStatus(drilled, 200, "同一备份恢复演练");
+  if (drilled.body?.data?.backup !== state.backupName || drilled.body?.data?.ok !== true) {
+    throw new Error(`恢复演练未验证本次备份：${JSON.stringify(drilled.body?.data).slice(0, 300)}`);
+  }
+  state.signoff.restoreVerified = true;
+  return {
+    name: state.backupName,
+    checks: (drilled.body.data.checks ?? []).map((check) => ({ name: check.name, ok: check.ok })),
+  };
 });
 
 await step("audit-trail", async () => {
@@ -504,6 +864,8 @@ await step("audit-trail", async () => {
     "config.create_model",
     "pool.update_settings",
     "backup.create",
+    "backup.drill",
+    ...(state.createdProviderIds.length ? ["pool.delete_provider"] : []),
     ...(REAL_MODEL ? ["config.test_model", "config.set_default_model", "pool.verify"] : []),
   ];
   const actions = new Set(events.map((event) => event.action));
@@ -511,21 +873,56 @@ await step("audit-trail", async () => {
   if (missing.length) throw new Error(`缺少审计动作：${missing.join(", ")}`);
   const failures = events.filter((event) => event.outcome === "failure");
   if (!failures.length) throw new Error("缺少拒绝审计事件");
-  const reviewEvent = events.find((event) => event.action === "review.save" && event.outcome === "success");
-  if (reviewEvent?.correlationId !== "acceptance-review-1") {
-    throw new Error(`复核审计缺少请求关联标识：${JSON.stringify(reviewEvent?.correlationId)}`);
+  const reviewCorrelations = new Set(events
+    .filter((event) => event.action === "review.save" && event.outcome === "success")
+    .map((event) => event.correlationId));
+  const requiredReviewCorrelations = [
+    "acceptance-review-1",
+    ...(REAL_MODEL ? [`acceptance-model-review-${RUN_ID}`] : []),
+  ];
+  const missingReviewCorrelations = requiredReviewCorrelations.filter((id) => !reviewCorrelations.has(id));
+  if (missingReviewCorrelations.length) {
+    throw new Error(`复核审计缺少请求关联标识：${missingReviewCorrelations.join(", ")}`);
   }
   for (const event of events) {
     if (!event.actorDisplay || !event.occurredAt || !event.outcome || !event.action) throw new Error("审计事件字段不完整");
   }
   const serialized = JSON.stringify(events);
   for (const secret of SECRETS) {
-    if (serialized.includes(secret)) throw new Error(`审计泄漏敏感值：${secret}`);
+    if (containsConfiguredSecret(serialized, secret)) throw new Error("审计事件包含敏感值");
   }
   return { events: events.length, failures: failures.length, actions: [...actions].length };
 });
 
 const ok = steps.every((item) => item.ok);
 const modelStep = steps.find((item) => item.name === "real-model-parse");
-console.log(JSON.stringify({ ok, host: HOST, port: PORT, origin: ORIGIN, tlsVerified: TLS_VERIFY, realModel: REAL_MODEL, modelEvidence: modelStep?.detail ?? null, steps, backupName: state.backupName, auditEventCount: state.auditEvents.length }, null, 2));
-process.exitCode = ok ? 0 : 1;
+const signoff = signoffEligibility({
+  tlsVerified: TLS_VERIFY,
+  dnsChecked: DNS_CHECKED,
+  model: MODEL_ENDPOINT,
+  ...state.signoff,
+});
+const accepted = ok && (!SIGNOFF || signoff.eligible);
+console.log(JSON.stringify({
+  ok: accepted,
+  mode: MODE,
+  runId: RUN_ID,
+  host: HOST,
+  port: PORT,
+  origin: ORIGIN,
+  tlsVerified: TLS_VERIFY,
+  dnsChecked: DNS_CHECKED,
+  realModel: REAL_MODEL,
+  modelEndpoint: MODEL_ENDPOINT,
+  modelEvidence: modelStep?.detail ?? null,
+  signoff,
+  cleanup: {
+    disabledUsers: state.createdUserIds.length,
+    removedModels: state.createdModelIds.length,
+    removedProviders: state.createdProviderIds.length,
+  },
+  steps,
+  backupName: state.backupName,
+  auditEventCount: state.auditEvents.length,
+}, null, 2));
+process.exitCode = accepted ? 0 : 1;

@@ -1,18 +1,26 @@
 ﻿param(
   [string]$Image = "customer-chat-analysis:acceptance",
+  [string]$UpgradeImage = "",
   [int]$ProxyPort = 8443,
   [string]$HostName = "chat.example.lan",
-  [string]$AdminPassword = "acceptance-admin-123",
+  [string]$AdminPassword = "",
   [string]$AdminUsername = "admin",
   [string]$ExternalEntry = "",
   [string]$ConnectHost = "",
   [string]$EvidencePath = "",
+  [string]$HostEvidencePath = "",
+  [string]$ExpectedHostImage = "",
+  [string]$ExpectedHostImageId = "",
+  [string]$SamplePath = "",
+  [string]$ModelProvider = "",
   [string]$ModelBaseUrl = "",
   [string]$ModelApiKey = "",
   [string]$ModelName = "",
   [string]$TextModelName = "",
   [string]$ModelSupportsVision = "true",
   [switch]$RequireRealModel,
+  [switch]$Signoff,
+  [switch]$CrossMachine,
   [switch]$SkipDnsCheck,
   [switch]$AllowSelfSigned,
   [switch]$Keep
@@ -23,6 +31,9 @@ $ErrorActionPreference = "Stop"
 $OutputEncoding = [System.Text.UTF8Encoding]::new()
 
 function Fail([string]$Message) { Write-Host "FAIL: $Message"; exit 1 }
+function New-RandomPassword {
+  return [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+}
 function Wait-Healthy([string]$Name) {
   for ($attempt = 0; $attempt -lt 40; $attempt++) {
     Start-Sleep -Seconds 3
@@ -62,21 +73,52 @@ function Set-ModelEnv {
   $apiKey = if ($ModelApiKey) { $ModelApiKey } else { $env:ACCEPTANCE_MODEL_API_KEY }
   $name = if ($ModelName) { $ModelName } else { $env:ACCEPTANCE_MODEL_NAME }
   $textName = if ($TextModelName) { $TextModelName } else { $env:ACCEPTANCE_TEXT_MODEL_NAME }
-  if ($baseUrl -and $apiKey -and $name) {
+  $provider = if ($ModelProvider) { $ModelProvider } else { $env:ACCEPTANCE_MODEL_PROVIDER }
+  $credentialReady = if ($Signoff) { [bool]$provider } else { [bool]$apiKey }
+  if ($baseUrl -and $name -and $credentialReady) {
     $resolvedText = if ($textName) { $textName } else { $name }
     $env:ACCEPTANCE_MODEL_BASE_URL = $baseUrl
-    $env:ACCEPTANCE_MODEL_API_KEY = $apiKey
+    if ($apiKey) {
+      $env:ACCEPTANCE_MODEL_API_KEY = $apiKey
+    } else {
+      Remove-Item Env:ACCEPTANCE_MODEL_API_KEY -ErrorAction SilentlyContinue
+    }
     $env:ACCEPTANCE_MODEL_NAME = $name
     $env:ACCEPTANCE_TEXT_MODEL_NAME = $resolvedText
     $env:ACCEPTANCE_MODEL_SUPPORTS_VISION = $ModelSupportsVision
-    return [ordered]@{ configured = $true; baseUrl = $baseUrl; visionModel = $name; textModel = $resolvedText; supportsVision = ($ModelSupportsVision -ne "false") }
+    $env:ACCEPTANCE_MODEL_PROVIDER = $provider
+    return [ordered]@{
+      configured = $true
+      credentialSource = if ($Signoff) { "host-provider" } else { "workstation" }
+      provider = $provider
+      baseUrl = $baseUrl
+      visionModel = $name
+      textModel = $resolvedText
+      supportsVision = ($ModelSupportsVision -ne "false")
+    }
   }
-  Remove-Item Env:ACCEPTANCE_MODEL_BASE_URL, Env:ACCEPTANCE_MODEL_API_KEY, Env:ACCEPTANCE_MODEL_NAME, Env:ACCEPTANCE_TEXT_MODEL_NAME, Env:ACCEPTANCE_MODEL_SUPPORTS_VISION -ErrorAction SilentlyContinue
+  Remove-Item Env:ACCEPTANCE_MODEL_PROVIDER, Env:ACCEPTANCE_MODEL_BASE_URL, Env:ACCEPTANCE_MODEL_API_KEY, Env:ACCEPTANCE_MODEL_NAME, Env:ACCEPTANCE_TEXT_MODEL_NAME, Env:ACCEPTANCE_MODEL_SUPPORTS_VISION -ErrorAction SilentlyContinue
   return [ordered]@{ configured = $false }
 }
 function Invoke-FieldAcceptance {
+  if (-not $AdminPassword) { Fail "现场验收必须通过 -AdminPassword 或安全环境注入显式提供管理员密码" }
   $uri = [Uri]$ExternalEntry
   if ($uri.Scheme -ne "https") { Fail "ExternalEntry 必须使用 https://（真实内网证书入口）" }
+  if ($Signoff -and $AllowSelfSigned) { Fail "正式签收禁止 -AllowSelfSigned" }
+  if ($Signoff -and $SkipDnsCheck) { Fail "正式签收禁止 -SkipDnsCheck" }
+  if ($Signoff -and -not $RequireRealModel) { Fail "正式签收必须传入 -RequireRealModel" }
+  if ($Signoff -and -not $ExpectedHostImage) {
+    Fail "正式签收必须通过 -ExpectedHostImage 指定主机上已批准的镜像标签"
+  }
+  if ($Signoff -and -not $ExpectedHostImageId) {
+    Fail "正式签收必须通过 -ExpectedHostImageId 指定主机上已批准的镜像摘要"
+  }
+  if ($Signoff -and -not $ModelProvider -and -not $env:ACCEPTANCE_MODEL_PROVIDER) {
+    Fail "正式签收必须通过 -ModelProvider 或 ACCEPTANCE_MODEL_PROVIDER 声明已审批供应商名称"
+  }
+  if ($Signoff -and ($ModelApiKey -or $env:ACCEPTANCE_MODEL_API_KEY)) {
+    Fail "正式签收禁止从工作站传入模型 API Key；请先在主电脑配置供应商凭据"
+  }
   $hostName = $uri.Host
   $port = if ($uri.IsDefaultPort) { 443 } else { $uri.Port }
   $origin = if ($uri.IsDefaultPort) { "https://$hostName" } else { "https://${hostName}:$port" }
@@ -97,12 +139,60 @@ function Invoke-FieldAcceptance {
 
   $dockerVersion = ""
   try { $dockerVersion = (docker version --format "{{.Server.Version}}" 2>$null) } catch { $dockerVersion = "" }
+  $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  $resolvedSample = if ($SamplePath) {
+    (Resolve-Path $SamplePath -ErrorAction Stop).Path
+  } else {
+    Join-Path $repoRoot "sample-chat.xlsx"
+  }
+  if (-not (Test-Path -LiteralPath $resolvedSample -PathType Leaf)) {
+    Fail "验收样本不存在：$resolvedSample"
+  }
+
+  $hostEvidenceSummary = $null
+  $crossMachineVerified = $false
+  if ($HostEvidencePath) {
+    $resolvedHostEvidence = (Resolve-Path $HostEvidencePath -ErrorAction Stop).Path
+    $hostEvidence = Get-Content -LiteralPath $resolvedHostEvidence -Raw | ConvertFrom-Json
+    $validation = $null
+    if ($Signoff) {
+      $policyScript = Join-Path $repoRoot "scripts/lan-host-evidence-policy.mjs"
+      $dnsAddresses = @($dnsRecords | ForEach-Object { [string]$_.address })
+      $validationText = (& node $policyScript $resolvedHostEvidence $env:COMPUTERNAME $hostName $ExpectedHostImage $ExpectedHostImageId ($dnsAddresses -join ",")) -join "`n"
+      $validationExit = $LASTEXITCODE
+      try { $validation = $validationText | ConvertFrom-Json }
+      catch { Fail "主机证据校验器未返回有效结果：$validationText" }
+      if ($validationExit -ne 0 -or -not $validation.ok) {
+        Fail "主机证据与本次工作站、DNS、镜像或时间不匹配：$($validation.errors -join ', ')"
+      }
+      $crossMachineVerified = $true
+    }
+    $hostEvidenceSummary = [ordered]@{
+      path = $resolvedHostEvidence
+      sha256 = (Get-FileHash -LiteralPath $resolvedHostEvidence -Algorithm SHA256).Hash
+      collectedAt = $hostEvidence.collectedAt
+      hostComputer = $hostEvidence.host.computer
+      entryHost = $hostEvidence.entry.host
+      entryAddress = $hostEvidence.entry.address
+      image = $hostEvidence.container.image
+      imageId = $hostEvidence.container.imageId
+      validation = $validation
+    }
+  } elseif ($Signoff) {
+    Fail "正式签收必须通过 -HostEvidencePath 提供固定主机的恢复、持久化和单实例证据"
+  }
 
   $evidence = [ordered]@{
     collectedAt = (Get-Date).ToString("o")
-    mode = "field"
+    mode = if ($Signoff) { "signoff" } else { "field-drill" }
     entry = $ExternalEntry
     tlsVerified = $tlsVerify
+    crossMachine = $crossMachineVerified
+    sample = @{
+      path = $resolvedSample
+      sha256 = (Get-FileHash -LiteralPath $resolvedSample -Algorithm SHA256).Hash
+    }
+    hostEvidence = $hostEvidenceSummary
     workstation = @{
       computer = $env:COMPUTERNAME
       user = $env:USERNAME
@@ -112,23 +202,33 @@ function Invoke-FieldAcceptance {
     dns = $dnsRecords
   }
 
-  $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
   $connectHost = if ($ConnectHost) { $ConnectHost } else { $hostName }
   $env:ACCEPTANCE_HOST = $hostName
   $env:ACCEPTANCE_PORT = "$port"
   $env:ACCEPTANCE_ORIGIN = $origin
   $env:ACCEPTANCE_CONNECT_HOST = $connectHost
   $env:ACCEPTANCE_TLS_VERIFY = if ($tlsVerify) { "true" } else { "false" }
+  $env:ACCEPTANCE_MODE = if ($Signoff) { "signoff" } else { "drill" }
+  $env:ACCEPTANCE_DNS_CHECKED = if ($SkipDnsCheck) { "false" } else { "true" }
+  $env:ACCEPTANCE_CROSS_MACHINE = if ($crossMachineVerified) { "true" } else { "false" }
+  Remove-Item Env:ACCEPTANCE_RESTORE_VERIFIED -ErrorAction SilentlyContinue
   $env:ACCEPTANCE_ADMIN_USERNAME = $AdminUsername
   $env:ACCEPTANCE_ADMIN_PASSWORD = $AdminPassword
-  $env:ACCEPTANCE_SAMPLE = (Join-Path $repoRoot "sample-chat.xlsx")
+  $env:ACCEPTANCE_SAMPLE = $resolvedSample
   $modelInfo = Set-ModelEnv
   if ($RequireRealModel -and -not $modelInfo.configured) {
-    Fail "现场签署要求 -RequireRealModel，但未提供真实模型凭据（-ModelBaseUrl/-ModelApiKey/-ModelName 或 ACCEPTANCE_MODEL_* 环境变量）"
+    Fail $(if ($Signoff) {
+      "正式签收要求主电脑预先配置供应商，并提供 -ModelProvider/-ModelBaseUrl/-ModelName（工作站不需要 API Key）"
+    } else {
+      "模型预演要求提供 -ModelBaseUrl/-ModelApiKey/-ModelName 或对应 ACCEPTANCE_MODEL_* 环境变量"
+    })
+  }
+  if ($Signoff -and -not $modelInfo.provider) {
+    Fail "正式签收缺少模型供应商声明"
   }
   $evidence.realModel = $modelInfo
 
-  Write-Host "== 现场验收 $ExternalEntry（TLS 校验：$tlsVerify，真实模型：$($modelInfo.configured)）"
+  Write-Host "== 现场验收 $ExternalEntry（模式：$($evidence.mode)，TLS 校验：$tlsVerify，真实模型：$($modelInfo.configured)）"
   $started = Get-Date
   $text = (node (Join-Path $repoRoot "scripts/lan-acceptance-client.mjs")) -join "`n"
   $seconds = [math]::Round(((Get-Date) - $started).TotalSeconds, 1)
@@ -140,7 +240,10 @@ function Invoke-FieldAcceptance {
     seconds = $seconds
     tlsVerified = $client.tlsVerified
     realModel = $client.realModel
+    modelEndpoint = $client.modelEndpoint
     modelEvidence = $client.modelEvidence
+    signoff = $client.signoff
+    cleanup = $client.cleanup
     steps = $client.steps
     backupName = $client.backupName
     auditEventCount = $client.auditEventCount
@@ -149,12 +252,19 @@ function Invoke-FieldAcceptance {
   [IO.File]::WriteAllText($path, ($evidence | ConvertTo-Json -Depth 8))
   Write-Host "证据文件：$path"
   if (-not $client.ok) { Fail "现场验收未通过（见证据文件）" }
-  Write-Host "FIELD ACCEPTANCE OK"
+  if ($Signoff -and -not $client.signoff.eligible) {
+    Fail "正式签收条件未满足：$($client.signoff.missing -join ', ')"
+  }
+  Write-Host $(if ($Signoff) { "FIELD SIGNOFF OK" } else { "FIELD DRILL OK" })
 }
 
 if ($ExternalEntry) {
   Invoke-FieldAcceptance
   exit 0
+}
+
+if (-not $AdminPassword) {
+  $AdminPassword = New-RandomPassword
 }
 
 docker info --format "{{.ServerVersion}}" | Out-Null
@@ -264,9 +374,13 @@ server {
   $env:ACCEPTANCE_ORIGIN = "https://$HostName"
   $env:ACCEPTANCE_CONNECT_HOST = "127.0.0.1"
   $env:ACCEPTANCE_TLS_VERIFY = "false"
+  $env:ACCEPTANCE_MODE = "drill"
+  $env:ACCEPTANCE_DNS_CHECKED = "false"
+  $env:ACCEPTANCE_CROSS_MACHINE = "false"
+  $env:ACCEPTANCE_RESTORE_VERIFIED = "false"
   $env:ACCEPTANCE_ADMIN_USERNAME = "admin"
   $env:ACCEPTANCE_ADMIN_PASSWORD = $AdminPassword
-  $env:ACCEPTANCE_SAMPLE = (Join-Path $repoRoot "sample-chat.xlsx")
+  $env:ACCEPTANCE_SAMPLE = if ($SamplePath) { (Resolve-Path $SamplePath -ErrorAction Stop).Path } else { Join-Path $repoRoot "sample-chat.xlsx" }
   $modelInfo = Set-ModelEnv
   $evidence.realModel = $modelInfo
   $clientStarted = Get-Date
@@ -275,7 +389,18 @@ server {
   $client = $clientText | ConvertFrom-Json
   if (-not $client) { Fail "验收客户端未输出结果：$clientText" }
   $client.steps | ForEach-Object { Write-Host ("   [{0}] {1}" -f ($(if ($_.ok) { "OK" } else { "FAIL" })), $_.name) }
-  $evidence.acceptanceClient = @{ ok = $client.ok; seconds = $clientSeconds; realModel = $client.realModel; modelEvidence = $client.modelEvidence; steps = $client.steps; backupName = $client.backupName; auditEventCount = $client.auditEventCount }
+  $evidence.acceptanceClient = @{
+    ok = $client.ok
+    seconds = $clientSeconds
+    realModel = $client.realModel
+    modelEndpoint = $client.modelEndpoint
+    modelEvidence = $client.modelEvidence
+    signoff = $client.signoff
+    cleanup = $client.cleanup
+    steps = $client.steps
+    backupName = $client.backupName
+    auditEventCount = $client.auditEventCount
+  }
   if (-not $client.ok) { throw "五角色验收未通过" }
 
   Write-Host "== 独立目录恢复与密钥校验"
@@ -290,7 +415,13 @@ server {
   Write-Host "== 镜像升级预演与持久数据校验"
   docker rm -f $appContainer | Out-Null
   $upgradeTag = "$Image-upgraded"
-  docker tag $Image $upgradeTag
+  $upgradeSource = if ($UpgradeImage) { $UpgradeImage } else { $Image }
+  if (-not $UpgradeImage) {
+    Write-Host "WARN: 未提供 -UpgradeImage，本轮仅验证同镜像重启与持久数据，不计入真实升级验收。"
+  } elseif (-not (docker image inspect $UpgradeImage 2>$null)) {
+    Fail "指定的升级镜像不存在：$UpgradeImage"
+  }
+  docker tag $upgradeSource $upgradeTag
   docker run -d --name $appContainer --network $network `
     -e "LISTEN_HOST=0.0.0.0" `
     -e "ALLOWED_HOSTS=$HostName" `
@@ -301,7 +432,12 @@ server {
   $jobCount = (Invoke-ContainerCli "node -e `"const D=require('/app/node_modules/better-sqlite3');const db=new D('/app/data/app.db',{readonly:true});process.stdout.write(String(db.prepare('SELECT COUNT(*) n FROM jobs').get().n));db.close();`"").Trim()
   Invoke-ContainerCli "test -f /app/data/.secrets/app.db.key.json" | Out-Null
   if ([int]$jobCount -lt 1) { Fail "升级预演后任务数据缺失" }
-  $evidence.persistence = @{ jobsAfterUpgrade = [int]$jobCount; managedKey = $true }
+  $evidence.persistence = @{
+    jobsAfterUpgrade = [int]$jobCount
+    managedKey = $true
+    upgradeImage = $upgradeSource
+    realUpgradeVerified = [bool]$UpgradeImage
+  }
 
   Write-Host "== 镜像回滚预演（切回原标签）"
   docker rm -f $appContainer | Out-Null

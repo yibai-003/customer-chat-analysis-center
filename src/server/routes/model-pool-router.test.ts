@@ -98,6 +98,57 @@ describe("model pool administration API", () => {
     expect(listed.body.data[0]).not.toHaveProperty("apiKey");
   });
 
+  it("deletes only providers that are no longer referenced by model configs", async () => {
+    const provider = createModelProvider({
+      name: "Route deletable provider",
+      baseUrl: "https://provider-route-delete.example/v1",
+      apiKey: "route-delete-secret",
+    });
+    const deleted = await jsonRequest(`/api/model-providers/${provider.id}`, {
+      method: "DELETE",
+    });
+    expect(deleted).toEqual({
+      status: 200,
+      body: { success: true, data: true, error: null },
+    });
+
+    const model = createModelConfig({
+      name: "Route referenced provider",
+      baseUrl: "https://provider-route-reference.example/v1",
+      apiKey: "route-reference-secret",
+      model: "route-reference-model",
+      purpose: "text",
+    });
+    const rejected = await jsonRequest(`/api/model-providers/${model.providerId}`, {
+      method: "DELETE",
+    });
+    expect(rejected.status).toBe(409);
+    expect(rejected.body.error).toContain("仍被模型配置引用");
+  });
+
+  it("clears a purpose default without selecting a replacement", async () => {
+    const model = createModelConfig({
+      name: "Route default model",
+      baseUrl: "https://route-default.example/v1",
+      apiKey: "route-default-secret",
+      model: "route-default-model",
+      purpose: "text",
+    });
+    await jsonRequest(`/api/model-configs/${model.id}/default`, {
+      method: "POST",
+      body: JSON.stringify({ purpose: "text" }),
+    });
+
+    const cleared = await jsonRequest("/api/model-configs/default/text", {
+      method: "DELETE",
+    });
+    expect(cleared).toEqual({
+      status: 200,
+      body: { success: true, data: true, error: null },
+    });
+    expect((await jsonRequest("/api/model-configs")).body.data[0].isPurposeDefault).toBe(false);
+  });
+
   it("returns preset install changes and reports a missing reusable provider as conflict", async () => {
     const conflict = await jsonRequest("/api/model-pools/qianwen-free/install", {
       method: "POST",

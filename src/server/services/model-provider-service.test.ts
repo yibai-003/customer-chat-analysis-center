@@ -9,6 +9,7 @@ import {
 } from "./model-config-service";
 import {
   createModelProvider,
+  deleteModelProvider,
   disableModelProvider,
   listModelProviders,
   resolveModelMember,
@@ -158,6 +159,25 @@ describe("model provider credentials", () => {
       lastError: "manual disable",
     });
     expect(resolvePoolMembers("text").some((item) => item.id === model.id)).toBe(false);
+  });
+
+  it("deletes an unreferenced provider and refuses to delete a referenced provider", () => {
+    const unreferenced = createModelProvider({
+      name: "可删除供应商",
+      baseUrl: "https://provider-delete.example/v1",
+      apiKey: "provider-delete-secret",
+    });
+    deleteModelProvider(unreferenced.id);
+    expect(listModelProviders().some((item) => item.id === unreferenced.id)).toBe(false);
+
+    const referenced = createModelConfig({
+      name: "被引用供应商成员",
+      baseUrl: "https://provider-reference.example/v1",
+      apiKey: "provider-reference-secret",
+      model: "provider-reference-model",
+      purpose: "text",
+    });
+    expect(() => deleteModelProvider(referenced.providerId!)).toThrow("仍被模型配置引用");
   });
 
   it("uses the configured capability TTL when resolving pool eligibility", () => {

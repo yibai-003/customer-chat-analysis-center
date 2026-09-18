@@ -81,6 +81,14 @@ export function setDefaultModel(id: string, purpose?: "vision" | "text") {
   transaction();
 }
 
+export function clearDefaultModel(purpose: "vision" | "text") {
+  db.prepare(`UPDATE model_configs
+    SET is_purpose_default = 0,
+        is_default = CASE WHEN ? = 'vision' THEN 0 ELSE is_default END,
+        updated_at = ?
+    WHERE purpose = ?`).run(purpose, new Date().toISOString(), purpose);
+}
+
 export function updateModelConfig(id: string, raw: unknown) {
   const current = db.prepare("SELECT * FROM model_configs WHERE id = ?").get(id) as any;
   if (!current) throw new Error("模型配置不存在");

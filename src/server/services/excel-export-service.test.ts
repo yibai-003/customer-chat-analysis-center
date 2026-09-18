@@ -25,16 +25,17 @@ describe("Excel export columns", () => {
   beforeAll(() => initDb());
   afterEach(() => {
     db.prepare("DELETE FROM analysis_field_runs WHERE record_id IN (SELECT id FROM records WHERE job_id = 'task-5-export-job')").run();
+    db.prepare("DELETE FROM record_section_reviews WHERE record_id IN (SELECT id FROM records WHERE job_id = 'task-5-export-job')").run();
     db.prepare("DELETE FROM records WHERE job_id = 'task-5-export-job'").run();
     db.prepare("DELETE FROM jobs WHERE id = 'task-5-export-job'").run();
-    db.prepare("DELETE FROM analysis_fields WHERE section_id = 'task-5-export'").run();
-    db.prepare("DELETE FROM analysis_sections WHERE id = 'task-5-export'").run();
+    db.prepare("DELETE FROM analysis_fields WHERE section_id LIKE 'task-5-export%'").run();
+    db.prepare("DELETE FROM analysis_sections WHERE id LIKE 'task-5-export%'").run();
     for (const file of generatedFiles) fs.rmSync(file, { force: true });
     generatedFiles.clear();
   });
 
-  it("does not add runtime status metadata columns to exported workbooks", () => {
-    expect(exportMetadataHeaders()).toEqual([]);
+  it("adds stable runtime status metadata columns to exported workbooks", () => {
+    expect(exportMetadataHeaders()).toEqual(["解析状态", "复核状态", "复核备注"]);
   });
 
   it("uses field labels in exported headers", () => {
@@ -142,6 +143,13 @@ describe("Excel export columns", () => {
         },
       },
     });
+    db.prepare(`
+      INSERT INTO record_section_reviews (
+        record_id, section_id, human_result_json, review_status, review_note, updated_at
+      ) VALUES (
+        'task-5-export-record', 'task-5-export', NULL, 'confirmed', '已人工复核', ?
+      )
+    `).run(timestamp);
 
     const outputPath = await exportJob("task-5-export-job", ["task-5-export"]);
     generatedFiles.add(outputPath);
@@ -159,6 +167,9 @@ describe("Excel export columns", () => {
       客服原因: "优惠说明不清晰",
       客户产品需求: "",
       话术逻辑优化建议: "先确认客户预算，再清晰说明到手价和优惠条件，并确认该方案是否可接受。",
+      解析状态: "completed",
+      复核状态: "confirmed",
+      复核备注: "已人工复核",
     });
     expect(JSON.stringify(cells)).not.toContain("希望优惠到100元");
   });
@@ -269,6 +280,7 @@ describe("Excel export columns", () => {
     expect(headers).toEqual([
       "订单号", "问题点-售前", "问题点-售后", "有无违规-售后",
       "客服问题 识别问题并打标签", "接待流程质检结果", "优化建议-售前",
+      "解析状态", "复核状态", "复核备注",
     ]);
     expect(headers).not.toContain("截图内容总结");
     expect(headers).not.toContain("统一质检分析");
@@ -280,9 +292,66 @@ describe("Excel export columns", () => {
       "客服问题 识别问题并打标签": "答非所问、漏回复",
       接待流程质检结果: "B",
       "优化建议-售前": "先准确回答尺寸",
+      解析状态: "completed",
+      复核状态: "pending",
+      复核备注: "",
     });
     expect(JSON.stringify(cells)).not.toContain("内部事实不得导出");
     expect(JSON.stringify(cells)).not.toContain("统一质检分析");
+  });
+
+  it("aggregates review state and notes for multi-section exports", async () => {
+    const sourcePath = path.join(os.tmpdir(), `multi-section-export-${Date.now()}.xlsx`);
+    generatedFiles.add(sourcePath);
+    const source = new ExcelJS.Workbook();
+    const sheet = source.addWorksheet("Sheet1");
+    sheet.addRow(["订单号"]);
+    sheet.addRow(["C-1"]);
+    await source.xlsx.writeFile(sourcePath);
+    const timestamp = "2026-09-18T00:00:00.000Z";
+    const insertSection = db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (?, NULL, ?, '', '[]', '[]', ?, 1, 0, ?, ?)
+    `);
+    insertSection.run("task-5-export-a", "售前质检", 90, timestamp, timestamp);
+    insertSection.run("task-5-export-b", "售后质检", 91, timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO jobs (
+        id, original_filename, source_path, section_id, section_name, status,
+        total_records, completed_records, failed_records, created_at, updated_at
+      ) VALUES ('task-5-export-job', 'source.xlsx', ?, 'task-5-export-a', '售前质检',
+        'ready', 1, 1, 0, ?, ?)
+    `).run(sourcePath, timestamp, timestamp);
+    db.prepare(`
+      INSERT INTO records (
+        id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
+        image_path, status, review_status, review_note, created_at, updated_at
+      ) VALUES ('task-5-export-record', 'task-5-export-job', 'Sheet1', 2, '{}', '{}',
+        '', 'completed', 'pending', '记录级备注不应覆盖板块备注', ?, ?)
+    `).run(timestamp, timestamp);
+    const insertReview = db.prepare(`
+      INSERT INTO record_section_reviews (
+        record_id, section_id, human_result_json, review_status, review_note, updated_at
+      ) VALUES ('task-5-export-record', ?, NULL, ?, ?, ?)
+    `);
+    insertReview.run("task-5-export-a", "confirmed", "售前已确认", timestamp);
+    insertReview.run("task-5-export-b", "needs_review", "售后需复核", timestamp);
+
+    const outputPath = await exportJob("task-5-export-job", [
+      "task-5-export-a",
+      "task-5-export-b",
+    ]);
+    generatedFiles.add(outputPath);
+    const exported = new ExcelJS.Workbook();
+    await exported.xlsx.readFile(outputPath);
+    const { cells } = worksheetValues(exported, "Sheet1");
+
+    expect(cells).toMatchObject({
+      复核状态: "needs_review",
+      复核备注: "售前质检：售前已确认；售后质检：售后需复核",
+    });
   });
 
   it("omits fields disabled for export from column and output plans", () => {

@@ -425,6 +425,11 @@ describe("configuration, model pool, account and audit authorization", () => {
         method: "POST",
         body: { name: "missing", targetDir: os.tmpdir() },
       })).status, role).toBe(403);
+      expect((await request("/api/admin/backups/drill", {
+        cookie: cookieFor(role),
+        method: "POST",
+        body: { name: "missing" },
+      })).status, role).toBe(403);
     }
 
     const backupMarker = auditMarker();
@@ -446,10 +451,27 @@ describe("configuration, model pool, account and audit authorization", () => {
     expect(restored.status).toBe(200);
     expect(fs.existsSync(path.join(target, "data/app.db"))).toBe(true);
 
+    const drilled = await request("/api/admin/backups/drill", {
+      cookie: cookieFor("admin"),
+      method: "POST",
+      body: { name: created.body.data.name },
+    });
+    expect(drilled.status).toBe(200);
+    expect(drilled.body.data).toMatchObject({
+      backup: created.body.data.name,
+      ok: true,
+      checks: expect.arrayContaining([
+        expect.objectContaining({ name: "database", ok: true }),
+        expect.objectContaining({ name: "model-credentials", ok: true }),
+      ]),
+    });
+    expect(drilled.body.data).not.toHaveProperty("directory");
+
     expect(auditEvents({ action: "backup.create", outcome: "success", since: backupMarker })).toHaveLength(1);
     const restoreEvents = auditEvents({ action: "backup.restore", outcome: "success", since: backupMarker });
     expect(restoreEvents).toHaveLength(1);
     expect(restoreEvents[0]).toMatchObject({ actor_user_id: userId("admin"), target_id: created.body.data.name, outcome: "success" });
+    expect(auditEvents({ action: "backup.drill", targetId: created.body.data.name, outcome: "success", since: backupMarker })).toHaveLength(1);
 
     const traversal = await request("/api/admin/backups/restore", {
       cookie: cookieFor("admin"),

@@ -2,6 +2,7 @@ import express from "express";
 import { z, ZodError } from "zod";
 import {
   createModelProvider,
+  deleteModelProvider,
   listModelProviders,
   safeBaseUrlSchema,
   testModelProvider,
@@ -104,6 +105,7 @@ function errorStatus(error: unknown) {
   ) {
     return 404;
   }
+  if (error instanceof Error && error.message === "模型供应商仍被模型配置引用") return 409;
   return 400;
 }
 
@@ -157,6 +159,21 @@ export function createModelPoolRouter(): express.Router {
         metadata: { name: provider.name, fields: Object.keys(input) },
       });
       return ok(res, provider);
+    } catch (error) {
+      return fail(res, error);
+    }
+  });
+
+  router.delete("/model-providers/:id", canUpdateProvider, (req, res) => {
+    try {
+      const id = routeId(req.params.id);
+      deleteModelProvider(id);
+      auditRequest(req, {
+        action: "pool.delete_provider",
+        targetType: "model_provider",
+        targetId: id,
+      });
+      return ok(res, true);
     } catch (error) {
       return fail(res, error);
     }

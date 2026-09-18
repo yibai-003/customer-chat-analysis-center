@@ -13,7 +13,7 @@ import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSection
 import { analyzeRecord } from "./services/analysis-service";
 import { analyzeJob, prepareTargetedRecordIds, retryFailedJob } from "./services/batch-analysis-service";
 import { exportJob } from "./services/excel-export-service";
-import { createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig, getModelReadinessChecks, getModelReadinessActions } from "./services/model-config-service";
+import { clearDefaultModel, createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig, getModelReadinessChecks, getModelReadinessActions } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
 import { listFields, upsertField, deleteField } from "./services/field-config-service";
 import { analyzeField, retryField } from "./services/field-analysis-service";
@@ -365,6 +365,19 @@ export function createApp(dependencies: AppDependencies = {}) {
     try {
       deleteModelConfig(req.params.id);
       auditRequest(req, { action: "config.delete_model", targetType: "model_config", targetId: req.params.id });
+      return ok(res, true);
+    } catch (error) { return fail(res, error); }
+  });
+  app.delete("/api/model-configs/default/:purpose", canManageConfig, (req, res) => {
+    try {
+      const purpose = req.params.purpose;
+      if (purpose !== "vision" && purpose !== "text") throw new Error("模型用途无效");
+      clearDefaultModel(purpose);
+      auditRequest(req, {
+        action: "config.clear_default_model",
+        targetType: "model_config",
+        metadata: { purpose },
+      });
       return ok(res, true);
     } catch (error) { return fail(res, error); }
   });

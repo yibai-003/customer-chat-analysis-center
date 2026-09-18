@@ -191,6 +191,15 @@ export function updateModelProvider(id: string, raw: unknown) {
   return mapProviderRow(db.prepare("SELECT * FROM model_providers WHERE id=?").get(id));
 }
 
+export function deleteModelProvider(id: string) {
+  const current = db.prepare("SELECT id FROM model_providers WHERE id=?").get(id);
+  if (!current) throw new Error("模型供应商不存在");
+  const reference = db.prepare("SELECT COUNT(*) count FROM model_configs WHERE provider_id=?")
+    .get(id) as { count: number };
+  if (reference.count > 0) throw new Error("模型供应商仍被模型配置引用");
+  db.prepare("DELETE FROM model_providers WHERE id=?").run(id);
+}
+
 export function disableModelProvider(id: string, reason: string) {
   const current = db.prepare("SELECT api_key_ciphertext FROM model_providers WHERE id=?").get(id) as any;
   if (!current) throw new Error("模型供应商不存在");

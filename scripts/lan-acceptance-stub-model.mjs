@@ -37,8 +37,37 @@ function analysisReply(text) {
   return JSON.stringify({ [key]: valueForType(type), evidence: "验收模拟证据" });
 }
 
+function jsonArrayAfter(text, label) {
+  const line = text.split(/\r?\n/).find((item) => item.startsWith(label));
+  if (!line) return [];
+  try {
+    const parsed = JSON.parse(line.slice(label.length));
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Lost-deal attribution needs knowledge ids and evidence grounded in the summary. */
+function lostDealReply(text) {
+  const summary = /截图内容总结：(.*)/.exec(text)?.[1]?.trim() || "";
+  const evidence = summary || "验收模拟证据";
+  const ground = (label) => jsonArrayAfter(text, label).slice(0, 1)
+    .map((item) => ({ knowledgeItemId: item.id, name: item.name, evidence, confidence: 0.9 }));
+  return JSON.stringify({
+    customerReasons: ground("客户原因候选："),
+    serviceReasons: ground("客服原因候选："),
+    demandTypes: [],
+    specificDemand: "",
+    specificDemandEvidence: "",
+    evidence: [evidence],
+    confidence: 0.9,
+  });
+}
+
 function reply(body) {
   const text = collectText(body?.messages);
+  if (/客户原因候选：/.test(text)) return lostDealReply(text);
   const structured = /结构化客服数据解析助手|响应外层必须是 JSON 对象/.test(text);
   if (structured) return analysisReply(text);
   if (/dominant color/i.test(text)) return "red";
