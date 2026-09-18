@@ -30,6 +30,23 @@ FIRST_ADMIN_PASSWORD=至少8位的初始密码
 
 完成后立即登录并按需在“账号管理”接口创建其他账号；账号由管理员创建、停用和重置，不开放自助注册。会话 Cookie 为 `HttpOnly + SameSite=Lax + Secure`；停用、重置密码、登出或到期都会即时撤销会话。
 
+如果管理员密码遗失或当前密码无法登录，先停止应用容器，再在主机上使用实际运行镜像执行本地重置。该命令只允许重置已存在的管理员账号：
+
+```powershell
+docker stop customer-chat-analysis
+$env:ADMIN_PASSWORD = "新的临时密码"
+docker run --rm `
+  -e ADMIN_PASSWORD `
+  -v "${PWD}:/app" `
+  -v "本机数据目录:/app/data" `
+  customer-chat-analysis:lan `
+  npm run reset:admin -- --username admin
+Remove-Item Env:ADMIN_PASSWORD
+docker start customer-chat-analysis
+```
+
+生产环境应使用当前实际运行镜像和实际数据目录，不要把密码写入 Git、镜像或长期环境变量；登录成功后立即按组织密码策略更换并清理临时凭据。
+
 账号管理（管理员会话下，PowerShell 示例）：
 
 ```powershell

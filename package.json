@@ -19,6 +19,7 @@
     "db:migrations": "tsx src/server/db-migration-cli.ts",
     "maintenance": "tsx src/server/maintenance-cli.ts",
     "bootstrap:admin": "tsx src/server/bootstrap-admin-cli.ts",
+    "reset:admin": "tsx src/server/reset-admin-password-cli.ts",
     "keys:migrate": "tsx src/server/key-cli.ts"
   },
   "type": "module",
