@@ -59,6 +59,7 @@
 ## 架构决策
 
 - [ADR-0001：局域网版采用单组织共享数据与角色授权](adr/0001-lan-single-organization-access-model.md)
+- [ADR-0002：模型供应商凭据集中管理](adr/0002-centralized-model-provider-credentials.md)
 
 ## 归档
 
@@ -72,6 +73,7 @@
 - [依赖漏洞定向修复](archive/dependency-security-remediation.md)
 - [容器化备份与独立恢复演练（2026-09-17）](archive/lan-backup-restore-drill-2026-09-17.md)
 - [局域网发布验收记录（2026-09-17）](archive/lan-release-acceptance-2026-09-17.md)
+- [局域网真实业务验收记录（2026-09-18）](archive/lan-real-business-acceptance-2026-09-18.md)
 - [前端状态模块拆分记录](archive/frontend-state-modules.md)
 - [Task 8 实施报告](archive/task-8-report.md)
 - [Task 9 实施报告](archive/task-9-report.md)

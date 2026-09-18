@@ -1,0 +1,104 @@
+/* Review workspace: give analysis results room without expanding table columns. */
+.app > .topbar { position: sticky; top: 0; z-index: 3; height: auto; min-height: 76px; flex-wrap: wrap; gap: 12px; padding-block: 12px; }
+@media (min-width: 701px) {
+  .app .workspace > .sidebar { position: sticky; z-index: 4; top: var(--workspace-header-height, 76px); height: calc(100dvh - var(--workspace-header-height, 76px)); min-height: 0; max-height: calc(100dvh - var(--workspace-header-height, 76px)); align-self: start; padding: 18px 10px 12px; }
+  .sidebar-scroll { flex: 1; min-height: 0; overflow: auto; scrollbar-gutter: stable; }
+  .sidebar > .server-state { flex: 0 0 auto; }
+  .sidebar-scroll .section-title { margin-top: 20px; }
+  .sidebar > .sidebar-botanical { flex: 0 0 auto; margin: 0 0 4px; padding-top: 12px; }
+  .sidebar > .sidebar-botanical .botanical-art { height: 96px; }
+}
+.import-section-form { margin-top: 18px; }
+.import-section-form select { display: block; width: 100%; min-height: 42px; margin-top: 8px; padding: 8px; border: 2px solid var(--pixel-line); background: #fff; color: var(--pixel-ink); }
+.import-section-form select:focus-visible { outline: 2px solid var(--pixel-ink); outline-offset: 2px; }
+.workspace > .detail {
+  position: relative;
+  isolation: isolate;
+  align-self: stretch;
+  height: auto;
+  min-height: calc(100dvh - var(--workspace-header-height, 76px));
+  max-height: none;
+  background: #f2f1e5;
+}
+.workspace > .detail::before,
+.workspace > .detail::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.workspace > .detail::before {
+  background:
+    linear-gradient(150deg, #dddcc25c, transparent 48%, #bdc79838),
+    url('../assets/botanical/fern-arching.webp') right top / 90% 560px repeat-y;
+  opacity: .14;
+}
+.workspace > .detail::after {
+  background: url('../assets/botanical/fern-fine.webp') left 260px / 75% 600px repeat-y;
+  opacity: .12;
+  animation: detail-foliage-drift 16s ease-in-out infinite alternate;
+}
+.detail > .detail-empty {
+  min-height: calc(100dvh - var(--workspace-header-height, 76px));
+  height: auto;
+  background: transparent;
+}
+.detail > .detail-empty > .botanical-art { width: 100%; max-width: 320px; height: 260px; }
+.detail > .detail-scroll { background: #fbfcf8e8; }
+@keyframes detail-foliage-drift {
+  from { background-position: left 260px; }
+  to { background-position: 8px 274px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .workspace > .detail::after { animation: none; }
+}
+.detail-scroll { max-height: none; overflow: visible; scrollbar-gutter: auto; }
+@media (min-width: 1201px) {
+  .workspace { grid-template-columns: 220px minmax(360px, 1fr) 20%; align-items: start; }
+  .workspace > .content { padding: 32px 24px 48px; }
+  .detail-scroll { padding: 24px; }
+  .content-header > .task-heading { padding-right: 0; }
+  .task-heading > .botanical-art { display: none; }
+}
+.detail-context { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 20px; align-items: start; }
+.detail-context .detail-image-button img { height: 140px; min-height: 0; max-height: 140px; object-fit: contain; }
+.detail-context .detail-image-button figcaption { font-size: 9px; letter-spacing: 0; bottom: 4px; left: 4px; }
+.detail-sources { min-width: 0; padding: 12px; border: 1px solid var(--pixel-line); background: #f2f3e9; }
+.detail-sources summary { cursor: pointer; color: var(--pixel-ink); font-size: 12px; font-weight: 600; line-height: 1.7; }
+.detail-sources summary span { display: block; margin-top: 4px; color: #69766c; font-size: 11px; font-weight: 400; }
+.detail-sources[open] summary { margin-bottom: 10px; }
+.detail-sources summary:focus-visible { outline: 2px solid var(--pixel-ink); outline-offset: 4px; }
+.source-fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
+.detail-context .source-field { display: block; min-width: 0; padding: 6px 0; border-top: 1px solid var(--pixel-line); }
+.detail-context .source-field span { display: block; font-size: 11px; color: #65736a; }
+.detail-context .source-field strong { display: block; max-width: none; text-align: left; font-size: 12px; line-height: 1.6; margin-top: 4px; overflow: visible; overflow-wrap: anywhere; }
+.detail-results { padding: 22px 0 18px; }
+.detail-results h3 { font-size: 13px; color: var(--pixel-ink); }
+.result-fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+.result-fields-grid > .result-field { margin: 0; min-width: 0; padding: 12px; border: 1px solid var(--pixel-line); background: #fff; }
+.result-fields-grid > .result-field--wide { grid-column: 1 / -1; }
+.result-fields-grid > .result-field > span { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; color: var(--pixel-ink); font-size: 12px; line-height: 1.7; }
+.result-fields-grid .result-field textarea { font-size: 13px; line-height: 1.75; min-height: 64px; padding: 9px; background: #fbfcf8; }
+.result-fields-grid .field-evidence, .result-fields-grid .form-error { display: block; white-space: normal; overflow-wrap: anywhere; line-height: 1.7; }
+.detail-actions { position: static; padding: 14px 0; border-top: 1px solid var(--pixel-line); background: var(--pixel-paper); }
+@media (min-width: 701px) and (max-width: 1200px) {
+  .workspace { grid-template-columns: 200px minmax(0, 1fr); }
+  .workspace > .sidebar { grid-column: 1; grid-row: 1 / 3; }
+  .workspace > .content { grid-column: 2; padding: 28px 20px; }
+  .workspace > .detail { grid-column: 2; border-left: 0; border-top: 2px solid var(--pixel-ink); }
+  .detail-scroll { max-height: none; padding: 24px; }
+  .content-header > .task-heading { padding-right: 0; }
+  .task-heading > .botanical-art { display: none; }
+}
+@media (max-width: 700px) {
+  .detail-context { grid-template-columns: 100px minmax(0, 1fr); gap: 12px; }
+  .source-fields-grid, .result-fields-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (min-width: 1201px) {
+  .detail-scroll { padding: 20px 14px; }
+  .detail-context, .source-fields-grid, .result-fields-grid { grid-template-columns: minmax(0, 1fr); }
+  .detail-context .detail-image-button { max-width: 160px; }
+  .detail-head, .detail-actions { flex-wrap: wrap; }
+  .detail-actions .button { flex: 1 1 120px; }
+}

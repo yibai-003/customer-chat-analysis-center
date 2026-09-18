@@ -101,8 +101,9 @@ async function survey(cookie) {
 }
 
 function formalDefault(models, purpose) {
-  return models.find((item) => item.purpose === purpose && !item.test && item.isEnabled && item.poolEnabled && item.verified)
-    ?? null;
+  return models
+    .filter((item) => item.purpose === purpose && !item.test && item.isEnabled && item.poolEnabled && item.verified)
+    .sort((left, right) => right.usageEvents - left.usageEvents)[0] ?? null;
 }
 
 const login = await post("/api/auth/login", { username: USER, password: PASS });
