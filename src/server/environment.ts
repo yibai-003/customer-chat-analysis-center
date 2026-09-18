@@ -9,7 +9,7 @@ export const projectRoot = fileURLToPath(new URL("../../", import.meta.url));
 export function loadEnvironment(file = path.join(projectRoot, ".env"), target = process.env) {
   if (!fs.existsSync(file)) return;
   const parsed = parseEnv(fs.readFileSync(file, "utf8"));
-  const allowed = new Set(["PORT", "DATA_DIR", "DATABASE_PATH", "ENCRYPTION_KEY", "MAX_UPLOAD_MB", "ANALYSIS_CONCURRENCY", "ANALYSIS_BATCH_SIZE", "MIN_FREE_DISK_MB", "BACKUP_INTERVAL_HOURS", "BACKUP_RETENTION", "CLEANUP_RETENTION_DAYS", "LOG_MAX_MB", "LOG_RETENTION"]);
+  const allowed = new Set(["PORT", "LISTEN_HOST", "ALLOWED_HOSTS", "ALLOWED_ORIGINS", "DATA_DIR", "DATABASE_PATH", "ENCRYPTION_KEY", "MAX_UPLOAD_MB", "ANALYSIS_CONCURRENCY", "ANALYSIS_BATCH_SIZE", "MIN_FREE_DISK_MB", "BACKUP_INTERVAL_HOURS", "BACKUP_RETENTION", "CLEANUP_RETENTION_DAYS", "LOG_MAX_MB", "LOG_RETENTION", "SESSION_TTL_HOURS", "SESSION_COOKIE_SECURE", "FIRST_ADMIN_USERNAME", "FIRST_ADMIN_PASSWORD", "FIRST_ADMIN_DISPLAY_NAME"]);
   for (const [key, value] of Object.entries(parsed)) if (allowed.has(key) && target[key] === undefined) target[key] = value;
 }
 if (process.env.NODE_ENV !== "test") loadEnvironment();

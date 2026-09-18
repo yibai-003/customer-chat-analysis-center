@@ -4,9 +4,9 @@
 
 在项目目录运行 `npm.cmd run backup`，完整恢复包生成到 `data/backups/full-时间-标识/`。
 
-包内包含 SQLite 在线快照、快照对应的知识配置 JSON、数据库引用的原始 Excel/截图/知识导入文件，以及每个文件的大小与 SHA-256 清单。已被正常清理且不存在的终态导入临时文件不备份。
+包内包含 SQLite 在线快照、快照对应的知识配置 JSON、数据库引用的原始 Excel/截图/知识导入文件、`DATA_DIR/exports` 下已生成的导出结果，以及每个文件的大小与 SHA-256 清单。已被正常清理且不存在的终态导入临时文件不备份。
 
-备份不复制可重新生成的导出 Excel、不包含 `.env` 或明文加密密钥。模型配置密文会保存在数据库中，换环境时必须单独安全保留匹配的 `.secrets/<数据库文件名>.key.json` 或原独立 `ENCRYPTION_KEY`，否则需要重新配置 API Key。完整包包含业务数据，不得上传 GitHub。详见 [密钥管理与迁移](encryption-key-management.md)。
+备份不包含 `.env` 或加密密钥。模型配置密文会保存在数据库中，换环境时必须单独安全保留匹配的 `.secrets/<数据库文件名>.key.json` 或原独立 `ENCRYPTION_KEY`，否则需要重新配置 API Key。完整包包含业务数据，不得上传 GitHub。详见 [密钥管理与迁移](encryption-key-management.md)。
 
 每次备份流程：创建临时包 → SQLite 完整性/外键检查 → 引用文件复制与一致性检查 → 校验全部文件 → 完成包 → 清理超额已验证常规包。
 
@@ -42,6 +42,7 @@ npm.cmd run restore -- "E:\客服解析中心\customer-chat-analysis-center\data
 recovery-20260913/
   data/app.db
   data/files/...
+  data/exports/...        # 备份时已生成的导出结果
   data/knowledge-sync-state.json
   knowledge/catalog.json
   RESTORED.json
@@ -49,9 +50,20 @@ recovery-20260913/
 
 `RESTORE_FAILED.txt` 表示恢复失败，不应启动该副本。原备份与原工作目录保留；换一个新的目标目录重试。
 
+## 恢复校验与密钥可用性
+
+恢复目录必须通过独立校验后才能替换运行环境：
+
+```powershell
+# 先把匹配的托管密钥放到恢复库旁（或保留原 ENCRYPTION_KEY），再执行
+npm.cmd run restore:verify -- "E:\客服解析中心\recovery-20260913"
+```
+
+校验项：`RESTORED.json` 标记、数据库完整性/外键/迁移版本、数据库引用的原始文件是否存在、知识快照与同步状态哈希是否一致、模型凭据能否用当前密钥解密。全部 `ok: true` 且退出码 0 才可进入切换；任一项失败按输出定位，不要启动该副本。容器化环境中同样的命令通过 `docker exec customer-chat-analysis npm run restore:verify -- <目录>` 执行。
+
 ## 检查与切换
 
-1. 在恢复目录中检验文件和数据库；本命令不把恢复目录自动设为当前运行环境。
+1. 在恢复目录中检验文件和数据库；优先运行 `npm run restore:verify -- <恢复目录>`，全部通过后再人工抽查关键页面与原图。本命令不把恢复目录自动设为当前运行环境。
 2. 将项目代码（同版本或已验证兼容版本，不复制旧 `data/`、旧 `knowledge/`）放入该恢复目录，安装依赖并构建。保留原目录用于回退。
 3. 使用与备份匹配的加密密钥：默认恢复数据库为 `data/app.db`，将单独保存的密钥放到 `data/.secrets/app.db.key.json`，或配置原独立 `ENCRYPTION_KEY`。配置 `DATA_DIR` 和 `DATABASE_PATH` 指向恢复目录。当前入口自动加载项目根目录 `.env`，操作系统显式变量优先；相对路径从项目根目录解析。
 4. 先使用不同本地端口验证原图可读、知识库可检索、复核内容存在、Excel 可导出。不要从原项目目录直接启动恢复数据并搭配旧知识快照，避免配置冲突。

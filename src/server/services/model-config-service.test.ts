@@ -15,6 +15,7 @@ import {
   updateModelConfig,
 } from "./model-config-service";
 import { listModelProviders, resolveModelMember } from "./model-provider-service";
+import { loginAdmin } from "../auth/test-admin";
 
 describe("model configuration management", () => {
   beforeEach(() => {
@@ -257,7 +258,9 @@ describe("model configuration management", () => {
     try {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("测试服务器地址无效");
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/ready`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/ready`, {
+        headers: { cookie: await loginAdmin(`http://127.0.0.1:${address.port}`) },
+      });
       const body = await response.json() as any;
 
       expect(response.status).toBe(503);
@@ -289,7 +292,9 @@ describe("model configuration management", () => {
     try {
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("测试服务器地址无效");
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/ready`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/ready`, {
+        headers: { cookie: await loginAdmin(`http://127.0.0.1:${address.port}`) },
+      });
       const body = await response.json() as any;
 
       expect(getModelReadinessActions()).toEqual({ verifyPoolMemberIds: [vision.id, text.id] });

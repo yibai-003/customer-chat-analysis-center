@@ -17,6 +17,7 @@ import {
   upsertKnowledgeItem,
 } from "../services/knowledge/knowledge-repository";
 import { createKnowledgeWorkbook } from "../services/knowledge/knowledge-test-fixtures";
+import { loginAdmin } from "../auth/test-admin";
 import type { KnowledgeColumn } from "../../shared/types";
 
 const sectionId = "refund";
@@ -28,6 +29,7 @@ const columns: KnowledgeColumn[] = [
 
 let server: Server;
 let baseUrl: string;
+let cookie: string;
 let startupResidualPath: string;
 
 function clearKnowledgeData() {
@@ -46,8 +48,8 @@ async function jsonRequest(
   const response = await fetch(`${baseUrl}${pathname}`, {
     ...init,
     headers: init?.body instanceof FormData
-      ? init.headers
-      : { "content-type": "application/json", ...init?.headers },
+      ? { cookie, ...init?.headers }
+      : { "content-type": "application/json", cookie, ...init?.headers },
   });
   return { status: response.status, body: await response.json() };
 }
@@ -86,6 +88,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${address.port}`;
+  cookie = await loginAdmin(baseUrl);
 });
 
 beforeEach(() => clearKnowledgeData());

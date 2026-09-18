@@ -341,8 +341,11 @@ describe("job repository", () => {
     const address = server.address() as AddressInfo;
 
     try {
+      const { loginAdmin } = await import("../auth/test-admin");
+      const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
       const response = await fetch(
         `http://127.0.0.1:${address.port}/api/jobs/${job.id}/records?page=2&pageSize=2&status=completed`,
+        { headers: { cookie } },
       );
 
       expect(response.status).toBe(200);

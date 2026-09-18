@@ -20,6 +20,8 @@ import {
   updatePoolMember,
   verifyPoolMembers,
 } from "../services/model-pool-admin-service";
+import { requireCapability } from "../auth/capabilities";
+import { auditRequest } from "../auth/audit";
 
 const idSchema = z.string().min(1).max(200);
 
@@ -107,6 +109,16 @@ function errorStatus(error: unknown) {
 
 export function createModelPoolRouter(): express.Router {
   const router = express.Router();
+  const canReadPool = requireCapability("config:manage", "config.pool_read", "model_pool");
+  const canCreateProvider = requireCapability("config:manage", "pool.create_provider", "model_provider");
+  const canUpdateProvider = requireCapability("config:manage", "pool.update_provider", "model_provider");
+  const canTestProvider = requireCapability("config:manage", "pool.test_provider", "model_provider");
+  const canUpdateMember = requireCapability("config:manage", "pool.update_member", "model_pool_member");
+  const canInstallPreset = requireCapability("config:manage", "pool.install_preset", "model_pool");
+  const canVerify = requireCapability("config:manage", "pool.verify", "model_pool_member");
+  const canRemove = requireCapability("config:manage", "pool.remove", "model_pool_member");
+  const canRestore = requireCapability("config:manage", "pool.restore", "model_pool_member");
+  const canUpdateSettings = requireCapability("config:manage", "pool.update_settings", "model_pool");
   const ok = (res: express.Response, data: unknown) => (
     res.json({ success: true, data, error: null })
   );
@@ -122,36 +134,45 @@ export function createModelPoolRouter(): express.Router {
     })
   );
 
-  router.get("/model-providers", (_req, res) => ok(res, listModelProviders()));
+  router.get("/model-providers", canReadPool, (_req, res) => ok(res, listModelProviders()));
 
-  router.post("/model-providers", (req, res) => {
+  router.post("/model-providers", canCreateProvider, (req, res) => {
     try {
-      return ok(res, createModelProvider(providerCreateSchema.parse(req.body)));
+      const provider = createModelProvider(providerCreateSchema.parse(req.body));
+      auditRequest(req, { action: "pool.create_provider", targetType: "model_provider", targetId: provider.id, metadata: { name: provider.name } });
+      return ok(res, provider);
     } catch (error) {
       return fail(res, error);
     }
   });
 
-  router.patch("/model-providers/:id", (req, res) => {
+  router.patch("/model-providers/:id", canUpdateProvider, (req, res) => {
     try {
-      return ok(res, updateModelProvider(
-        routeId(req.params.id),
-        providerPatchSchema.parse(req.body),
-      ));
+      const input = providerPatchSchema.parse(req.body);
+      const provider = updateModelProvider(routeId(req.params.id), input);
+      auditRequest(req, {
+        action: "pool.update_provider",
+        targetType: "model_provider",
+        targetId: provider.id,
+        metadata: { name: provider.name, fields: Object.keys(input) },
+      });
+      return ok(res, provider);
     } catch (error) {
       return fail(res, error);
     }
   });
 
-  router.post("/model-providers/:id/test", async (req, res) => {
+  router.post("/model-providers/:id/test", canTestProvider, async (req, res) => {
     try {
-      return ok(res, await testModelProvider(routeId(req.params.id)));
+      const result = await testModelProvider(routeId(req.params.id));
+      auditRequest(req, { action: "pool.test_provider", targetType: "model_provider", targetId: String(req.params.id) });
+      return ok(res, result);
     } catch (error) {
       return fail(res, error);
     }
   });
 
-  router.get("/model-pools", (req, res) => {
+  router.get("/model-pools", canReadPool, (req, res) => {
     try {
       const query = poolListQuerySchema.parse(req.query);
       return ok(res, {
@@ -163,20 +184,27 @@ export function createModelPoolRouter(): express.Router {
     }
   });
 
-  router.patch("/model-pool-members/:id", (req, res) => {
+  router.patch("/model-pool-members/:id", canUpdateMember, (req, res) => {
     try {
-      return ok(res, updatePoolMember(
-        routeId(req.params.id),
-        poolMemberPatchSchema.parse(req.body),
-      ));
+      const input = poolMemberPatchSchema.parse(req.body);
+      const member = updatePoolMember(routeId(req.params.id), input);
+      auditRequest(req, {
+        action: "pool.update_member",
+        targetType: "model_pool_member",
+        targetId: String(req.params.id),
+        metadata: { fields: Object.keys(input) },
+      });
+      return ok(res, member);
     } catch (error) {
       return fail(res, error);
     }
   });
 
-  router.post("/model-pools/qianwen-free/install", (_req, res) => {
+  router.post("/model-pools/qianwen-free/install", canInstallPreset, (req, res) => {
     try {
-      return ok(res, installQianwenFreePool());
+      const result = installQianwenFreePool();
+      auditRequest(req, { action: "pool.install_preset", targetType: "model_pool", metadata: { preset: "qianwen_free" } });
+      return ok(res, result);
     } catch (error) {
       const missingProvider = error instanceof Error
         && error.message === "请先配置并启用千问服务商凭证";
@@ -184,50 +212,51 @@ export function createModelPoolRouter(): express.Router {
     }
   });
 
-  router.post("/model-pools/qianwen-free/verify", async (req, res) => {
+  router.post("/model-pools/qianwen-free/verify", canVerify, async (req, res) => {
     try {
       const input = verificationSchema.parse(req.body);
-      return ok(res, await verifyPoolMembers(input.ids, {
-        enablePassed: input.enablePassed,
-      }));
+      const result = await verifyPoolMembers(input.ids, { enablePassed: input.enablePassed });
+      auditRequest(req, { action: "pool.verify", targetType: "model_pool_member", metadata: { count: input.ids.length, enablePassed: input.enablePassed } });
+      return ok(res, result);
     } catch (error) {
       return fail(res, error);
     }
   });
 
-  router.post("/model-pool-members/verify", async (req, res) => {
+  router.post("/model-pool-members/verify", canVerify, async (req, res) => {
     try {
       const input = verificationSchema.parse(req.body);
-      return ok(res, await verifyPoolMembers(input.ids, {
-        enablePassed: input.enablePassed,
-      }));
+      const result = await verifyPoolMembers(input.ids, { enablePassed: input.enablePassed });
+      auditRequest(req, { action: "pool.verify", targetType: "model_pool_member", metadata: { count: input.ids.length, enablePassed: input.enablePassed } });
+      return ok(res, result);
     } catch (error) {
       return fail(res, error);
     }
   });
 
-  router.post("/model-pool-members/remove", (req, res) => {
+  router.post("/model-pool-members/remove", canRemove, (req, res) => {
     try {
       const input = removalSchema.parse(req.body);
-      return ok(res, removePoolMembers(input.ids, {
-        reason: input.reason,
-        note: input.note,
-      }));
+      const result = removePoolMembers(input.ids, { reason: input.reason, note: input.note });
+      auditRequest(req, { action: "pool.remove", targetType: "model_pool_member", metadata: { count: input.ids.length, reason: input.reason } });
+      return ok(res, result);
     } catch (error) {
       return fail(res, error);
     }
   });
 
-  router.post("/model-pool-members/restore", (req, res) => {
+  router.post("/model-pool-members/restore", canRestore, (req, res) => {
     try {
       const input = memberIdsSchema.parse(req.body);
-      return ok(res, restorePoolMembers(input.ids));
+      const result = restorePoolMembers(input.ids);
+      auditRequest(req, { action: "pool.restore", targetType: "model_pool_member", metadata: { count: input.ids.length } });
+      return ok(res, result);
     } catch (error) {
       return fail(res, error);
     }
   });
 
-  router.get("/model-pool-settings", (_req, res) => {
+  router.get("/model-pool-settings", canReadPool, (_req, res) => {
     try {
       return ok(res, getModelPoolSettings());
     } catch (error) {
@@ -235,15 +264,18 @@ export function createModelPoolRouter(): express.Router {
     }
   });
 
-  router.patch("/model-pool-settings", (req, res) => {
+  router.patch("/model-pool-settings", canUpdateSettings, (req, res) => {
     try {
-      return ok(res, updateModelPoolSettings(settingsPatchSchema.parse(req.body)));
+      const input = settingsPatchSchema.parse(req.body);
+      const settings = updateModelPoolSettings(input);
+      auditRequest(req, { action: "pool.update_settings", targetType: "model_pool", metadata: { fields: Object.keys(input) } });
+      return ok(res, settings);
     } catch (error) {
       return fail(res, error);
     }
   });
 
-  router.get("/model-usage-events", (req, res) => {
+  router.get("/model-usage-events", canReadPool, (req, res) => {
     try {
       return ok(res, listModelUsageEvents(usageFilterSchema.parse(req.query)));
     } catch (error) {

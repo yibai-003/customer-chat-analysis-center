@@ -28,6 +28,17 @@ describe("project environment", () => {
     loadEnvironment(file, env);
     expect(env).toEqual({ PORT: "8787", DATA_DIR: "./custom-data", BACKUP_RETENTION: "3" });
   });
+  it("loads the one-time first administrator values from the host-local .env", () => {
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), "env-admin-")); folders.push(folder);
+    const file = path.join(folder, ".env");
+    fs.writeFileSync(file, 'FIRST_ADMIN_USERNAME=admin\nFIRST_ADMIN_PASSWORD=local-admin-password-1\n');
+    const env: NodeJS.ProcessEnv = {};
+    loadEnvironment(file, env);
+    expect(env).toEqual({
+      FIRST_ADMIN_USERNAME: "admin",
+      FIRST_ADMIN_PASSWORD: "local-admin-password-1",
+    });
+  });
   it("does not create a missing env file", () => {
     const env: NodeJS.ProcessEnv = {};
     loadEnvironment(path.join(os.tmpdir(), "missing-env-" + Date.now()), env);

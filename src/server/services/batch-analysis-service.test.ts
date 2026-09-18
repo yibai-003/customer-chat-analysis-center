@@ -2,6 +2,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
+import { loginAdmin, withAuth } from "../auth/test-admin";
 import { db, initDb } from "../db/client";
 import {
   acquireJobRun,
@@ -524,11 +525,12 @@ describe("batch analysis API", () => {
     const address = server.address() as AddressInfo;
 
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/analyze`, {
+      const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/analyze`, withAuth(cookie, {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sectionId: "refund", concurrency: 4, batchSize: 40, maxPaidTokens: 5000 }),
-      });
+      }));
       await new Promise<void>((resolve) => setImmediate(resolve));
 
       expect(response.status).toBe(200);
@@ -568,9 +570,10 @@ describe("batch analysis API", () => {
     const address = server.address() as AddressInfo;
 
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, {
+      const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, withAuth(cookie, {
         method: "POST",
-      });
+      }));
       await new Promise<void>((resolve) => setImmediate(resolve));
 
       expect(response.status).toBe(200);
@@ -603,9 +606,10 @@ describe("batch analysis API", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
 
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, {
+      const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, withAuth(cookie, {
         method: "POST",
-      });
+      }));
       const body = await response.json();
 
       expect(response.status).toBe(400);
@@ -663,9 +667,10 @@ describe("batch analysis API", () => {
     const address = server.address() as AddressInfo;
 
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, {
+      const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, withAuth(cookie, {
         method: "POST",
-      });
+      }));
 
       expect(response.status).toBe(400);
       expect(await response.json()).toMatchObject({
@@ -719,10 +724,11 @@ describe("batch analysis API", () => {
     const address = server.address() as AddressInfo;
 
     try {
+      const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
       const response = await Promise.race([
-        fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, {
+        fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, withAuth(cookie, {
           method: "POST",
-        }),
+        })),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error("接口等待了整个批次")), 500)),
       ]);
 

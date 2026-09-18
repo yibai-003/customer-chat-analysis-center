@@ -13,6 +13,16 @@ npm run dev
 
 打开 `http://localhost:8787`。
 
+首次使用需要先在主机上创建管理员账号（除健康检查外，业务接口仅允许登录用户访问）：
+
+```powershell
+npm run bootstrap:admin -- --username admin --password "至少8位的初始密码"
+```
+
+已有账号后该引导入口自动失效；同一环境也可在首次启动前通过 `FIRST_ADMIN_USERNAME`、`FIRST_ADMIN_PASSWORD` 环境变量完成引导（两项必须同时提供，显示名可选，账号存在后忽略）。本机运行可直接把这两项写入项目根目录 `.env`（模板见 `.env.example`）；首次登录成功后请删除密码行并重启服务。登录会话使用 `HttpOnly`、`SameSite=Lax` 的 `Secure` Cookie；登出、停用账号、重置密码或会话到期都会使已有会话失效。
+
+局域网部署（内部 HTTPS、网段限制、备份恢复与运维）见 [局域网部署与单实例运行](docs/guides/lan-deployment.md) 与 [局域网运维手册](docs/guides/lan-operations.md)。
+
 本机访问防护、`.env` 配置优先级及可迁移启动脚本说明见 [本地启动指南](docs/guides/local-access-and-startup.md)。Node.js 要求 22.12 或更新版本。
 
 依赖使用官方 npm 源并启用证书校验；新环境请使用 `npm ci` 按锁文件安装。安装步骤、证书和原生依赖排查见 [可复现安装指南](docs/guides/reproducible-installation.md)。

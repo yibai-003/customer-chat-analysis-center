@@ -21,6 +21,7 @@ interface StartupApplication {
 
 export interface StartupDependencies {
   port: number;
+  host?: string;
   createApplication: () => StartupApplication;
   recoverStaleJobRuns: () => void;
   recoverImportJobs: () => void;
@@ -29,6 +30,7 @@ export interface StartupDependencies {
 
 const defaultDependencies: StartupDependencies = {
   port: config.port,
+  host: config.listenHost,
   createApplication: createApp,
   recoverStaleJobRuns,
   recoverImportJobs,
@@ -40,7 +42,8 @@ export function startServer(
 ): StartupServer {
   const retention = positiveInteger(process.env.BACKUP_RETENTION, "BACKUP_RETENTION", 7);
   const hours = positiveInteger(process.env.BACKUP_INTERVAL_HOURS, "BACKUP_INTERVAL_HOURS", 24, 8760);
-  const server = dependencies.createApplication().listen(dependencies.port, "127.0.0.1", () => {
+  const host = dependencies.host ?? config.listenHost;
+  const server = dependencies.createApplication().listen(dependencies.port, host, () => {
     dependencies.recoverStaleJobRuns();
     dependencies.recoverImportJobs();
     dependencies.log(`客服解析中心 running at http://localhost:${dependencies.port}`);
@@ -50,7 +53,7 @@ export function startServer(
         busy: () => Boolean(db.prepare("SELECT id FROM jobs WHERE run_token IS NOT NULL LIMIT 1").get()
           || db.prepare("SELECT id FROM records WHERE status='processing' LIMIT 1").get()
           || db.prepare("SELECT id FROM import_jobs WHERE status IN ('queued','processing') LIMIT 1").get()),
-        create: () => createFullBackup({ database: db, backupRoot: root, retention, catalog: captureCatalog }),
+        create: () => createFullBackup({ database: db, backupRoot: root, exportsDir: path.join(config.dataDir, "exports"), retention, catalog: captureCatalog }),
       });
       server.once?.("close", stop);
     }

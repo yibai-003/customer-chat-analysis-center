@@ -6,10 +6,12 @@ import Database from "better-sqlite3";
 import { z } from "zod";
 
 const referenceSchema = z.object({ table: z.enum(["jobs", "records", "import_jobs", "knowledge_imports"]), id: z.string(), column: z.enum(["source_path", "image_path"]), file: z.string() }).strict();
+const exportSchema = z.object({ file: z.string(), name: z.string() }).strict();
 const manifestSchema = z.object({
   version: z.literal(1), kind: z.literal("full"), createdAt: z.string().datetime(),
   files: z.array(z.object({ path: z.string(), size: z.number().int().nonnegative(), sha256: z.string().regex(/^[a-f0-9]{64}$/) }).strict()),
   references: z.array(referenceSchema),
+  exports: z.array(exportSchema).default([]),
 }).strict();
 type Reference = z.infer<typeof referenceSchema>;
 type Manifest = z.infer<typeof manifestSchema>;
@@ -71,6 +73,13 @@ export async function verifyBackup(directory: string): Promise<Manifest> {
     const actual = await hashFile(member(directory, file.path));
     if (actual.size !== file.size || actual.sha256 !== file.sha256) throw new Error(`Backup checksum mismatch: ${file.path}`);
   }
+  const exportNames = new Set<string>();
+  for (const item of manifest.exports) {
+    if (!item.name || path.basename(item.name) !== item.name) throw new Error("Invalid export member name");
+    if (exportNames.has(item.name)) throw new Error("Duplicate export member name");
+    if (!entries.has(item.file)) throw new Error("Incomplete backup manifest");
+    exportNames.add(item.name);
+  }
   const database = new Database(member(directory, "database.db"), { readonly: true, fileMustExist: true });
   try {
     validateDatabase(database);
@@ -92,6 +101,7 @@ export async function verifyBackup(directory: string): Promise<Manifest> {
 export async function createFullBackup(options: {
   database: any; backupRoot: string; retention?: number;
   catalog: (database: any) => unknown;
+  exportsDir?: string;
 }) {
   positiveInteger(options.retention, "BACKUP_RETENTION", 7);
   rejectLinks(options.backupRoot);
@@ -102,7 +112,7 @@ export async function createFullBackup(options: {
   finally { await handle.close(); await fsp.unlink(lock); }
 }
 
-async function createFullBackupLocked(options: { database: any; backupRoot: string; retention?: number; catalog: (database: any) => unknown }) {
+async function createFullBackupLocked(options: { database: any; backupRoot: string; retention?: number; catalog: (database: any) => unknown; exportsDir?: string }) {
   const retention = positiveInteger(options.retention, "BACKUP_RETENTION", 7);
   rejectLinks(options.backupRoot);
   await fsp.mkdir(options.backupRoot, { recursive: true });
@@ -134,9 +144,29 @@ async function createFullBackupLocked(options: { database: any; backupRoot: stri
       }
       mapped.push({ table: ref.table, id: ref.id, column: ref.column, file });
     }
+    // Generated exports are derived from the database but are kept so a restored
+    // environment can serve previously delivered result workbooks without re-exporting.
+    const exportMembers: Array<{ file: string; name: string }> = [];
+    const exportFiles: string[] = [];
+    if (options.exportsDir && fs.existsSync(options.exportsDir)) {
+      rejectLinks(options.exportsDir);
+      for (const entry of await fsp.readdir(options.exportsDir, { withFileTypes: true })) {
+        if (!entry.isFile()) continue;
+        const name = entry.name;
+        if (!name || path.basename(name) !== name) continue;
+        const source = path.join(options.exportsDir, name);
+        const file = `files/${crypto.randomUUID()}${path.extname(name).replace(/[^.a-z0-9]/gi, "")}`;
+        const before = await hashFile(source);
+        await fsp.copyFile(source, member(staging, file));
+        const copy = await hashFile(member(staging, file));
+        if (copy.sha256 !== before.sha256) throw new Error("Export file changed during backup; retry later");
+        exportMembers.push({ file, name });
+        exportFiles.push(file);
+      }
+    }
     const files = [];
-    for (const file of ["database.db", "knowledge/catalog.json", ...copied.values()]) files.push({ path: file, ...await hashFile(member(staging, file)) });
-    const manifest: Manifest = { version: 1, kind: "full", createdAt, files, references: mapped };
+    for (const file of ["database.db", "knowledge/catalog.json", ...copied.values(), ...exportFiles]) files.push({ path: file, ...await hashFile(member(staging, file)) });
+    const manifest: Manifest = { version: 1, kind: "full", createdAt, files, references: mapped, exports: exportMembers };
     await fsp.writeFile(path.join(staging, "manifest.json"), JSON.stringify(manifest, null, 2));
     await verifyBackup(staging);
     await fsp.rename(staging, directory);
@@ -179,11 +209,18 @@ export async function restoreFullBackup(source: string, target: string) {
     await fsp.copyFile(member(source, "database.db"), path.join(target, "data/app.db"));
     await fsp.copyFile(member(source, "knowledge/catalog.json"), path.join(target, "knowledge/catalog.json"));
     if ((await hashFile(path.join(target, "knowledge/catalog.json"))).sha256 !== manifest.files.find(f => f.path === "knowledge/catalog.json")!.sha256) throw new Error("Restored catalog checksum mismatch");
-    for (const file of manifest.files.filter(f => f.path.startsWith("files/"))) {
+    const exportFiles = new Set(manifest.exports.map((item) => item.file));
+    for (const file of manifest.files.filter(f => f.path.startsWith("files/") && !exportFiles.has(f.path))) {
       const dest = member(path.join(target, "data"), file.path);
       await fsp.mkdir(path.dirname(dest), { recursive: true });
       await fsp.copyFile(member(source, file.path), dest);
       if ((await hashFile(dest)).sha256 !== file.sha256) throw new Error("Restored file checksum mismatch");
+    }
+    for (const item of manifest.exports) {
+      const dest = member(path.join(target, "data", "exports"), item.name);
+      await fsp.mkdir(path.dirname(dest), { recursive: true });
+      await fsp.copyFile(member(source, item.file), dest);
+      if ((await hashFile(dest)).sha256 !== manifest.files.find(f => f.path === item.file)!.sha256) throw new Error("Restored export checksum mismatch");
     }
     if ((await hashFile(path.join(target, "data/app.db"))).sha256 !== manifest.files.find(f => f.path === "database.db")!.sha256) throw new Error("Restored database checksum mismatch");
     const database = new Database(path.join(target, "data/app.db"));

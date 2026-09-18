@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { validateXlsx, requireDiskSpace, defaultXlsxLimits } from "./upload-safety";
 import { createApp } from "../app";
 import { config } from "../config";
+import { loginAdmin } from "../auth/test-admin";
 
 let directory: string;
 let file: string;
@@ -58,23 +59,24 @@ describe("upload safety", () => {
     const server = createApp().listen(0, "127.0.0.1");
     await new Promise<void>(resolve => server.once("listening", resolve));
     const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const cookie = await loginAdmin(base);
     try {
       const root = path.join(config.dataDir, "uploads");
       const before = fs.readdirSync(root);
       let form = new FormData(); form.append("file", new Blob(["invalid"]), "test.xlsx");
-      const response = await fetch(base + "/api/jobs/import", { method: "POST", body: form });
+      const response = await fetch(base + "/api/jobs/import", { method: "POST", headers: { cookie }, body: form });
       expect(response.status).toBe(415);
       expect(fs.readdirSync(root)).toEqual(before);
       vi.spyOn(fs, "statfsSync").mockReturnValue({ bavail: 0, bsize: 4096 } as any);
       form = new FormData(); form.append("file", new Blob(["invalid"]), "test.xlsx");
-      const lowDisk = await fetch(base + "/api/jobs/import-preview", { method: "POST", body: form });
+      const lowDisk = await fetch(base + "/api/jobs/import-preview", { method: "POST", headers: { cookie }, body: form });
       expect(lowDisk.status).toBe(507);
       expect((await lowDisk.json()).error).toContain("磁盘空间不足");
       expect(fs.readdirSync(root)).toEqual(before);
       vi.restoreAllMocks();
       vi.spyOn(fs, "statfsSync").mockReturnValueOnce({ bavail: 1e9, bsize: 4096 } as any).mockReturnValue({ bavail: 0, bsize: 4096 } as any);
       form = new FormData(); form.append("file", new Blob([fs.readFileSync(file)]), "test.xlsx");
-      const interrupted = await fetch(base + "/api/jobs/import", { method: "POST", body: form });
+      const interrupted = await fetch(base + "/api/jobs/import", { method: "POST", headers: { cookie }, body: form });
       expect(interrupted.status).toBe(507);
       expect(fs.readdirSync(root)).toEqual(before);
     } finally { await new Promise<void>(resolve => server.close(() => resolve())); }

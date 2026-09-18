@@ -16,32 +16,38 @@ let root: string;
 let recordId: string;
 let jobId: string;
 let workbookPath: string;
+let exportsDir: string;
 const pixel = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
 beforeEach(async () => {
   initDb();
   db.exec("DELETE FROM records; DELETE FROM import_jobs; DELETE FROM jobs; DELETE FROM knowledge_imports;");
   root = fs.mkdtempSync(path.join(os.tmpdir(), "full-backup-test-"));
   workbookPath = path.join(root, "source.xlsx");
+  exportsDir = path.join(root, "exports");
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Sheet1"); sheet.addRow(["来源", "截图"]); sheet.addRow(["测试", ""]);
   sheet.addImage(workbook.addImage({ buffer: pixel as any, extension: "png" }), "B2:B2");
   await workbook.xlsx.writeFile(workbookPath);
   fs.writeFileSync(path.join(root, "screenshot.png"), pixel);
+  fs.mkdirSync(exportsDir, { recursive: true });
+  fs.writeFileSync(path.join(exportsDir, "结果导出.xlsx"), Buffer.from("export-bytes"));
   const job = createJob("source.xlsx", workbookPath, { id: "refund", name: "refund" }); jobId = job.id;
   addRecords(job.id, [{ rowNumber: 2, sheetName: "Sheet1", anchor: {}, sourceFields: { origin: "test" }, imagePath: path.join(root, "screenshot.png") }]);
   recordId = listRecords(job.id)[0].id;
   updateRecord(recordId, { sectionId: "refund", humanResult: { reason: "verified" }, reviewNote: "review note", status: "completed", reviewStatus: "confirmed" });
 });
 afterEach(() => fs.rmSync(root, { recursive: true, force: true }));
-const backup = (retention = 7) => createFullBackup({ database: db, backupRoot: path.join(root, "backups"), catalog: captureCatalog, retention });
+const backup = (retention = 7) => createFullBackup({ database: db, backupRoot: path.join(root, "backups"), exportsDir, catalog: captureCatalog, retention });
 
 describe("verified full backups", () => {
   it("restores workbook images, review values, configuration and paths in a new directory", async () => {
     const result = await backup();
     const manifest = await verifyBackup(result.directory);
     expect(manifest.references).toHaveLength(2);
+    expect(manifest.exports).toEqual([expect.objectContaining({ name: "结果导出.xlsx" })]);
     const target = path.join(root, "new-environment");
     await restoreFullBackup(result.directory, target);
+    expect(fs.readFileSync(path.join(target, "data/exports/结果导出.xlsx"))).toEqual(Buffer.from("export-bytes"));
     const restored = new Database(path.join(target, "data/app.db"));
     try {
       const image = restored.prepare("SELECT image_path FROM records WHERE id=?").get(recordId).image_path;

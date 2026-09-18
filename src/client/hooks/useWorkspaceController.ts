@@ -8,11 +8,11 @@ import { useSectionCatalog } from "./useSectionCatalog";
 import { useAnalysisActions } from "./useAnalysisActions";
 import { useModelReadiness } from "./useModelReadiness";
 
-export function useWorkspaceController() {
+export function useWorkspaceController({ canManageConfig = true }: { canManageConfig?: boolean } = {}) {
   const headerRef = useRef<HTMLElement>(null);
   const [headerHeight, setHeaderHeight] = useState(76);
   const [notice, setNotice] = useState("");
-  const [dialog, setDialog] = useState<"model" | "section" | null>(null);
+  const [dialog, setDialog] = useState<"model" | "section" | "users" | "audit" | "backups" | null>(null);
   const [knowledgeSection, setKnowledgeSection] = useState<AnalysisSection | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [analysisCapacity, setAnalysisCapacity] = useState<AnalysisCapacity | null>(null);
@@ -32,6 +32,7 @@ export function useWorkspaceController() {
     currentSection: catalog.currentSection,
     selected: records.selected,
     modelReadiness,
+    canManageConfig,
     mountedRef: selection.mountedRef,
     taskActionBusy: selection.taskActionBusy,
     setNotice,

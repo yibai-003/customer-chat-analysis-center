@@ -194,6 +194,7 @@ afterEach(async () => {
 describe("knowledge workspace", () => {
   it("opens the current section knowledge workspace from App and returns", async () => {
     const payloads: Record<string, unknown> = {
+      "/api/auth/me": { user: { id: "admin-1", organizationId: "org-default", username: "admin", displayName: "测试管理员", role: "admin", isEnabled: true, createdAt: "2026-09-17T00:00:00.000Z", updatedAt: "2026-09-17T00:00:00.000Z" }, capabilities: ["task:view", "task:import", "task:analyze", "task:delete", "task:export", "review:save", "config:manage", "admin:manage", "audit:view"] },
       "/api/jobs": [],
       "/api/sections": [
         { ...section, id: "after-sales", parentId: null, name: "售后分析", sortOrder: 0 },

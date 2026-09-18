@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 
 interface SyncStatus { state: "synced" | "pending" | "conflict"; snapshotReady: boolean; github: "not_checked" }
-export function KnowledgeSyncStatus() {
+export function KnowledgeSyncStatus({ canRetry = true }: { canRetry?: boolean }) {
   const [status, setStatus] = useState<SyncStatus | null>(null);
   const [error, setError] = useState("");
   const [retrying, setRetrying] = useState(false);
@@ -37,8 +37,8 @@ export function KnowledgeSyncStatus() {
       : status?.state === "conflict" ? "知识快照存在仓库冲突，请保留本地数据并合并配置。"
       : status?.state === "pending" ? "本地修改已保存，知识快照等待同步。" : error ? "知识快照状态未知。" : "正在读取知识快照状态…"}
     {error && <span role="alert"> {error}</span>}
-    <button className="button light" disabled={retrying || status?.state === "conflict"} onClick={() => void retry()}>
+    {canRetry && <button className="button light" disabled={retrying || status?.state === "conflict"} onClick={() => void retry()}>
       {retrying ? "同步中…" : "重试快照同步"}
-    </button>
+    </button>}
   </div>;
 }

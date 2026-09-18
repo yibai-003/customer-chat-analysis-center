@@ -6,6 +6,7 @@ import { getField, upsertField } from "../services/field-config-service";
 import { createModelConfig } from "../services/model-config-service";
 import { upsertKnowledgeBase, upsertKnowledgeItem } from "../services/knowledge/knowledge-repository";
 import { createApp } from "../app";
+import { loginAdmin } from "../auth/test-admin";
 
 beforeAll(() => initDb());
 const revision = () => db.prepare("SELECT revision FROM knowledge_sync_outbox").get().revision;
@@ -57,10 +58,11 @@ describe("configuration writes validate before mutation", () => {
   it("rejects browser-bypassing invalid requests with 400 and no config change", async () => {
     const server = createApp().listen(0, "127.0.0.1"); await new Promise<void>(resolve => server.once("listening", resolve));
     const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const cookie = await loginAdmin(base);
     const before = revision();
     try {
       for (const [route, body] of [["/api/sections/refund/fields", { key: "valid", label: "field", type: "string", isEnabled: "false" }], ["/api/sections", { name: "section", prompt: "", outputSchema: [null] }]]) {
-        const result = await fetch(base + route, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        const result = await fetch(base + route, { method: "POST", headers: { "Content-Type": "application/json", cookie }, body: JSON.stringify(body) });
         expect(result.status).toBe(400); expect((await result.json()).success).toBe(false);
       }
       expect(revision()).toBe(before);

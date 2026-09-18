@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AnalysisCapacity, AnalysisField, AnalysisSection, Job, RecordDetail, RecordPage, RecordSummary } from "../shared/types";
+import { capabilitiesForRole } from "../shared/types";
 import App from "./App";
 import { Detail, formatFieldResult } from "./App";
 
@@ -314,7 +315,20 @@ function jsonResponse(data: unknown) {
   } as Response;
 }
 
+const currentUser = {
+  id: "admin-1",
+  organizationId: "org-default",
+  username: "admin",
+  displayName: "测试管理员",
+  role: "admin",
+  isEnabled: true,
+  createdAt: "2026-09-17T00:00:00.000Z",
+  updatedAt: "2026-09-17T00:00:00.000Z",
+};
+
 function defaultResponse(url: string): Response {
+  if (url === "/api/auth/me") return jsonResponse({ user: currentUser, capabilities: capabilitiesForRole("admin") });
+  if (url === "/api/auth/status") return jsonResponse({ hasAdmin: true });
   if (url === "/api/jobs") return jsonResponse(jobs);
   if (url === "/api/sections") return jsonResponse([
     { ...section, id: "service", parentId: null, name: "客服分析" },

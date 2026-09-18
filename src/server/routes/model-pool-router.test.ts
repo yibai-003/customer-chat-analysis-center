@@ -7,9 +7,11 @@ import { db, initDb } from "../db/client";
 import { createModelConfig } from "../services/model-config-service";
 import { createModelProvider } from "../services/model-provider-service";
 import { QIANWEN_FREE_POOL_PRESET } from "../services/qianwen-free-pool-preset";
+import { loginAdmin } from "../auth/test-admin";
 
 let server: Server;
 let baseUrl: string;
+let cookie: string;
 
 function resetModelPoolData() {
   db.exec(`
@@ -28,7 +30,7 @@ async function jsonRequest(
 ): Promise<{ status: number; body: any }> {
   const response = await fetch(`${baseUrl}${pathname}`, {
     ...init,
-    headers: { "content-type": "application/json", ...init?.headers },
+    headers: { "content-type": "application/json", cookie, ...init?.headers },
   });
   return { status: response.status, body: await response.json() };
 }
@@ -39,6 +41,7 @@ beforeAll(async () => {
   await new Promise<void>((resolve) => server.once("listening", resolve));
   const address = server.address() as AddressInfo;
   baseUrl = `http://127.0.0.1:${address.port}`;
+  cookie = await loginAdmin(baseUrl);
 });
 
 beforeEach(resetModelPoolData);

@@ -1,0 +1,17 @@
+node_modules
+data
+dist
+coverage
+.git
+.github
+.worktrees
+.scratch
+.superpowers
+docs
+deploy
+.env
+.env.*
+*.log
+*.xlsx
+RESTORED.json
+RESTORE_FAILED.txt

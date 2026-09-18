@@ -18,6 +18,7 @@ export function useAnalysisActions(deps: {
   currentSection?: AnalysisSection;
   selected: ReturnType<typeof useRecordWorkspace>["selected"];
   modelReadiness: { ready: boolean };
+  canManageConfig: boolean;
   mountedRef: { current: boolean };
   taskActionBusy: boolean;
   setNotice: (message: string) => void;
@@ -34,6 +35,7 @@ export function useAnalysisActions(deps: {
     currentSection,
     selected,
     modelReadiness,
+    canManageConfig,
     mountedRef,
     taskActionBusy,
     setNotice,
@@ -82,8 +84,10 @@ export function useAnalysisActions(deps: {
     pendingRecordIdsRef.current = recordIds && recordIds.length ? [...recordIds] : null;
     setPendingTargetedCount(pendingRecordIdsRef.current?.length ?? null);
     if (!modelReadiness.ready) {
-      setNotice("请先在模型配置中验证并启用对应的视觉模型和文本模型");
-      setDialog("model");
+      setNotice(canManageConfig
+        ? "请先在模型配置中验证并启用对应的视觉模型和文本模型"
+        : "模型尚未就绪，请联系配置人员验证并启用对应的视觉模型和文本模型");
+      if (canManageConfig) setDialog("model");
       return;
     }
     const operation = captureJobOperation();

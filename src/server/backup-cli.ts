@@ -10,7 +10,7 @@ try {
   const database = new Database(config.databasePath, { readonly: true, fileMustExist: true });
   try {
     const { captureCatalog } = await import("./services/knowledge/knowledge-sync-service");
-    console.log(JSON.stringify(await createFullBackup({ database, backupRoot: path.join(config.dataDir, "backups"), retention, catalog: captureCatalog }), null, 2));
+    console.log(JSON.stringify(await createFullBackup({ database, backupRoot: path.join(config.dataDir, "backups"), exportsDir: path.join(config.dataDir, "exports"), retention, catalog: captureCatalog }), null, 2));
   } finally { database.close(); }
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Backup failed");

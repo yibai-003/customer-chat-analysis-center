@@ -3,6 +3,108 @@ export type ReviewStatus = "pending" | "confirmed" | "needs_review";
 export type JobStatus = "ready" | "processing" | "paused" | "completed" | "failed" | "cancelled";
 export type ImportJobStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";
 
+export type UserRole = "admin" | "config" | "operator" | "reviewer" | "readonly";
+
+export const USER_CAPABILITIES = [
+  "task:view",
+  "task:import",
+  "task:analyze",
+  "task:delete",
+  "task:export",
+  "review:save",
+  "config:manage",
+  "user:manage",
+  "backup:manage",
+  "audit:view",
+  "admin:manage",
+] as const;
+
+export type UserCapability = (typeof USER_CAPABILITIES)[number];
+
+export const USER_ROLES: UserRole[] = ["admin", "config", "operator", "reviewer", "readonly"];
+
+export const ROLE_CAPABILITIES: Record<UserRole, UserCapability[]> = {
+  admin: [...USER_CAPABILITIES],
+  config: ["task:view", "config:manage"],
+  operator: ["task:view", "task:import", "task:analyze", "task:delete", "task:export"],
+  reviewer: ["task:view", "task:export", "review:save"],
+  readonly: ["task:view"],
+};
+
+export function capabilitiesForRole(role: UserRole): UserCapability[] {
+  return ROLE_CAPABILITIES[role] ?? [];
+}
+
+export interface UserProfile {
+  id: string;
+  organizationId: string;
+  username: string;
+  displayName: string;
+  role: UserRole;
+  isEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuthenticatedSession {
+  user: UserProfile;
+  capabilities: UserCapability[];
+}
+
+export type AuditOutcome = "success" | "failure";
+
+export interface AuditEvent {
+  id: string;
+  actorUserId: string | null;
+  actorDisplay: string;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  outcome: AuditOutcome;
+  metadata: Record<string, unknown>;
+  correlationId: string | null;
+  occurredAt: string;
+}
+
+export interface AuditEventPage {
+  items: AuditEvent[];
+  limit: number;
+  nextCursor: string | null;
+}
+
+export interface BackupEntry {
+  name: string;
+  createdAt: string | null;
+  valid: boolean;
+}
+
+export interface BackupCreation {
+  name: string;
+  files: number;
+  references: number;
+  verified: boolean;
+  warnings: string[];
+}
+
+export interface RestoreCopy {
+  directory: string;
+  database: string;
+  files: number;
+  verified: boolean;
+}
+
+export interface RestoreCheck {
+  name: string;
+  ok: boolean;
+  detail: unknown;
+}
+
+export interface RestoreVerification {
+  directory: string;
+  ok: boolean;
+  checks: RestoreCheck[];
+}
+
 export interface ImportJob {
   id: string;
   filename: string;

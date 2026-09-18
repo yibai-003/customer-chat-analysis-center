@@ -39,7 +39,7 @@ try {
   Write-Host "== 首次启动容器（不注入 ENCRYPTION_KEY，验证托管密钥落盘）"
   docker rm -f $container 2>$null | Out-Null
   docker run -d --name $container -p "127.0.0.1:${HostPort}:8787" `
-    -e "SESSION_SECRET=verify-session-secret" `
+    -e "LISTEN_HOST=0.0.0.0" `
     -v "${dataDir}:/app/data" -v "${knowledgeDir}:/app/knowledge" $Image | Out-Null
   if ($LASTEXITCODE -ne 0) { Fail "容器启动失败" }
   if (-not (Wait-Healthy $container)) {
@@ -64,7 +64,7 @@ try {
   Write-Host "== 重建容器后持久化校验"
   docker rm -f $container | Out-Null
   docker run -d --name $container -p "127.0.0.1:${HostPort}:8787" `
-    -e "SESSION_SECRET=verify-session-secret" `
+    -e "LISTEN_HOST=0.0.0.0" `
     -v "${dataDir}:/app/data" -v "${knowledgeDir}:/app/knowledge" $Image | Out-Null
   if (-not (Wait-Healthy $container)) { Fail "重建后健康检查未通过" }
   docker exec $container sh -c "test -f /app/data/persist-check.txt && test -f /app/data/app.db && test -f /app/data/.secrets/app.db.key.json && test -f /app/data/logs/server.out.log && test -f /app/knowledge/catalog.json"
@@ -80,7 +80,8 @@ try {
   (Get-Content (Join-Path $PSScriptRoot "..\deploy\.env.example")) `
     -replace '^APP_IMAGE=.*', "APP_IMAGE=$Image" `
     -replace '^ENCRYPTION_KEY=$', "ENCRYPTION_KEY=verify-encryption-key" `
-    -replace '^SESSION_SECRET=$', "SESSION_SECRET=verify-session-secret" `
+    -replace '^ALLOWED_HOSTS=.*', "ALLOWED_HOSTS=verify.example.lan" `
+    -replace '^ALLOWED_ORIGINS=.*', "ALLOWED_ORIGINS=https://verify.example.lan" `
     -replace '^DEPLOY_DATA_DIR=.*', "DEPLOY_DATA_DIR=$($dataDir -replace '\\','/')" `
     -replace '^DEPLOY_KNOWLEDGE_DIR=.*', "DEPLOY_KNOWLEDGE_DIR=$($knowledgeDir -replace '\\','/')" `
     | Set-Content $envFile

@@ -22,6 +22,7 @@ import {
   upsertKnowledgeItem,
 } from "../services/knowledge/knowledge-repository";
 import { searchKnowledge } from "../services/knowledge/knowledge-search-service";
+import { auditRequest } from "../auth/audit";
 import type { KnowledgeColumn } from "../../shared/types";
 
 const PREVIEW_TTL_MS = 30 * 60 * 1000;
@@ -229,6 +230,17 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
           knowledgeBaseId: pending.knowledgeBaseId,
         });
         completed = true;
+        auditRequest(req, {
+          action: "config.knowledge_import",
+          targetType: "knowledge_base",
+          targetId: result.knowledgeBase.id,
+          metadata: {
+            sectionId: pending.sectionId,
+            added: result.added,
+            updated: result.updated,
+            skipped: result.skipped,
+          },
+        });
         return ok(res, result);
       } catch (error) {
         return fail(res, error);
@@ -245,14 +257,21 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
     try {
       const existing = getKnowledgeBase(req.params.id);
       if (!existing) return fail(res, "知识库不存在", 404);
-      return ok(res, upsertKnowledgeBase({
+      const updated = upsertKnowledgeBase({
         id: existing.id,
         sectionId: existing.sectionId,
         name: req.body.name ?? existing.name,
         originalFilename: existing.originalFilename,
         columns: existing.columns,
         isEnabled: req.body.isEnabled ?? existing.isEnabled,
-      }));
+      });
+      auditRequest(req, {
+        action: "config.knowledge_update_base",
+        targetType: "knowledge_base",
+        targetId: existing.id,
+        metadata: { name: updated.name, isEnabled: updated.isEnabled },
+      });
+      return ok(res, updated);
     } catch (error) {
       return fail(res, error);
     }
@@ -262,6 +281,7 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
     try {
       if (!getKnowledgeBase(req.params.id)) return fail(res, "知识库不存在", 404);
       deleteKnowledgeBase(req.params.id);
+      auditRequest(req, { action: "config.knowledge_delete_base", targetType: "knowledge_base", targetId: req.params.id });
       return ok(res, true);
     } catch (error) {
       return fail(res, error);
@@ -285,11 +305,13 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
   router.post("/knowledge-bases/:id/items", (req, res) => {
     try {
       if (!getKnowledgeBase(req.params.id)) return fail(res, "知识库不存在", 404);
-      return ok(res, upsertKnowledgeItem({
+      const item = upsertKnowledgeItem({
         knowledgeBaseId: req.params.id,
         values: req.body.values ?? {},
         isEnabled: req.body.isEnabled ?? true,
-      }));
+      });
+      auditRequest(req, { action: "config.knowledge_create_item", targetType: "knowledge_item", targetId: item.id, metadata: { knowledgeBaseId: req.params.id } });
+      return ok(res, item);
     } catch (error) {
       return fail(res, error);
     }
@@ -299,7 +321,7 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
     try {
       const existing = getKnowledgeItem(req.params.id);
       if (!existing) return fail(res, "知识条目不存在", 404);
-      return ok(res, upsertKnowledgeItem({
+      const item = upsertKnowledgeItem({
         id: existing.id,
         knowledgeBaseId: existing.knowledgeBaseId,
         values: req.body.values
@@ -307,7 +329,9 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
           : existing.values,
         isEnabled: req.body.isEnabled ?? existing.isEnabled,
         sourceRowNumber: existing.sourceRowNumber,
-      }));
+      });
+      auditRequest(req, { action: "config.knowledge_update_item", targetType: "knowledge_item", targetId: existing.id, metadata: { knowledgeBaseId: existing.knowledgeBaseId } });
+      return ok(res, item);
     } catch (error) {
       return fail(res, error);
     }
@@ -315,8 +339,10 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
 
   router.delete("/knowledge-items/:id", (req, res) => {
     try {
-      if (!getKnowledgeItem(req.params.id)) return fail(res, "知识条目不存在", 404);
+      const existing = getKnowledgeItem(req.params.id);
+      if (!existing) return fail(res, "知识条目不存在", 404);
       deleteKnowledgeItem(req.params.id);
+      auditRequest(req, { action: "config.knowledge_delete_item", targetType: "knowledge_item", targetId: req.params.id, metadata: { knowledgeBaseId: existing.knowledgeBaseId } });
       return ok(res, true);
     } catch (error) {
       return fail(res, error);

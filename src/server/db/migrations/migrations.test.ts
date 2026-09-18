@@ -25,7 +25,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -64,8 +64,8 @@ describe("versioned migrations", () => {
 
     runMigrations(db);
 
-    expect(currentSchemaVersion).toBe(15);
-    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]);
+    expect(currentSchemaVersion).toBe(17);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
     const qwenRows = db.prepare(`
       SELECT
         model.provider_id,
@@ -126,6 +126,38 @@ describe("versioned migrations", () => {
       expect(indexes).toContain(name);
     }
     expect(columns.filter((name) => name === "pool_removed_at")).toHaveLength(1);
+  });
+  it("creates one active organization and identity tables and marks legacy rows as unassigned", () => {
+    applyLegacyBaseline(db);
+    db.exec(`
+      INSERT INTO jobs (id, original_filename, source_path, status, total_records, completed_records, failed_records, created_at, updated_at)
+      VALUES ('legacy-job', 'old.xlsx', 'old.xlsx', 'ready', 0, 0, 0, '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z');
+    `);
+    runMigrations(db);
+
+    expect(db.prepare("SELECT COUNT(*) n FROM organizations WHERE is_active = 1").get()).toEqual({ n: 1 });
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get()).toBeTruthy();
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='user_sessions'").get()).toBeTruthy();
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='audit_events'").get()).toBeTruthy();
+    const columns = (db.prepare("PRAGMA table_info(jobs)").all() as Array<{ name: string }>).map((column) => column.name);
+    expect(columns).toEqual(expect.arrayContaining(["organization_id", "created_by_user_id"]));
+    const legacy = db.prepare("SELECT organization_id, created_by_user_id FROM jobs WHERE id = 'legacy-job'").get();
+    expect(legacy).toEqual({ organization_id: "org-default", created_by_user_id: null });
+    runMigrations(db);
+    expect(db.prepare("SELECT COUNT(*) n FROM organizations").get()).toEqual({ n: 1 });
+  });
+  it("keeps audit events append-only and independent of account deletion", () => {
+    applyLegacyBaseline(db);
+    runMigrations(db);
+    db.prepare(`INSERT INTO audit_events
+      (id, organization_id, actor_user_id, actor_display, action, target_type, target_id, outcome, metadata_json, correlation_id, occurred_at)
+      VALUES ('audit-1','org-default','ghost-user','历史操作员','task.export','job','job-1','success','{}','req-1','2026-09-17T00:00:00.000Z')`).run();
+    expect(() => db.prepare("UPDATE audit_events SET action = 'tampered' WHERE id = 'audit-1'").run())
+      .toThrow("审计事件不可修改");
+    expect(() => db.prepare("DELETE FROM audit_events WHERE id = 'audit-1'").run())
+      .toThrow("审计事件不可删除");
+    expect(db.prepare("SELECT action, actor_user_id FROM audit_events WHERE id = 'audit-1'").get())
+      .toEqual({ action: "task.export", actor_user_id: "ghost-user" });
   });
   it("replaces legacy reception prompts with compact structured protocols", () => {
     applyLegacyBaseline(db);

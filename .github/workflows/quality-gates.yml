@@ -1,0 +1,115 @@
+name: Quality gates
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Quality gates (clean checkout)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATA_DIR: ./data
+      DATABASE_PATH: ./data/app.db
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Record toolchain
+        run: |
+          node --version
+          npm --version
+
+      - name: npm ci
+        run: npm ci
+
+      - name: check:installation
+        run: npm run check:installation
+
+      - name: test
+        run: npm test
+
+      - name: typecheck
+        run: npm run typecheck
+
+      - name: lint
+        run: npm run lint
+
+      - name: build
+        run: npm run build
+
+      - name: db:init (fresh database)
+        run: npm run db:init
+
+      - name: db:check
+        run: npm run db:check
+
+      - name: smoke
+        run: npm run smoke
+
+  release-artifact:
+    name: Release artifact
+    needs: quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    if: github.event_name != 'pull_request'
+    env:
+      DATA_DIR: ./data
+      DATABASE_PATH: ./data/app.db
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      - name: build
+        run: npm run build
+
+      - name: Build production image (no push)
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          SHA="${GITHUB_SHA:0:12}"
+          IMAGE="customer-chat-analysis-center:${VERSION}-${SHA}"
+          docker build -t "$IMAGE" .
+          echo "IMAGE_TAG=$IMAGE" >> "$GITHUB_ENV"
+          echo "IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')" >> "$GITHUB_ENV"
+
+      - name: Package release artifact
+        run: |
+          VERSION="$(node -p "require('./package.json').version")"
+          SHA="${GITHUB_SHA:0:12}"
+          mkdir -p .release
+          tar -czf ".release/customer-chat-analysis-center-${VERSION}-${SHA}.tar.gz" \
+            dist src/server src/shared knowledge config package.json package-lock.json
+          node -e 'const fs=require("node:fs"); const pkg=require("./package.json"); fs.writeFileSync(".release/manifest.json", JSON.stringify({artifact:"customer-chat-analysis-center", version:pkg.version, commit:process.env.GITHUB_SHA, ref:process.env.GITHUB_REF_NAME, runId:process.env.GITHUB_RUN_ID, node:process.version, image:process.env.IMAGE_TAG, imageId:process.env.IMAGE_ID, builtAt:new Date().toISOString()}, null, 2)+"\n");'
+
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: customer-chat-analysis-center-release-candidate
+          path: .release/
+          retention-days: 30

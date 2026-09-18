@@ -689,6 +689,7 @@ describe("ModelConfigDialog", () => {
   });
 
   it("refreshes providers and pool members after provider PATCH without refreshing settings", async () => {
+    vi.setSystemTime(new Date("2026-09-16T06:00:00.000Z"));
     const staleMember = member({
       name: "旧能力快照",
       capabilityEligible: true,

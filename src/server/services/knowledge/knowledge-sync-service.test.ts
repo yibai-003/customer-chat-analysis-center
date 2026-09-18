@@ -8,6 +8,7 @@ import { upsertKnowledgeBase, upsertKnowledgeItem, deleteKnowledgeBase } from ".
 import { searchKnowledge } from "./knowledge-search-service";
 import { createApp } from "../../app";
 import { upsertField, getField } from "../field-config-service";
+import { loginAdmin } from "../../auth/test-admin";
 
 let directory: string;
 let sync: KnowledgeSync;
@@ -138,14 +139,15 @@ describe("portable knowledge catalog", () => {
     sync.initialize(false); const server = createApp({ knowledgeSync: sync }).listen(0, "127.0.0.1");
     await new Promise<void>(resolve => server.once("listening", resolve));
     const base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    const cookie = await loginAdmin(base);
     try {
       vi.spyOn(fs, "renameSync").mockImplementation(() => { throw new Error("no space"); });
-      const saved = await fetch(base + "/api/sections/chat", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "saved once", prompt: "keep" }) });
+      const saved = await fetch(base + "/api/sections/chat", { method: "PATCH", headers: { "Content-Type": "application/json", cookie }, body: JSON.stringify({ name: "saved once", prompt: "keep" }) });
       expect(saved.status).toBe(200); expect(await saved.json()).toMatchObject({ success: true, sync: { state: "pending" } });
       const revision = db.prepare("SELECT revision FROM knowledge_sync_outbox").get().revision;
-      expect((await fetch(base + "/api/knowledge-sync/retry", { method: "POST" })).status).toBe(503);
+      expect((await fetch(base + "/api/knowledge-sync/retry", { method: "POST", headers: { cookie } })).status).toBe(503);
       vi.restoreAllMocks();
-      expect(await (await fetch(base + "/api/knowledge-sync/retry", { method: "POST" })).json()).toMatchObject({ success: true, data: { state: "synced", github: "not_checked" } });
+      expect(await (await fetch(base + "/api/knowledge-sync/retry", { method: "POST", headers: { cookie } })).json()).toMatchObject({ success: true, data: { state: "synced", github: "not_checked" } });
       expect(db.prepare("SELECT revision FROM knowledge_sync_outbox").get().revision).toBe(revision);
     } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
   });
@@ -241,8 +243,9 @@ describe("portable knowledge catalog", () => {
     await new Promise<void>((resolve) => server.once("listening", resolve));
     const address = server.address() as { port: number };
     const url = `http://127.0.0.1:${address.port}/api/sections/chat`;
+    const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
     try {
-      const response = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "自动保存测试", prompt: "提示词" }) });
+      const response = await fetch(url, { method: "PATCH", headers: { "Content-Type": "application/json", cookie }, body: JSON.stringify({ name: "自动保存测试", prompt: "提示词" }) });
       expect(response.status).toBe(200);
       expect(JSON.parse(fs.readFileSync(sync.file, "utf8")).sections.find((s: any) => s.id === "chat").name).toBe("自动保存测试");
       const incoming = captureCatalog(); incoming.sections[0].name = "其他环境修改";

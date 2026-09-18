@@ -45,6 +45,8 @@ async function waitFor(check, label) {
 
 const port = await freePort();
 const baseUrl = `http://127.0.0.1:${port}`;
+const adminUsername = "smoke-admin";
+const adminPassword = "smoke-admin-password-1";
 let child;
 let stderr = "";
 let failed = false;
@@ -57,6 +59,9 @@ try {
       PORT: String(port),
       DATA_DIR: path.join(dataRoot, "data"),
       DATABASE_PATH: path.join(dataRoot, "data", "app.db"),
+      FIRST_ADMIN_USERNAME: adminUsername,
+      FIRST_ADMIN_PASSWORD: adminPassword,
+      FIRST_ADMIN_DISPLAY_NAME: "冒烟测试管理员",
     },
     stdio: ["ignore", "pipe", "pipe"],
     windowsHide: true,
@@ -82,7 +87,32 @@ try {
   assert(page.status === 200, `静态页面返回 ${page.status}`);
   assert((await page.text()).includes('id="root"'), "静态页面缺少挂载点");
 
-  const ready = await fetch(`${baseUrl}/api/ready`);
+  const anonymousJobs = await fetch(`${baseUrl}/api/jobs`);
+  assert(anonymousJobs.status === 401, `匿名调用业务接口应被拒绝：${anonymousJobs.status}`);
+  const anonymousReady = await fetch(`${baseUrl}/api/ready`);
+  assert(anonymousReady.status === 401, `匿名调用就绪接口应被拒绝：${anonymousReady.status}`);
+
+  const login = await fetch(`${baseUrl}/api/auth/login`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ username: adminUsername, password: adminPassword }),
+  });
+  assert(login.status === 200, `管理员登录失败：${login.status}`);
+  const loginBody = await login.json();
+  assert(
+    Array.isArray(loginBody?.data?.capabilities)
+    && loginBody.data.capabilities.includes("task:view")
+    && loginBody.data.capabilities.includes("admin:manage"),
+    "登录响应缺少角色能力列表",
+  );
+  const setCookie = login.headers.get("set-cookie");
+  assert(
+    setCookie && setCookie.includes("HttpOnly") && setCookie.includes("SameSite=Lax"),
+    "会话 Cookie 缺少 HttpOnly 或 SameSite=Lax 属性",
+  );
+  const cookie = setCookie.split(";")[0];
+
+  const ready = await fetch(`${baseUrl}/api/ready`, { headers: { cookie } });
   const readyBody = await ready.json();
   assert(
     (ready.status === 200) === (readyBody?.data?.ready === true),
@@ -94,16 +124,33 @@ try {
     "就绪响应缺少模型状态",
   );
 
-  const sync = await fetch(`${baseUrl}/api/knowledge-sync`);
+  const sync = await fetch(`${baseUrl}/api/knowledge-sync`, { headers: { cookie } });
   const syncBody = await sync.json();
   assert(
     sync.status === 200 && ["synced", "pending"].includes(syncBody?.data?.state),
     `知识快照状态异常：${sync.status}`,
   );
 
+  const authedJobs = await fetch(`${baseUrl}/api/jobs`, { headers: { cookie } });
+  assert(authedJobs.status === 200, `登录后访问任务接口失败：${authedJobs.status}`);
+
+  const anonymousAdmin = await fetch(`${baseUrl}/api/admin/users`);
+  assert(anonymousAdmin.status === 401, `匿名调用管理接口应被拒绝：${anonymousAdmin.status}`);
+  const audit = await fetch(`${baseUrl}/api/admin/audit-events?limit=5`, { headers: { cookie } });
+  const auditBody = await audit.json();
+  assert(
+    audit.status === 200
+    && Array.isArray(auditBody?.data?.items)
+    && auditBody.data.items.some((event) => event.action === "auth.login"),
+    "管理员审计查询异常",
+  );
+
   console.log(JSON.stringify({
     smoke: "ok",
     health: health.data.status,
+    denyAnonymous: true,
+    authenticated: true,
+    auditQuery: auditBody.data.items.length,
     ready: readyBody.data.ready,
     models: readyBody.data.models,
     knowledgeSync: syncBody.data.state,

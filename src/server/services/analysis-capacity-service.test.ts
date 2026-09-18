@@ -2,6 +2,7 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import { describe, expect, it } from "vitest";
 import { createApp } from "../app";
+import { loginAdmin } from "../auth/test-admin";
 import {
   getAnalysisCapacity,
   recommendAnalysisSettings,
@@ -200,7 +201,8 @@ describe("analysis capacity API", () => {
     const address = server.address() as AddressInfo;
 
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/system/analysis-capacity`);
+      const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/system/analysis-capacity`, { headers: { cookie } });
       const body = await response.json();
 
       expect(response.status).toBe(200);
@@ -246,7 +248,8 @@ describe("analysis capacity API", () => {
     const address = server.address() as AddressInfo;
 
     try {
-      const response = await fetch(`http://127.0.0.1:${address.port}/api/system/analysis-capacity`);
+      const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/system/analysis-capacity`, { headers: { cookie } });
 
       expect(response.status).toBe(500);
       expect(await response.json()).toEqual({

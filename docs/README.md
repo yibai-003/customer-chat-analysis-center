@@ -8,6 +8,13 @@
 - [本地访问与启动配置](guides/local-access-and-startup.md)
 - [官方源可复现安装](guides/reproducible-installation.md)
 
+### 局域网部署与运维
+- [局域网部署与单实例运行](guides/lan-deployment.md)
+- [局域网运维手册](guides/lan-operations.md)
+
+### CI
+- [CI 质量闸门与发布工件](guides/ci-quality-gates.md)
+
 ### 配置
 - [服务端输入约束](guides/server-input-validation.md)
 - [大文件 Excel 导入处理流程](guides/large-file-processing-flow.md)
@@ -41,6 +48,12 @@
 - [架构与结构性重复治理实施计划](architecture-remediation-plan-2026-09-17.md)
 - [架构治理进度账本](architecture-remediation-progress.md)
 - [项目稳定性开发流程](stability-development-workflow.md)
+- [模型池、批量选择与解析效能实施计划](operational-efficiency-implementation-plan-2026-09-17.md)
+- [模型池、批量选择与解析效能验收标准](operational-efficiency-acceptance-criteria-2026-09-17.md)
+
+## 架构决策
+
+- [ADR-0001：局域网版采用单组织共享数据与角色授权](adr/0001-lan-single-organization-access-model.md)
 
 ## 归档
 
@@ -52,6 +65,8 @@
 - [后续推进计划（2026-09-17）](archive/follow-up-plan-2026-09-17.md)
 - [配置 Schema 与热点错误分类验证](archive/configuration-and-hot-topic-validation.md)
 - [依赖漏洞定向修复](archive/dependency-security-remediation.md)
+- [容器化备份与独立恢复演练（2026-09-17）](archive/lan-backup-restore-drill-2026-09-17.md)
+- [局域网发布验收记录（2026-09-17）](archive/lan-release-acceptance-2026-09-17.md)
 - [前端状态模块拆分记录](archive/frontend-state-modules.md)
 - [Task 8 实施报告](archive/task-8-report.md)
 - [Task 9 实施报告](archive/task-9-report.md)
