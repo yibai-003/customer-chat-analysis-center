@@ -1,6 +1,7 @@
 node_modules
 dist
 data
+release
 .env
 deploy/.env
 deploy/data

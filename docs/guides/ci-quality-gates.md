@@ -27,10 +27,10 @@
 
 1. `npm ci` + `npm run build`
 2. `docker build -t customer-chat-analysis-center:<version>-<commit12> .` —— 按 `Dockerfile` 构建生产镜像，验证多阶段构建与原生依赖；**只构建、不打标签推送、不登录任何镜像仓库**
-3. 打包 `dist`、`src/server`、`src/shared`、`knowledge`、`config`、`package.json`、`package-lock.json` 为 `customer-chat-analysis-center-<version>-<commit12>.tar.gz`
-4. 生成 `manifest.json`（版本、commit、ref、runId、Node 版本、镜像标签、镜像 ID、构建时间），经 `upload-artifact` 保留 30 天
+3. 打包 `dist`、`src/server`、`src/shared`、`knowledge`、`config`、`package.json`、`package-lock.json` 为 `customer-chat-analysis-center-<version>-<commit12>.tar.gz`（版本取自 `package.json`，仓库内为 `0.1.0`）
+4. 生成 `manifest.json`（版本、commit、ref、runId、Node 版本、镜像标签、镜像 ID、运行要求、构建时间），经 `upload-artifact` 保留 30 天
 
-`.dockerignore` 排除 `node_modules`、`data`、`dist`、`.git`、`.env*` 与本地样本，保证构建上下文不含主机数据或密钥。工件与镜像均无任何推送/部署步骤。
+工件目录使用非隐藏的 `release/`（upload-artifact 默认跳过隐藏文件/目录）；`.dockerignore` 排除 `node_modules`、`data`、`dist`、`.git`、`.env*` 与本地样本，保证构建上下文不含主机数据或密钥。工件与镜像均无任何推送/部署步骤。
 
 ## 需要的版本
 

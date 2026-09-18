@@ -1,4 +1,4 @@
-name: Quality gates
+﻿name: Quality gates
 
 on:
   push:
@@ -102,14 +102,14 @@ jobs:
         run: |
           VERSION="$(node -p "require('./package.json').version")"
           SHA="${GITHUB_SHA:0:12}"
-          mkdir -p .release
-          tar -czf ".release/customer-chat-analysis-center-${VERSION}-${SHA}.tar.gz" \
+          mkdir -p release
+          tar -czf "release/customer-chat-analysis-center-${VERSION}-${SHA}.tar.gz" \
             dist src/server src/shared knowledge config package.json package-lock.json
-          node -e 'const fs=require("node:fs"); const pkg=require("./package.json"); fs.writeFileSync(".release/manifest.json", JSON.stringify({artifact:"customer-chat-analysis-center", version:pkg.version, commit:process.env.GITHUB_SHA, ref:process.env.GITHUB_REF_NAME, runId:process.env.GITHUB_RUN_ID, node:process.version, image:process.env.IMAGE_TAG, imageId:process.env.IMAGE_ID, builtAt:new Date().toISOString()}, null, 2)+"\n");'
+          node -e 'const fs=require("node:fs"); const pkg=require("./package.json"); fs.writeFileSync("release/manifest.json", JSON.stringify({artifact:"customer-chat-analysis-center", version:pkg.version, commit:process.env.GITHUB_SHA, ref:process.env.GITHUB_REF_NAME, runId:process.env.GITHUB_RUN_ID, node:process.version, image:process.env.IMAGE_TAG, imageId:process.env.IMAGE_ID, requires:"npm ci plus Node 22.12 or newer, or run the built container image", builtAt:new Date().toISOString()}, null, 2)+"\n");'
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
           name: customer-chat-analysis-center-release-candidate
-          path: .release/
+          path: release/
           retention-days: 30
