@@ -157,6 +157,16 @@ const malformedVerificationCases = [
     input.runtime.assets.scripts = ["assets/app.js", "assets/app.js"];
     return input;
   }],
+  ["asset path with internal space", () => {
+    const input = matchingDeployment();
+    input.runtime.assets.scripts = ["assets/a b.js"];
+    return input;
+  }],
+  ["asset path with control character", () => {
+    const input = matchingDeployment();
+    input.entryAssets.styles = ["assets/a\n.css"];
+    return input;
+  }],
   ["sparse asset array", () => {
     const input = matchingDeployment();
     input.entryAssets.styles = new Array(1);
@@ -346,6 +356,42 @@ describe("LAN deployment policy", () => {
     const input = matchingDeployment();
     input.targetCommitSha = "ABCDEF1234567890ABCDEF1234567890ABCDEF12";
     input.runtime.commitSha = "abcdef1234567890abcdef1234567890abcdef12";
+    input.targetImage = "app:0.1.0-abcdef123456";
+    input.runtime.image = "app:0.1.0-abcdef123456";
+
+    expect(verifyDeployment(input)).toEqual({
+      ok: true,
+      reasons: [],
+      rollback: false,
+    });
+  });
+
+  it("requires image tags to end with the target commit prefix", () => {
+    const input = matchingDeployment();
+    input.targetImage = "app:0.1.0-bbbbbbbbbbbb";
+    input.runtime.image = "app:0.1.0-bbbbbbbbbbbb";
+
+    expect(verifyDeployment(input)).toEqual({
+      ok: false,
+      reasons: ["image"],
+      rollback: true,
+    });
+
+    const result = runCli(["verify"], JSON.stringify(input));
+    expect(result.status).toBe(1);
+    expect(JSON.parse(result.stdout)).toEqual({
+      ok: false,
+      reasons: ["image"],
+      rollback: true,
+    });
+  });
+
+  it("accepts a correctly bound image tag with normalized SHA case", () => {
+    const input = matchingDeployment();
+    input.targetCommitSha = "ABCDEF1234567890ABCDEF1234567890ABCDEF12";
+    input.runtime.commitSha = "abcdef1234567890abcdef1234567890abcdef12";
+    input.targetImage = "app:0.1.0-abcdef123456";
+    input.runtime.image = "app:0.1.0-abcdef123456";
 
     expect(verifyDeployment(input)).toEqual({
       ok: true,

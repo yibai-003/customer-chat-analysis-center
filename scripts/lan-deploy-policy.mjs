@@ -40,6 +40,14 @@ function isValidTaggedImageReference(value) {
     && DOCKER_TAG_PATTERN.test(tag);
 }
 
+function imageTag(value) {
+  return value.slice(value.lastIndexOf(":") + 1);
+}
+
+function imageBindsCommit(value, commitSha) {
+  return imageTag(value).endsWith(`-${commitSha.slice(0, 12).toLowerCase()}`);
+}
+
 function normalizeVersionTag(version) {
   if (typeof version !== "string" || !version) {
     throw new Error("version must be a non-empty Docker tag value");
@@ -80,6 +88,7 @@ function assertAssetArray(value, field, extension) {
       || assetPath.includes("\\")
       || assetPath.includes("?")
       || assetPath.includes("#")
+      || /[\s\p{Cc}]/u.test(assetPath)
       || !assetPath.endsWith(extension)
       || assetPath.split("/").some((segment) => (
         segment.length === 0 || segment === "." || segment === ".."
@@ -165,7 +174,12 @@ export function verifyDeployment(input) {
   ) {
     reasons.push("commit");
   }
-  if (input.runtime?.image !== input.targetImage) reasons.push("image");
+  if (
+    input.runtime.image !== input.targetImage
+    || !imageBindsCommit(input.targetImage, input.targetCommitSha)
+  ) {
+    reasons.push("image");
+  }
   if (
     !sameAssets(input.runtime?.assets?.scripts ?? [], input.entryAssets?.scripts ?? [])
     || !sameAssets(input.runtime?.assets?.styles ?? [], input.entryAssets?.styles ?? [])
