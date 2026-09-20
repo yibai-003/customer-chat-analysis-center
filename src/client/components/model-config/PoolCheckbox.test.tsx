@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import { flushSync } from "react-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PoolCheckbox } from "./PoolCheckbox";
 
@@ -44,6 +46,30 @@ describe("PoolCheckbox", () => {
     expect(checkbox.indeterminate).toBe(true);
     rerender(<PoolCheckbox {...props} />);
     expect(checkbox.indeterminate).toBe(true);
+  });
+
+  it("keeps a synchronous parent commit as the final indeterminate state", () => {
+    function ControlledPoolCheckbox() {
+      const [indeterminate, setIndeterminate] = useState(true);
+      return (
+        <PoolCheckbox
+          label="同步全选"
+          checked={false}
+          indeterminate={indeterminate}
+          onChange={() => {
+            flushSync(() => setIndeterminate(false));
+          }}
+        />
+      );
+    }
+
+    render(<ControlledPoolCheckbox />);
+    const checkbox = screen.getByRole("checkbox", { name: "同步全选" }) as HTMLInputElement;
+    expect(checkbox.indeterminate).toBe(true);
+
+    fireEvent.click(checkbox);
+
+    expect(checkbox.indeterminate).toBe(false);
   });
 
   it("passes through disabled state and ignores activation", () => {

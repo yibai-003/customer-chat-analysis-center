@@ -22,8 +22,8 @@ export function PoolCheckbox({
   useLayoutEffect(syncIndeterminate);
 
   function handleChange() {
-    onChange();
     syncIndeterminate();
+    onChange();
   }
 
   return (
