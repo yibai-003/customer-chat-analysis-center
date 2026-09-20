@@ -406,6 +406,35 @@ describe("ModelConfigDialog", () => {
     expect(keyInput.placeholder).toBe("留空则保留原 Key");
   });
 
+  it("updates a provider through the established PATCH request contract", async () => {
+    await renderDialog();
+    fireEvent.click(screen.getByRole("tab", { name: "服务商凭证" }));
+    fireEvent.click(await screen.findByRole("button", { name: "编辑千问百炼" }));
+
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "千问百炼生产" } });
+    fireEvent.change(screen.getByLabelText("Base URL"), {
+      target: { value: "https://dashscope.aliyuncs.com/compatible-mode/v2" },
+    });
+    fireEvent.click(screen.getByLabelText("启用服务商"));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "保存服务商" }));
+    });
+
+    await waitFor(() => expect(requests.some((request) => (
+      request.url === "/api/model-providers/provider-1" && request.init?.method === "PATCH"
+    ))).toBe(true));
+    const patchRequests = requests.filter((request) => (
+      request.url === "/api/model-providers/provider-1" && request.init?.method === "PATCH"
+    ));
+    expect(patchRequests).toHaveLength(1);
+    expect(patchRequests[0].init?.headers).toEqual({ "Content-Type": "application/json" });
+    expect(JSON.parse(String(patchRequests[0].init?.body))).toEqual({
+      name: "千问百炼生产",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v2",
+      isEnabled: false,
+    });
+  });
+
   it("sends all editable routing, quota, and billing fields for a member row", async () => {
     await renderDialog();
     const row = (await screen.findByText("千问视觉")).closest("tr");
