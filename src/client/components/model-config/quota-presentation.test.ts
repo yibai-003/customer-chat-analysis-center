@@ -113,6 +113,24 @@ describe("quota presentation", () => {
     }
   });
 
+  it("preserves exhaustion status when the total is unavailable", () => {
+    expect(quotaPresentation({
+      quotaUsedTokens: 1200,
+      quotaSafetyRatio: 0.9,
+      quotaBlocked: false,
+      quotaExhaustedAt: "2026-09-20T08:00:00.000Z",
+    })).toMatchObject({
+      kind: "unlimited",
+      tone: "exhausted",
+      used: 1200,
+      total: null,
+      remaining: null,
+      percent: 0,
+      progressValue: 0,
+      statusText: "额度已耗尽",
+    });
+  });
+
   it("handles invalid totals without throwing", () => {
     for (const total of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(quotaPresentation({
@@ -130,6 +148,25 @@ describe("quota presentation", () => {
         statusText: "额度数据异常",
       });
     }
+  });
+
+  it("preserves exhaustion status when the total is invalid", () => {
+    expect(quotaPresentation({
+      quotaUsedTokens: 50,
+      quotaTotalTokens: 0,
+      quotaSafetyRatio: 0.9,
+      quotaBlocked: false,
+      quotaExhaustedAt: "2026-09-20T08:00:00.000Z",
+    })).toMatchObject({
+      kind: "invalid",
+      tone: "exhausted",
+      used: 50,
+      total: null,
+      remaining: null,
+      percent: 0,
+      progressValue: 0,
+      statusText: "额度已耗尽",
+    });
   });
 
   it("normalizes invalid or negative usage to zero", () => {

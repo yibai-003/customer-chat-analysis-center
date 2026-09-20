@@ -30,29 +30,30 @@ export function formatQuotaTokens(value: number) {
 
 export function quotaPresentation(input: QuotaInput): QuotaPresentation {
   const used = nonNegativeFinite(input.quotaUsedTokens);
+  const hasExhaustionEvidence = Boolean(input.quotaExhaustedAt);
   if (input.quotaTotalTokens == null) {
     return {
       kind: "unlimited",
-      tone: "unlimited",
+      tone: hasExhaustionEvidence ? "exhausted" : "unlimited",
       used,
       total: null,
       remaining: null,
       percent: 0,
       progressValue: 0,
-      statusText: "不限额",
+      statusText: hasExhaustionEvidence ? "额度已耗尽" : "不限额",
     };
   }
   const total = input.quotaTotalTokens;
   if (!Number.isFinite(total) || total <= 0) {
     return {
       kind: "invalid",
-      tone: "invalid",
+      tone: hasExhaustionEvidence ? "exhausted" : "invalid",
       used,
       total: null,
       remaining: null,
       percent: 0,
       progressValue: 0,
-      statusText: "额度数据异常",
+      statusText: hasExhaustionEvidence ? "额度已耗尽" : "额度数据异常",
     };
   }
   const ratio = Math.min(1, used / total);
@@ -60,7 +61,7 @@ export function quotaPresentation(input: QuotaInput): QuotaPresentation {
   const threshold = Number.isFinite(input.quotaSafetyRatio)
     ? Math.min(1, Math.max(0, input.quotaSafetyRatio))
     : 0.95;
-  const tone = used >= total || Boolean(input.quotaExhaustedAt)
+  const tone = used >= total || hasExhaustionEvidence
     ? "exhausted"
     : input.quotaBlocked || ratio >= threshold
       ? "warning"

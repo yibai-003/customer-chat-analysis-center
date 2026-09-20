@@ -369,6 +369,25 @@ describe("QuotaMeter", () => {
     expect(progress.getAttribute("aria-valuemax")).toBe("1000000");
   });
 
+  it("caps overused progress semantics at max while preserving exact display", () => {
+    render(<QuotaMeter
+      modelName="超额模型"
+      quota={quotaPresentation({
+        quotaUsedTokens: 1_200_000,
+        quotaTotalTokens: 1_000_000,
+        quotaSafetyRatio: 0.95,
+        quotaBlocked: false,
+      })}
+    />);
+    expect(screen.getByText("1,200,000 / 1,000,000")).toBeTruthy();
+    const progress = screen.getByRole("progressbar", { name: "超额模型额度 100%" });
+    const now = Number(progress.getAttribute("aria-valuenow"));
+    const max = Number(progress.getAttribute("aria-valuemax"));
+    expect(now).toBe(1_000_000);
+    expect(max).toBe(1_000_000);
+    expect(now).toBeLessThanOrEqual(max);
+  });
+
   it("renders unlimited and invalid states without a progressbar", () => {
     const { rerender } = render(<QuotaMeter
       modelName="不限额模型"
@@ -441,7 +460,7 @@ export function QuotaMeter({
         aria-label={`${modelName}额度 ${quota.percent}%`}
         aria-valuemin={0}
         aria-valuemax={quota.total}
-        aria-valuenow={quota.used}
+        aria-valuenow={quota.progressValue}
       >
         <span className="quota-meter-fill" style={{ width: `${quota.percent}%` }} />
       </span>
@@ -459,7 +478,7 @@ Run:
 npx vitest run src/client/components/model-config/QuotaMeter.test.tsx
 ```
 
-Expected: 2 tests PASS.
+Expected: 3 tests PASS.
 
 - [ ] **Step 5: Commit**
 
