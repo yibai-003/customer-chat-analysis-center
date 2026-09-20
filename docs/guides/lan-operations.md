@@ -7,10 +7,12 @@
 ## 1. 首次部署
 
 1. 准备固定主机：本机磁盘、固定内网地址、可用 Docker（无 Docker 时按 [局域网部署](lan-deployment.md) 的 Windows 服务等价契约）。
-2. 配置环境：`cd deploy; Copy-Item .env.example .env`，填写 `APP_IMAGE`、`ENCRYPTION_KEY`（独立强密钥）、`ALLOWED_HOSTS`、`ALLOWED_ORIGINS`，确认 `DEPLOY_DATA_DIR`、`DEPLOY_KNOWLEDGE_DIR` 在本地磁盘。
+2. 配置环境：`cd deploy; Copy-Item .env.example .env`，填写 `ENCRYPTION_KEY`（独立强密钥）、`ALLOWED_HOSTS`、`ALLOWED_ORIGINS`，确认 `DEPLOY_DATA_DIR`、`DEPLOY_KNOWLEDGE_DIR` 在本地磁盘；镜像标签由标准部署脚本按 commit 生成，不手工填写。
 3. 部署 TLS：按 `deploy/reverse-proxy.example.conf` 配置内网反向代理；证书由内网 CA 签发或自签名并导入客户端信任；只放行批准网段，不映射公网。
-4. 启动：`docker compose up -d --build`，等待健康检查通过；首次启动自动生成数据库、托管密钥（`.secrets/app.db.key.json`）与知识快照。
+4. 启动：从仓库根目录执行 `pwsh -File scripts/lan-deploy.ps1 -EnvFile deploy/.env -ContainerName customer-chat-analysis -EntryUrl http://127.0.0.1:8787`；等待脚本完成健康、容器内就绪、运行版本和入口资源核验。首次启动自动生成数据库、托管密钥（`.secrets/app.db.key.json`）与知识快照。
 5. 可复跑验证：`pwsh -File scripts/verify-lan-runtime.ps1` 应返回 `PASS`（镜像、健康、非 root、持久化重建、单实例保护、Compose 校验）。
+
+标准部署拒绝未提交改动的正式发布；需要明确标记的非发布构建时才使用 `-Preview`。仅执行 `git push` 不会构建镜像、替换运行容器或更新局域网入口。成功输出应记录 commit、镜像标签、镜像 ID、运行时 JS/CSS 资源和回滚命令。`/api/version` 可在不登录的情况下读取这些发布元数据，`/api/ready` 仍只对管理员开放，部署脚本通过容器内 `npm run ready:check` 获取就绪结果。
 
 ## 2. 管理员初始化
 
@@ -95,16 +97,17 @@ docker exec customer-chat-analysis npm run restore:verify -- /tmp/recovery-20260
 
 ## 6. 升级
 
-1. 记录当前镜像标签：`deploy/.env` 的 `APP_IMAGE`。
-2. 升级前备份并用 `npm run restore --verify <备份目录>`（或 `restore:verify`）确认包可用；密钥单独留存。
-3. 低峰期构建新镜像并打新标签，修改 `APP_IMAGE` 后 `docker compose up -d`；等待健康检查通过再放开代理。
-4. 数据库迁移在启动时自动执行并留有迁移前保护备份；迁移失败会拒绝启动，按报错恢复旧镜像与备份。
+1. 升级前备份并用 `npm run restore:verify -- <备份目录>` 确认包可用；密钥单独留存。
+2. 低峰期从仓库根目录执行 `scripts/lan-deploy.ps1` 标准发布命令。正式发布要求干净工作区；不要手工改 `APP_IMAGE`，也不要用裸 `docker compose up -d` 替代脚本。
+3. 脚本按健康、容器内 `npm run ready:check`、`/api/version` 和入口 JS/CSS 资源顺序核验；失败时返回非零并尝试恢复发布前镜像。数据库迁移失败仍会拒绝启动，按报错恢复旧镜像与备份。
+4. `git push` 不会自动触发上述构建或容器替换；发布后应保存脚本输出中的 commit、镜像标签、镜像 ID、资源名和回滚命令。
 
 ## 7. 回滚
 
-- 代码/镜像回滚：把 `APP_IMAGE` 改回上一标签，`docker compose up -d`，验证健康与关键页面。
-- 数据结构不兼容时：停止服务，按第 5 节把升级前备份恢复到独立目录并校验，确认后再切换数据目录。
-- 不要用旧镜像直接打开已升级的新数据库结构；也不要只回滚数据而保留不兼容镜像。
+- 代码/镜像回滚：使用 `pwsh -File scripts/lan-deploy.ps1 -EnvFile deploy/.env -ContainerName customer-chat-analysis -EntryUrl http://127.0.0.1:8787 -RollbackImage <旧镜像标签>`，只切换应用镜像，并验证健康、容器内就绪、`/api/version` 和入口资源。
+- 镜像回滚不会删除或重建数据库、知识库、上传、导出、日志、备份或密钥目录，也不会改写持久数据。
+- 数据结构不兼容时：不要用旧镜像直接打开已升级的新数据库结构；停止服务后按第 5 节把升级前备份恢复到独立目录并校验，确认数据库、密钥和业务数据可用后再切换数据目录。
+- 也不要只回滚数据而保留不兼容镜像。
 
 ## 8. 日志收集
 
