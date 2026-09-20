@@ -1,4 +1,3 @@
-import { pathToFileURL } from "node:url";
 import { getReadinessStatus, type ReadinessStatus } from "./services/readiness-service";
 
 export interface ReadinessCliOptions {
@@ -32,8 +31,4 @@ export function runReadinessCli(options: ReadinessCliOptions = {}): number {
 
   (options.write ?? console.log)(output);
   return exitCode;
-}
-
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  process.exitCode = runReadinessCli();
 }

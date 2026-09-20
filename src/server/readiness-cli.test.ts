@@ -1,17 +1,55 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runReadinessCli } from "./readiness-cli";
 
 const roots: string[] = [];
+const projectRoot = path.resolve(import.meta.dirname, "../..");
 
 afterEach(() => {
   for (const root of roots.splice(0)) {
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+function runDirectCli(root: string, databasePath: string) {
+  return spawnSync(
+    process.execPath,
+    ["--import", "tsx", "src/server/readiness-cli-entry.ts"],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        DATA_DIR: path.join(root, "data"),
+        DATABASE_PATH: databasePath,
+      },
+      encoding: "utf8",
+      timeout: 10_000,
+      windowsHide: true,
+    },
+  );
+}
+
+function expectSafeDirectFailure(
+  result: SpawnSyncReturns<string>,
+  temporaryRoot: string,
+) {
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(1);
+  const lines = result.stdout.trim().split(/\r?\n/);
+  expect(lines).toHaveLength(1);
+  expect(JSON.parse(lines[0])).toEqual({
+    ready: false,
+    database: false,
+    error: "Readiness check failed",
+  });
+  expect(result.stdout).not.toContain(temporaryRoot);
+  expect(result.stderr).not.toContain(temporaryRoot);
+  expect(result.stderr).toBe("");
+}
 
 describe("readiness CLI", () => {
   it("prints JSON and returns zero for a ready instance", () => {
@@ -66,35 +104,21 @@ describe("readiness CLI", () => {
     });
   });
 
-  it("prints failure JSON without an unhandled stack when directly executed", () => {
+  it("prints failure JSON when directly executed with an uninitialized database", () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "readiness-cli-"));
     roots.push(root);
-    const projectRoot = path.resolve(import.meta.dirname, "../..");
-    const result = spawnSync(
-      process.execPath,
-      ["--import", "tsx", "src/server/readiness-cli.ts"],
-      {
-        cwd: projectRoot,
-        env: {
-          ...process.env,
-          NODE_ENV: "production",
-          DATA_DIR: path.join(root, "data"),
-          DATABASE_PATH: path.join(root, "data", "app.db"),
-        },
-        encoding: "utf8",
-        timeout: 10_000,
-        windowsHide: true,
-      },
-    );
+    const result = runDirectCli(root, path.join(root, "data", "app.db"));
 
-    expect(result.error).toBeUndefined();
-    expect(result.status).toBe(1);
-    expect(JSON.parse(result.stdout.trim())).toEqual({
-      ready: false,
-      database: false,
-      error: "Readiness check failed",
-    });
-    expect(result.stdout).not.toContain(root);
-    expect(result.stderr).not.toMatch(/SqliteError|node:internal|readiness-cli\.ts:\d+|\bat\s.+\(/);
+    expectSafeDirectFailure(result, root);
+  });
+
+  it("prints failure JSON when the database cannot be opened during module loading", () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "readiness-cli-"));
+    roots.push(root);
+    const databasePath = path.join(root, "database-directory");
+    fs.mkdirSync(databasePath);
+    const result = runDirectCli(root, databasePath);
+
+    expectSafeDirectFailure(result, root);
   });
 });
