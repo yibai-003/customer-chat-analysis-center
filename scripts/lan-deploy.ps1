@@ -52,6 +52,14 @@ function Get-ContainerImage([string]$Name) {
   return $image
 }
 
+function Get-ContainerImageId([string]$Name) {
+  $imageId = ((& docker inspect --format "{{.Image}}" $Name 2>$null) | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0) {
+    return ""
+  }
+  return $imageId
+}
+
 function Get-ImageRuntimeMetadata([string]$Image) {
   $raw = ((& docker image inspect --format "{{json .Config.Env}}" $Image 2>$null) | Out-String).Trim()
   if ($LASTEXITCODE -ne 0 -or -not $raw) {
@@ -67,6 +75,58 @@ function Get-ImageRuntimeMetadata([string]$Image) {
   return $metadata
 }
 
+function Normalize-HostPath([string]$Value) {
+  if (-not $Value) {
+    throw "Compose 持久化目录不能为空"
+  }
+  if ($Value.StartsWith("\") -or $Value.StartsWith("//")) {
+    throw "持久化目录不能使用网络共享盘：$Value"
+  }
+  try {
+    return [System.IO.Path]::GetFullPath($Value).TrimEnd([char[]]@("\", "/"))
+  } catch {
+    throw "无法解析持久化目录：$Value"
+  }
+}
+
+function Get-ComposeMounts {
+  $raw = ((& docker compose --env-file $ResolvedEnvFile -f $ComposePath config --format json 2>$null) | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $raw) {
+    throw "无法读取 Compose 渲染后的挂载配置"
+  }
+  $config = $raw | ConvertFrom-Json
+  if (-not $config.services.app.volumes) {
+    throw "Compose app 服务未声明持久化挂载"
+  }
+  return @($config.services.app.volumes)
+}
+
+function Assert-ExpectedMounts([string]$Name) {
+  $expectedMounts = Get-ComposeMounts
+  $actualRaw = ((& docker inspect --format "{{json .Mounts}}" $Name 2>$null) | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $actualRaw) {
+    throw "无法读取容器实际挂载"
+  }
+  $actualMounts = @($actualRaw | ConvertFrom-Json)
+
+  foreach ($target in @("/app/data", "/app/knowledge")) {
+    $expected = @($expectedMounts | Where-Object { $_.target -eq $target }) | Select-Object -First 1
+    $actual = @($actualMounts | Where-Object { $_.Destination -eq $target }) | Select-Object -First 1
+    if (-not $expected -or -not $actual) {
+      throw "容器缺少持久化挂载：$target"
+    }
+    if ([string]$expected.type -ne "bind" -or [string]$actual.Type -ne "bind") {
+      throw "持久化挂载必须是 bind 类型：$target"
+    }
+
+    $expectedSource = Normalize-HostPath ([string]$expected.source)
+    $actualSource = Normalize-HostPath ([string]$actual.Source)
+    if ($expectedSource -ne $actualSource) {
+      throw "容器挂载来源与 Compose 配置不一致：$target"
+    }
+  }
+}
+
 function Get-RuntimeVersion([string]$BaseUrl) {
   $response = Invoke-RestMethod -Method Get -Uri "$($BaseUrl.TrimEnd('/'))/api/version"
   if (-not $response.success -or -not $response.data) {
@@ -77,17 +137,14 @@ function Get-RuntimeVersion([string]$BaseUrl) {
 
 function Get-EntryAssets([string]$BaseUrl) {
   $html = (Invoke-WebRequest -UseBasicParsing -Uri "$($BaseUrl.TrimEnd('/'))/").Content
-  $scripts = @(
-    [regex]::Matches($html, '<script[^>]+src=["'']/?([^"'']+\.js)["'']', "IgnoreCase") |
-      ForEach-Object { $_.Groups[1].Value }
-  )
-  $styles = @(
-    [regex]::Matches($html, '<link[^>]+href=["'']/?([^"'']+\.css)["'']', "IgnoreCase") |
-      ForEach-Object { $_.Groups[1].Value }
-  )
+  $assetJson = ($html | & node $PolicyPath assets | Out-String).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $assetJson) {
+    throw "无法解析入口资源"
+  }
+  $assets = $assetJson | ConvertFrom-Json
   return @{
-    scripts = @($scripts | Select-Object -Unique)
-    styles = @($styles | Select-Object -Unique)
+    scripts = @($assets.scripts)
+    styles = @($assets.styles)
   }
 }
 
@@ -99,11 +156,17 @@ function Invoke-ComposeImage([string]$Image) {
   }
 }
 
-function Restore-PreviousImage([string]$Image) {
+function Restore-PreviousImage([string]$Image, [string]$ImageId) {
   if (-not $Image) {
     throw "没有可用于回滚的旧容器镜像"
   }
   Write-Host "== 回滚到 $Image"
+  if ($ImageId) {
+    & docker tag $ImageId $Image
+    if ($LASTEXITCODE -ne 0) {
+      throw "无法将旧镜像 ID 重新绑定到镜像标签：$Image"
+    }
+  }
   $metadata = Get-ImageRuntimeMetadata $Image
   $env:APP_IMAGE = $Image
   foreach ($name in @("APP_VERSION", "APP_COMMIT_SHA", "APP_BUILD_TIME")) {
@@ -124,6 +187,7 @@ function Invoke-DeploymentVerification(
   if (-not (Wait-ContainerHealthy $ContainerName)) {
     throw "容器健康检查失败"
   }
+  Assert-ExpectedMounts $ContainerName
 
   Write-Host "== 容器内 ready:check"
   & docker exec $ContainerName npm run ready:check
@@ -146,7 +210,10 @@ function Invoke-DeploymentVerification(
     throw "部署策略核验失败：$($policyOutput -join ' ')"
   }
   Write-Host ($policyOutput -join "`n")
-  return $runtime
+  return @{
+    Runtime = $runtime
+    EntryAssets = $entryAssets
+  }
 }
 
 Push-Location $ProjectRoot
@@ -165,6 +232,10 @@ try {
   }
 
   $previousImage = Get-ContainerImage $ContainerName
+  $previousImageId = if ($previousImage) { Get-ContainerImageId $ContainerName } else { "" }
+  if ($previousImage -and -not $previousImageId) {
+    throw "无法读取当前容器镜像 ID，拒绝开始部署"
+  }
   $previousVersion = if ($previousImage) { Get-RuntimeVersion $EntryUrl } else { $null }
   $targetCommit = $commit
   $targetVersion = ""
@@ -219,9 +290,11 @@ try {
 
   $env:APP_CONTAINER_NAME = $ContainerName
   Invoke-ComposeImage $targetImage
-  $runtime = Invoke-DeploymentVerification $targetImage $targetCommit
-  $imageId = ((& docker inspect --format "{{.Image}}" $ContainerName) | Out-String).Trim()
-  Write-Host "PASS: commit=$($runtime.commitSha) image=$($runtime.image) imageId=$imageId"
+  $verification = Invoke-DeploymentVerification $targetImage $targetCommit
+  $runtime = $verification.Runtime
+  $imageId = Get-ContainerImageId $ContainerName
+  $assetsJson = $verification.EntryAssets | ConvertTo-Json -Depth 5 -Compress
+  Write-Host "PASS: commit=$($runtime.commitSha) image=$($runtime.image) imageId=$imageId assets=$assetsJson"
   if ($previousVersion) {
     Write-Host "previous=$($previousVersion.image); rollback=pwsh -File scripts/lan-deploy.ps1 -RollbackImage $($previousVersion.image)"
   }
@@ -230,19 +303,21 @@ try {
   Write-Host "FAIL: $failure"
   if ($previousImage) {
     try {
-      Restore-PreviousImage $previousImage
-      if (-not (Wait-ContainerHealthy $ContainerName)) {
-        throw "回滚后容器健康检查失败"
-      }
+      Restore-PreviousImage $previousImage $previousImageId
+      $restoredVerification = Invoke-DeploymentVerification $previousImage $previousVersion.commitSha
+      $restoredRuntime = $restoredVerification.Runtime
       $restoredImage = Get-ContainerImage $ContainerName
       if ($restoredImage -ne $previousImage) {
         throw "回滚后运行镜像不匹配：$restoredImage"
       }
-      $restoredRuntime = Get-RuntimeVersion $EntryUrl
+      $restoredImageId = Get-ContainerImageId $ContainerName
+      if ($previousImageId -and $restoredImageId -ne $previousImageId) {
+        throw "回滚后镜像 ID 不匹配：$restoredImageId"
+      }
       if ($restoredRuntime.image -ne $previousImage) {
         throw "回滚后版本接口镜像不匹配：$($restoredRuntime.image)"
       }
-      Write-Host "ROLLBACK PASS: $restoredImage"
+      Write-Host "ROLLBACK PASS: $restoredImage imageId=$restoredImageId"
     } catch {
       throw "$failure；自动回滚失败：$($_.Exception.Message)"
     }

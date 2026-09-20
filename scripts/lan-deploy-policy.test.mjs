@@ -232,12 +232,20 @@ describe("LAN deployment policy", () => {
     expect(script).toContain("--build-arg \"APP_COMMIT_SHA=$commit\"");
     expect(script).toContain("docker compose");
     expect(script).toContain("$targetVersion-preview");
+    expect(script).toContain("config --format json");
+    expect(script).toContain("docker inspect --format \"{{json .Mounts}}\"");
+    expect(script).toContain("/app/data");
+    expect(script).toContain("/app/knowledge");
+    expect(script).toContain("Get-ContainerImageId");
+    expect(script).toContain("docker tag $ImageId $Image");
+    expect(script).toContain("EntryAssets");
   });
 
   it("checks the restored runtime image without deleting persistent directories", () => {
     const script = fs.readFileSync(`${projectRoot}/scripts/lan-deploy.ps1`, "utf8");
 
-    expect(script).toContain("$restoredRuntime = Get-RuntimeVersion");
+    expect(script).toContain("$restoredVerification = Invoke-DeploymentVerification");
+    expect(script).toContain("$restoredRuntime = $restoredVerification.Runtime");
     expect(script).toContain("$restoredRuntime.image -ne $previousImage");
     expect(script).not.toMatch(
       /Remove-Item[^\r\n]*(DEPLOY_DATA_DIR|DEPLOY_KNOWLEDGE_DIR)/i,
@@ -536,6 +544,19 @@ describe("LAN deployment policy", () => {
     expect(result.stdout.trim()).toBe(
       "customer-chat-analysis-center:0.1.0-aaaaaaaaaaaa",
     );
+  });
+
+  it("uses the shared parser for the assets CLI command", () => {
+    const html = [
+      "<!-- <script src='/assets/ignored.js'></script> -->",
+      '<SCRIPT SRC = "/assets/app.js?v=1#entry"></SCRIPT>',
+      '<link rel="stylesheet" href="/assets/app.css?theme=1">',
+    ].join("");
+
+    const result = runCli(["assets"], html);
+
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual(extractEntryAssets(html));
   });
 
   it("executes the CLI when Node receives a relative script path", () => {

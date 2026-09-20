@@ -212,6 +212,15 @@ function runCli(args) {
       return 0;
     }
 
+    if (command === "assets") {
+      if (commandArgs.length !== 0) {
+        throw new Error("usage: assets");
+      }
+      const html = fs.readFileSync(0, "utf8");
+      writeLine(process.stdout, JSON.stringify(extractEntryAssets(html)));
+      return 0;
+    }
+
     if (command === "verify") {
       if (commandArgs.length !== 0) {
         throw new Error("usage: verify");
