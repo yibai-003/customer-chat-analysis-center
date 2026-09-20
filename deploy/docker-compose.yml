@@ -4,7 +4,12 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
-    container_name: customer-chat-analysis
+      args:
+        APP_VERSION: ${APP_VERSION:-0.1.0}
+        APP_COMMIT_SHA: ${APP_COMMIT_SHA:-development}
+        APP_BUILD_TIME: ${APP_BUILD_TIME:-development}
+        APP_IMAGE: ${APP_IMAGE:-customer-chat-analysis:lan}
+    container_name: ${APP_CONTAINER_NAME:-customer-chat-analysis}
     restart: unless-stopped
     ports:
       - "127.0.0.1:${APP_PORT:-8787}:8787"
@@ -13,6 +18,10 @@ services:
       LISTEN_HOST: "0.0.0.0"
       DATA_DIR: /app/data
       DATABASE_PATH: /app/data/app.db
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      APP_COMMIT_SHA: ${APP_COMMIT_SHA:-development}
+      APP_BUILD_TIME: ${APP_BUILD_TIME:-development}
+      APP_IMAGE: ${APP_IMAGE:-customer-chat-analysis:lan}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?请在 deploy/.env 中提供独立的加密密钥}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}

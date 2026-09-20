@@ -8,18 +8,42 @@
 - 运行阶段只安装生产依赖（`tsx` 已作为启动运行时依赖），以非 root 用户 `node`（UID 1000）运行，入口为 `node --import tsx src/server/launcher.ts`。
 - 健康检查使用 `node -e fetch(.../api/health)`，只判断 HTTP 200，不输出业务细节；容器内应用端口固定 `8787`。
 
-## 运行配置
+## 运行配置与标准部署
 
 ```powershell
 cd deploy
 Copy-Item .env.example .env
-# 填写 APP_IMAGE、ENCRYPTION_KEY、ALLOWED_HOSTS、ALLOWED_ORIGINS，
+# 填写 ENCRYPTION_KEY、ALLOWED_HOSTS、ALLOWED_ORIGINS，
 # 确认 DEPLOY_DATA_DIR / DEPLOY_KNOWLEDGE_DIR
-docker compose up -d --build
 ```
 
+正式发布从仓库根目录执行标准入口。脚本读取当前完整 Git commit，使用包版本和 commit 前 12 位生成镜像标签，执行质量门禁、构建、容器替换和运行版本核验：
+
+```powershell
+pwsh -File scripts/lan-deploy.ps1 `
+  -EnvFile deploy/.env `
+  -ContainerName customer-chat-analysis `
+  -EntryUrl http://127.0.0.1:8787
+```
+
+- 正式发布要求工作区干净；`git push` 只会推送提交，不会重新构建镜像、替换运行容器或更新局域网入口。
+- `-Preview` 只允许显式标记的非发布构建使用，不能作为真实局域网发布验收的替代。
+- `-RollbackImage <tag>` 跳过构建并把应用切换到指定的旧镜像标签，例如：
+
+  ```powershell
+  pwsh -File scripts/lan-deploy.ps1 `
+    -EnvFile deploy/.env `
+    -ContainerName customer-chat-analysis `
+    -EntryUrl http://127.0.0.1:8787 `
+    -RollbackImage customer-chat-analysis-center:0.1.0-aaaaaaaaaaaa
+  ```
+
+- 脚本先记录当前运行镜像，再按健康检查、容器内 `npm run ready:check`、`/api/version` 和入口 HTML 资源顺序核验。`ready:check` 只读检查数据目录、SQLite 完整性、外键、当前迁移版本、关键表、磁盘空间和模型状态。健康、就绪、提交、镜像或 JS/CSS 资源任一核验失败时返回非零，并尝试恢复上一镜像。
+- 成功输出应包含目标 commit、镜像标签、镜像 ID、运行时 JS/CSS 资源，以及可直接复制的回滚命令。`/api/version` 是无需登录的发布元数据接口，只返回版本、完整 commit SHA、构建时间、镜像标签和入口资源；不包含凭据、数据库或宿主机路径。
+- `/api/ready` 继续要求管理员权限；部署脚本不保存管理员密码、会话 Cookie 或部署令牌，而是通过容器内的 `npm run ready:check` 获取同一就绪服务的退出码。
+
 - **单实例**：`container_name: customer-chat-analysis` 固定容器名，`deploy.replicas: 1`，不可 `--scale app=2`；同一宿主机同一数据库只允许一个容器。启动入口的日志锁与端口占用会拒绝第二个实例。
-- **端口**：应用在容器内监听 `0.0.0.0:8787`（`LISTEN_HOST`），Compose 只把端口发布到宿主机 `127.0.0.1:${APP_PORT}`，由内网反向代理 / TLS 终止器对外提供服务；不要直接把应用端口暴露到局域网或公网。
+- **端口**：本地开发服务默认使用 `http://localhost:8787`，Docker 局域网容器内部也固定监听 `0.0.0.0:8787`，但 Compose 只把它发布到宿主机 `127.0.0.1:${APP_PORT}`，再由内网反向代理 / TLS 终止器对外提供服务；不要让本地开发进程和局域网容器同时争用同一宿主机端口，也不要直接把应用端口暴露到局域网或公网。
 - **持久化**：`DEPLOY_DATA_DIR` → `/app/data`（SQLite、上传、导出、日志、备份、`.secrets` 托管密钥），`DEPLOY_KNOWLEDGE_DIR` → `/app/knowledge`（知识快照）。两者必须在主机本地磁盘，不能放网络共享盘。
 - **密钥**：`ENCRYPTION_KEY` 只存在于 `deploy/.env`（不提交、不打入镜像）。若不提供，应用会在 `DATA_DIR/.secrets/` 生成托管密钥文件，必须单独备份（见 [加密密钥管理](encryption-key-management.md)）。会话使用随机令牌，无需额外会话密钥；`SESSION_TTL_HOURS` 控制有效期，`SESSION_COOKIE_SECURE` 默认要求 HTTPS。
 - **内部入口**：`ALLOWED_HOSTS` 与 `ALLOWED_ORIGINS` 必须填写反向代理对外的内网域名，否则应用的浏览器边界会拒绝代理转发的请求（见下节）。
@@ -55,10 +79,10 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-lan-runtime.ps1
 
 ## 升级与回滚
 
-1. 构建并打标签：`docker build -t customer-chat-analysis:lan-<日期> .`，同时更新 `deploy/.env` 的 `APP_IMAGE`。
-2. 升级前备份：`docker exec customer-chat-analysis npm run backup`，确认 `DATA_DIR/backups/full-*` 生成；托管密钥文件一并单独留存。
-3. `docker compose up -d` 完成替换；健康检查通过后再放开代理。
-4. 回滚：把 `APP_IMAGE` 改回上一标签并 `docker compose up -d`；如数据结构不兼容，使用升级前备份按 `docs/guides/backup-and-recovery.md` 恢复到独立目录。
+1. 升级前备份：`docker exec customer-chat-analysis npm run backup`，确认 `DATA_DIR/backups/full-*` 生成；托管密钥文件一并单独留存。
+2. 使用上面的 `scripts/lan-deploy.ps1` 正式发布命令。不要手工修改镜像标签，也不要用裸 `docker compose up -d` 替代标准入口。
+3. 发生核验失败时，脚本尝试恢复发布前记录的镜像；也可以使用 `-RollbackImage <tag>` 显式切换到已知旧镜像，并再次执行健康、就绪、版本和资源核验。
+4. 镜像回滚只切换应用容器，不删除、不重建、不改写 `DEPLOY_DATA_DIR` 或 `DEPLOY_KNOWLEDGE_DIR` 中的持久数据。若新版本已经执行了不兼容的数据结构变更，不能只回滚镜像；必须按升级前备份和 [备份与恢复](backup-and-recovery.md) 指引恢复到独立目录，完成数据库完整性、密钥和业务数据校验后再切换。
 
 ## 没有 Docker 时的 Windows 服务等价契约
 

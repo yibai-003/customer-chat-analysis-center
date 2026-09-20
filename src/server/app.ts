@@ -1,6 +1,8 @@
 import { createSafeUpload, validateXlsx, requireDiskSpace, UploadError } from "./security/upload-safety";
 import { localAccess } from "./security/local-access";
 import { projectRoot } from "./environment";
+import { readRuntimeVersion, type RuntimeVersion } from "./runtime-version";
+import { getReadinessStatus, type ReadinessStatus } from "./services/readiness-service";
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,7 +15,7 @@ import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSection
 import { analyzeRecord } from "./services/analysis-service";
 import { analyzeJob, prepareTargetedRecordIds, retryFailedJob } from "./services/batch-analysis-service";
 import { exportJob } from "./services/excel-export-service";
-import { clearDefaultModel, createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig, getModelReadinessChecks, getModelReadinessActions } from "./services/model-config-service";
+import { clearDefaultModel, createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
 import { listFields, upsertField, deleteField } from "./services/field-config-service";
 import { analyzeField, retryField } from "./services/field-analysis-service";
@@ -36,6 +38,8 @@ interface AppDependencies {
   analysisCapacityProvider?: typeof getAnalysisCapacity;
   analyzeJobRunner?: typeof analyzeJob;
   retryFailedJobStarter?: typeof retryFailedJob;
+  runtimeVersionProvider?: () => RuntimeVersion;
+  readinessProvider?: () => ReadinessStatus;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -94,6 +98,9 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.get("/api/health", (_req, res) => {
     res.json({ success: true, data: { status: "ok" }, error: null });
   });
+  app.get("/api/version", (_req, res) => {
+    return ok(res, (dependencies.runtimeVersionProvider ?? readRuntimeVersion)());
+  });
   app.use("/api/auth", createAuthRouter());
   app.use("/api", requireAuth());
   app.use("/api/admin", createAdminRouter());
@@ -109,13 +116,12 @@ export function createApp(dependencies: AppDependencies = {}) {
   });
   app.get("/api/ready", canManageSystem, (_req, res) => {
     try {
-      const disk = fs.statfsSync(config.dataDir);
-      const freeDiskMb = Math.floor(Number(disk.bavail) * Number(disk.bsize) / 1024 / 1024);
-      const checks = getModelReadinessChecks();
-      const vision = checks.vision.verified;
-      const text = checks.text.verified;
-      const ready = freeDiskMb >= config.minFreeDiskMb && vision && text;
-      return res.status(ready ? 200 : 503).json({ success: ready, data: { ready, database: true, freeDiskMb, minFreeDiskMb: config.minFreeDiskMb, models: { vision, text }, modelChecks: checks, actions: getModelReadinessActions() }, error: ready ? null : "模型未检测、检测失败/过期，或磁盘空间不足" });
+      const status = (dependencies.readinessProvider ?? getReadinessStatus)();
+      return res.status(status.ready ? 200 : 503).json({
+        success: status.ready,
+        data: status,
+        error: status.ready ? null : "数据库未就绪、模型未检测/失败/过期，或磁盘空间不足",
+      });
     } catch (error) { return fail(res, error, 503); }
   });
   app.get("/api/system/analysis-capacity", canCheckCapacity, (_req, res) => {
