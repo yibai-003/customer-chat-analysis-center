@@ -8,6 +8,7 @@
     "smoke": "node scripts/smoke-local.mjs",
     "typecheck": "tsc --noEmit",
     "build": "vite build",
+    "ready:check": "tsx src/server/readiness-cli.ts",
     "knowledge:export": "tsx src/server/knowledge-cli.ts export",
     "knowledge:push": "tsx src/server/knowledge-cli.ts push",
     "knowledge:restore": "tsx src/server/knowledge-cli.ts restore",
