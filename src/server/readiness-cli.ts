@@ -6,10 +6,32 @@ export interface ReadinessCliOptions {
   write?: (value: string) => void;
 }
 
+export interface ReadinessCliFailure {
+  ready: false;
+  database: false;
+  error: string;
+}
+
+const failureJson = JSON.stringify({
+  ready: false,
+  database: false,
+  error: "Readiness check failed",
+} satisfies ReadinessCliFailure);
+
 export function runReadinessCli(options: ReadinessCliOptions = {}): number {
-  const status = (options.provider ?? getReadinessStatus)();
-  (options.write ?? console.log)(JSON.stringify(status));
-  return status.ready ? 0 : 1;
+  let output: string;
+  let exitCode = 1;
+
+  try {
+    const status = (options.provider ?? getReadinessStatus)();
+    output = JSON.stringify(status);
+    exitCode = status.ready ? 0 : 1;
+  } catch {
+    output = failureJson;
+  }
+
+  (options.write ?? console.log)(output);
+  return exitCode;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
