@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { describe, expect, it } from "vitest";
-import { currentSchemaVersion } from "../db/migrations";
+import { currentSchemaVersion, migrations } from "../db/migrations";
 import { getReadinessStatus, isDatabaseReady } from "./readiness-service";
 
 const checks = {
@@ -71,19 +71,37 @@ describe("readiness service", () => {
         name TEXT NOT NULL,
         applied_at TEXT NOT NULL
       );
-      INSERT INTO schema_migrations VALUES (${currentSchemaVersion}, 'current', 'now');
       CREATE TABLE analysis_sections (id TEXT PRIMARY KEY);
       CREATE TABLE analysis_fields (id TEXT PRIMARY KEY);
       CREATE TABLE knowledge_bases (id TEXT PRIMARY KEY);
       CREATE TABLE knowledge_items (id TEXT PRIMARY KEY);
     `);
+    const insertMigration = database.prepare(
+      "INSERT INTO schema_migrations VALUES (?, ?, 'now')",
+    );
+    for (const migration of migrations) {
+      insertMigration.run(migration.version, migration.name);
+    }
     database.close();
 
     try {
       expect(isDatabaseReady(databasePath)).toBe(true);
       const incomplete = new Database(databasePath);
-      incomplete.exec("DROP TABLE analysis_fields");
+      incomplete.prepare("DELETE FROM schema_migrations WHERE version = ?").run(currentSchemaVersion - 1);
       incomplete.close();
+      expect(isDatabaseReady(databasePath)).toBe(false);
+
+      const wrongName = new Database(databasePath);
+      wrongName.prepare(
+        "INSERT INTO schema_migrations VALUES (?, 'wrong-name', 'now')",
+      ).run(currentSchemaVersion - 1);
+      wrongName.close();
+      expect(isDatabaseReady(databasePath)).toBe(false);
+
+      const missingTable = new Database(databasePath);
+      missingTable.prepare("DELETE FROM schema_migrations WHERE version = ?").run(currentSchemaVersion - 1);
+      missingTable.exec("DROP TABLE analysis_fields");
+      missingTable.close();
       expect(isDatabaseReady(databasePath)).toBe(false);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });

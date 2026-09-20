@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import Database from "better-sqlite3";
 import { config } from "../config";
-import { appliedMigrations, currentSchemaVersion } from "../db/migrations";
+import {
+  appliedMigrations,
+  currentSchemaVersion,
+  migrations,
+} from "../db/migrations";
 import {
   getModelReadinessActions,
   getModelReadinessChecks,
@@ -51,8 +55,19 @@ export function isDatabaseReady(databasePath: string): boolean {
     database = new Database(databasePath, { readonly: true, fileMustExist: true });
     if (database.pragma("integrity_check", { simple: true }) !== "ok") return false;
     if (database.pragma("foreign_key_check").length > 0) return false;
-    const version = appliedMigrations(database).at(-1)?.version ?? 0;
-    if (version !== currentSchemaVersion) return false;
+    const applied = appliedMigrations(database);
+    const hasLegacyVersion = applied[0]?.version === 1;
+    const current = hasLegacyVersion ? applied.slice(1) : applied;
+    if (
+      current.length !== migrations.length
+      || current.at(-1)?.version !== currentSchemaVersion
+      || current.some((migration, index) => {
+        const expected = migrations[index];
+        return migration.version !== expected.version || migration.name !== expected.name;
+      })
+    ) {
+      return false;
+    }
     return REQUIRED_TABLES.every((table) => (
       database.prepare(
         "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
