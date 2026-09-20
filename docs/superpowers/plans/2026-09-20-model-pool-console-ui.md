@@ -388,7 +388,7 @@ describe("QuotaMeter", () => {
     expect(now).toBeLessThanOrEqual(max);
   });
 
-  it("renders unlimited and invalid states without a progressbar", () => {
+  it("renders unlimited and invalid values and statuses once without a progressbar", () => {
     const { rerender } = render(<QuotaMeter
       modelName="不限额模型"
       quota={quotaPresentation({
@@ -398,7 +398,8 @@ describe("QuotaMeter", () => {
         quotaBlocked: false,
       })}
     />);
-    expect(screen.getByText("不限额")).toBeTruthy();
+    expect(screen.getAllByText("10")).toHaveLength(1);
+    expect(screen.getAllByText("不限额")).toHaveLength(1);
     expect(screen.queryByRole("progressbar")).toBeNull();
 
     rerender(<QuotaMeter
@@ -410,7 +411,44 @@ describe("QuotaMeter", () => {
         quotaBlocked: false,
       })}
     />);
-    expect(screen.getByText("额度数据异常")).toBeTruthy();
+    expect(screen.getAllByText("10")).toHaveLength(1);
+    expect(screen.getAllByText("额度数据异常")).toHaveLength(1);
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("renders exhausted missing-total state once without a progressbar", () => {
+    const { container } = render(<QuotaMeter
+      modelName="无总额耗尽模型"
+      quota={quotaPresentation({
+        quotaUsedTokens: 1_200,
+        quotaSafetyRatio: 0.95,
+        quotaBlocked: true,
+        quotaExhaustedAt: "2026-09-20T08:00:00.000Z",
+      })}
+    />);
+    expect(screen.getAllByText("1,200")).toHaveLength(1);
+    expect(screen.getAllByText("额度已耗尽")).toHaveLength(1);
+    expect(container.querySelector(".quota-meter")?.getAttribute("data-quota-state"))
+      .toBe("exhausted");
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("renders exhausted invalid-total state once without a progressbar", () => {
+    const { container } = render(<QuotaMeter
+      modelName="异常总额耗尽模型"
+      quota={quotaPresentation({
+        quotaUsedTokens: 50,
+        quotaTotalTokens: 0,
+        quotaSafetyRatio: 0.95,
+        quotaBlocked: true,
+        quotaExhaustedAt: "2026-09-20T08:00:00.000Z",
+      })}
+    />);
+    expect(screen.getAllByText("50")).toHaveLength(1);
+    expect(screen.getAllByText("额度已耗尽")).toHaveLength(1);
+    expect(container.querySelector(".quota-meter")?.getAttribute("data-quota-state"))
+      .toBe("exhausted");
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 });
 ```
@@ -443,7 +481,7 @@ export function QuotaMeter({
     return (
       <div className={`quota-meter ${quota.tone}`} data-quota-state={quota.tone}>
         <span className="quota-meter-value">
-          {formatQuotaTokens(quota.used)} / {quota.statusText}
+          {formatQuotaTokens(quota.used)}
         </span>
         <span className="quota-meter-status">{quota.statusText}</span>
       </div>
@@ -478,7 +516,7 @@ Run:
 npx vitest run src/client/components/model-config/QuotaMeter.test.tsx
 ```
 
-Expected: 3 tests PASS.
+Expected: 5 tests PASS.
 
 - [ ] **Step 5: Commit**
 
