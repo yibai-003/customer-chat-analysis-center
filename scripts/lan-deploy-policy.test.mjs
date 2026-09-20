@@ -111,6 +111,66 @@ const malformedVerificationCases = [
     input.entryAssets.styles = [42];
     return input;
   }],
+  ["empty asset sets", () => {
+    const input = matchingDeployment();
+    input.runtime.assets = { scripts: [], styles: [] };
+    input.entryAssets = { scripts: [], styles: [] };
+    return input;
+  }],
+  ["empty asset path", () => {
+    const input = matchingDeployment();
+    input.runtime.assets.scripts = [""];
+    return input;
+  }],
+  ["script path with query", () => {
+    const input = matchingDeployment();
+    input.runtime.assets.scripts = ["assets/app.js?v=1"];
+    return input;
+  }],
+  ["style path with hash", () => {
+    const input = matchingDeployment();
+    input.entryAssets.styles = ["assets/app.css#theme"];
+    return input;
+  }],
+  ["script path with leading slash", () => {
+    const input = matchingDeployment();
+    input.entryAssets.scripts = ["/assets/app.js"];
+    return input;
+  }],
+  ["style path with dot slash", () => {
+    const input = matchingDeployment();
+    input.runtime.assets.styles = ["./assets/app.css"];
+    return input;
+  }],
+  ["script path with wrong extension", () => {
+    const input = matchingDeployment();
+    input.runtime.assets.scripts = ["assets/app.css"];
+    return input;
+  }],
+  ["style path with wrong extension", () => {
+    const input = matchingDeployment();
+    input.entryAssets.styles = ["assets/app.js"];
+    return input;
+  }],
+  ["duplicate asset path", () => {
+    const input = matchingDeployment();
+    input.runtime.assets.scripts = ["assets/app.js", "assets/app.js"];
+    return input;
+  }],
+  ["sparse asset array", () => {
+    const input = matchingDeployment();
+    input.entryAssets.styles = new Array(1);
+    return input;
+  }],
+  ["untagged target image", () => ({
+    ...matchingDeployment(),
+    targetImage: "registry.example.com:5000/org/app",
+  })],
+  ["untagged runtime image", () => {
+    const input = matchingDeployment();
+    input.runtime.image = "org/app";
+    return input;
+  }],
 ];
 
 const invalidImageTagCases = [
@@ -250,8 +310,44 @@ describe("LAN deployment policy", () => {
     });
   });
 
+  it("follows HTML boundaries and raw-text rules for entry assets", () => {
+    const html = [
+      '<!-- <script src="/assets/comment.js"></script> -->',
+      '<!DOCTYPE html PUBLIC "<script src=\'/assets/declaration.js\'>">',
+      '<?instruction href="/assets/instruction.css"?>',
+      '< script src="/assets/spaced-tag.js"></script>',
+      '<scripture src="/assets/not-script.js"></scripture>',
+      '<script src="/assets/app.js?v=1#entry" src="/assets/duplicate.js">',
+      'const fake = "<script src=\\"/assets/script-string.js\\"></script>";',
+      "</script>",
+      "<style>",
+      '.fake::before { content: "<link href=\\"/assets/style-string.css\\">"; }',
+      "</style>",
+      '<link data-href="/assets/decoy.css" HREF = "./assets/app.css?theme=1#main" href="/assets/duplicate.css">',
+      '<script SRC="./assets/vendor.js#module"></script>',
+      '<link href="/assets/app.css?duplicate=1">',
+    ].join("");
+
+    expect(extractEntryAssets(html)).toEqual({
+      scripts: ["assets/app.js", "assets/vendor.js"],
+      styles: ["assets/app.css"],
+    });
+  });
+
   it("accepts a healthy ready deployment with matching order-insensitive assets", () => {
     expect(verifyDeployment(matchingDeployment())).toEqual({
+      ok: true,
+      reasons: [],
+      rollback: false,
+    });
+  });
+
+  it("compares valid commit SHAs case-insensitively", () => {
+    const input = matchingDeployment();
+    input.targetCommitSha = "ABCDEF1234567890ABCDEF1234567890ABCDEF12";
+    input.runtime.commitSha = "abcdef1234567890abcdef1234567890abcdef12";
+
+    expect(verifyDeployment(input)).toEqual({
       ok: true,
       reasons: [],
       rollback: false,
@@ -273,18 +369,14 @@ describe("LAN deployment policy", () => {
     });
   });
 
-  it("compares scripts and styles as separate asset sets", () => {
+  it("rejects assets assigned to the wrong collection", () => {
     const input = matchingDeployment();
     input.entryAssets = {
       scripts: input.runtime.assets.styles,
       styles: input.runtime.assets.scripts,
     };
 
-    expect(verifyDeployment(input)).toEqual({
-      ok: false,
-      reasons: ["assets"],
-      rollback: true,
-    });
+    expect(() => verifyDeployment(input)).toThrow(/verification input.*scripts/i);
   });
 
   it.each(malformedVerificationCases)(
