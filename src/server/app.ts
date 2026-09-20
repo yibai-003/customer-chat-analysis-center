@@ -120,7 +120,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       return res.status(status.ready ? 200 : 503).json({
         success: status.ready,
         data: status,
-        error: status.ready ? null : "模型未检测、检测失败/过期，或磁盘空间不足",
+        error: status.ready ? null : "数据库未就绪、模型未检测/失败/过期，或磁盘空间不足",
       });
     } catch (error) { return fail(res, error, 503); }
   });

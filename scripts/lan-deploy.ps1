@@ -187,7 +187,8 @@ try {
     if ($LASTEXITCODE -ne 0 -or -not $targetVersion) {
       throw "无法读取 package.json 版本"
     }
-    $targetImage = ((& node $PolicyPath image-tag $ImageRepository $targetVersion $commit) | Out-String).Trim()
+    $imageVersion = if ($Preview) { "$targetVersion-preview" } else { $targetVersion }
+    $targetImage = ((& node $PolicyPath image-tag $ImageRepository $imageVersion $commit) | Out-String).Trim()
     if ($LASTEXITCODE -ne 0 -or -not $targetImage) {
       throw "无法生成目标镜像标签"
     }

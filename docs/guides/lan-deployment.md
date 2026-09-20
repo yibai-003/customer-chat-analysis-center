@@ -38,7 +38,7 @@ pwsh -File scripts/lan-deploy.ps1 `
     -RollbackImage customer-chat-analysis-center:0.1.0-aaaaaaaaaaaa
   ```
 
-- 脚本先记录当前运行镜像，再按健康检查、容器内 `npm run ready:check`、`/api/version` 和入口 HTML 资源顺序核验。健康、就绪、提交、镜像或 JS/CSS 资源任一核验失败时返回非零，并尝试恢复上一镜像。
+- 脚本先记录当前运行镜像，再按健康检查、容器内 `npm run ready:check`、`/api/version` 和入口 HTML 资源顺序核验。`ready:check` 只读检查数据目录、SQLite 完整性、外键、当前迁移版本、关键表、磁盘空间和模型状态。健康、就绪、提交、镜像或 JS/CSS 资源任一核验失败时返回非零，并尝试恢复上一镜像。
 - 成功输出应包含目标 commit、镜像标签、镜像 ID、运行时 JS/CSS 资源，以及可直接复制的回滚命令。`/api/version` 是无需登录的发布元数据接口，只返回版本、完整 commit SHA、构建时间、镜像标签和入口资源；不包含凭据、数据库或宿主机路径。
 - `/api/ready` 继续要求管理员权限；部署脚本不保存管理员密码、会话 Cookie 或部署令牌，而是通过容器内的 `npm run ready:check` 获取同一就绪服务的退出码。
 

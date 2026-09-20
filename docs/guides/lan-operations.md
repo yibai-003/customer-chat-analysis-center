@@ -12,7 +12,7 @@
 4. 启动：从仓库根目录执行 `pwsh -File scripts/lan-deploy.ps1 -EnvFile deploy/.env -ContainerName customer-chat-analysis -EntryUrl http://127.0.0.1:8787`；等待脚本完成健康、容器内就绪、运行版本和入口资源核验。首次启动自动生成数据库、托管密钥（`.secrets/app.db.key.json`）与知识快照。
 5. 可复跑验证：`pwsh -File scripts/verify-lan-runtime.ps1` 应返回 `PASS`（镜像、健康、非 root、持久化重建、单实例保护、Compose 校验）。
 
-标准部署拒绝未提交改动的正式发布；需要明确标记的非发布构建时才使用 `-Preview`。仅执行 `git push` 不会构建镜像、替换运行容器或更新局域网入口。成功输出应记录 commit、镜像标签、镜像 ID、运行时 JS/CSS 资源和回滚命令。`/api/version` 可在不登录的情况下读取这些发布元数据，`/api/ready` 仍只对管理员开放，部署脚本通过容器内 `npm run ready:check` 获取就绪结果。
+标准部署拒绝未提交改动的正式发布；需要明确标记的非发布构建时才使用 `-Preview`。仅执行 `git push` 不会构建镜像、替换运行容器或更新局域网入口。成功输出应记录 commit、镜像标签、镜像 ID、运行时 JS/CSS 资源和回滚命令。`/api/version` 可在不登录的情况下读取这些发布元数据，`/api/ready` 仍只对管理员开放，部署脚本通过容器内 `npm run ready:check` 获取就绪结果；就绪检查会验证 SQLite 完整性、外键、迁移版本和关键业务表。
 
 ## 2. 管理员初始化
 

@@ -231,6 +231,7 @@ describe("LAN deployment policy", () => {
     expect(script).toContain("npm run build");
     expect(script).toContain("--build-arg \"APP_COMMIT_SHA=$commit\"");
     expect(script).toContain("docker compose");
+    expect(script).toContain("$targetVersion-preview");
   });
 
   it("checks the restored runtime image without deleting persistent directories", () => {
