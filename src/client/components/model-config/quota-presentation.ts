@@ -6,6 +6,7 @@ export interface QuotaInput {
   quotaTotalTokens?: number | null;
   quotaSafetyRatio: number;
   quotaBlocked: boolean;
+  quotaExhaustedAt?: string | null;
 }
 
 export interface QuotaPresentation {
@@ -15,6 +16,7 @@ export interface QuotaPresentation {
   total: number | null;
   remaining: number | null;
   percent: number;
+  progressValue: number;
   statusText: string;
 }
 
@@ -36,6 +38,7 @@ export function quotaPresentation(input: QuotaInput): QuotaPresentation {
       total: null,
       remaining: null,
       percent: 0,
+      progressValue: 0,
       statusText: "不限额",
     };
   }
@@ -48,6 +51,7 @@ export function quotaPresentation(input: QuotaInput): QuotaPresentation {
       total: null,
       remaining: null,
       percent: 0,
+      progressValue: 0,
       statusText: "额度数据异常",
     };
   }
@@ -56,9 +60,9 @@ export function quotaPresentation(input: QuotaInput): QuotaPresentation {
   const threshold = Number.isFinite(input.quotaSafetyRatio)
     ? Math.min(1, Math.max(0, input.quotaSafetyRatio))
     : 0.95;
-  const tone = input.quotaBlocked || used >= total
+  const tone = used >= total || Boolean(input.quotaExhaustedAt)
     ? "exhausted"
-    : ratio >= threshold
+    : input.quotaBlocked || ratio >= threshold
       ? "warning"
       : "normal";
   return {
@@ -68,6 +72,7 @@ export function quotaPresentation(input: QuotaInput): QuotaPresentation {
     total,
     remaining: Math.max(0, total - used),
     percent,
+    progressValue: Math.min(used, total),
     statusText: tone === "exhausted"
       ? "额度已耗尽"
       : tone === "warning"
