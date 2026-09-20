@@ -22,6 +22,7 @@ import {
   resolvePoolMembers,
   type ResolvedPoolMember,
 } from "./model-provider-service";
+import { rankEligibleModelCandidates } from "./model-pool-policy";
 
 export interface ModelPoolCallOptions {
   purpose: ModelPurpose;
@@ -45,36 +46,6 @@ export class ModelPoolError extends Error {
   }
 }
 
-function expiryTime(member: ResolvedPoolMember) {
-  if (!member.quotaExpiresAt) return Number.POSITIVE_INFINITY;
-  const value = Date.parse(member.quotaExpiresAt);
-  return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
-}
-
-function remainingQuota(member: ResolvedPoolMember) {
-  return Math.max(0, (member.quotaTotalTokens ?? Number.MAX_SAFE_INTEGER) - member.quotaUsedTokens);
-}
-
-function commonEligible(
-  member: ResolvedPoolMember,
-  now: number,
-  failedMemberIds: ReadonlySet<string>,
-) {
-  if (!member.isEnabled
-    || !member.poolEnabled
-    || !member.providerEnabled
-    || !member.capabilityEligible
-    || member.memberType !== "general"
-    || failedMemberIds.has(member.id)) return false;
-  if (member.cooldownUntil && Date.parse(member.cooldownUntil) > now) return false;
-  if (member.billingMode === "free") {
-    if (expiryTime(member) <= now) return false;
-    const safetyLimit = (member.quotaTotalTokens ?? 0) * member.quotaSafetyRatio;
-    if (member.quotaBlocked || member.quotaUsedTokens >= safetyLimit) return false;
-  }
-  return true;
-}
-
 export function rankPoolCandidates(
   members: ResolvedPoolMember[],
   options: {
@@ -83,33 +54,7 @@ export function rankPoolCandidates(
     failedMemberIds: ReadonlySet<string>;
   },
 ): ResolvedPoolMember[] {
-  const eligible = members.filter((member) =>
-    commonEligible(member, options.now, options.failedMemberIds)
-      && (member.billingMode === "free" || options.allowPaid)
-  );
-  const hasNonThinkingFree = eligible.some((member) =>
-    member.billingMode === "free" && !member.thinkingMode
-  );
-  const tier = { A: 0, B: 1, C: 2 } as const;
-  return eligible
-    .filter((member) =>
-      !(hasNonThinkingFree && member.billingMode === "free" && member.thinkingMode)
-    )
-    .sort((left, right) => {
-      if (left.billingMode !== right.billingMode) return left.billingMode === "free" ? -1 : 1;
-      if (left.billingMode === "free") {
-        const expiryDifference = expiryTime(left) - expiryTime(right);
-        if (expiryDifference) return expiryDifference;
-        const quotaDifference = remainingQuota(left) - remainingQuota(right);
-        if (quotaDifference) return quotaDifference;
-      }
-      if (tier[left.qualityTier] !== tier[right.qualityTier]) {
-        return tier[left.qualityTier] - tier[right.qualityTier];
-      }
-      if (left.thinkingMode !== right.thinkingMode) return left.thinkingMode ? 1 : -1;
-      if (left.priority !== right.priority) return left.priority - right.priority;
-      return left.consecutiveFailures - right.consecutiveFailures || left.id.localeCompare(right.id);
-    });
+  return rankEligibleModelCandidates(members, options);
 }
 
 function usageDetails(usage: Usage) {

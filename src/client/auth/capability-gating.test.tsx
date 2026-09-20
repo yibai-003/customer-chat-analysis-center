@@ -139,6 +139,13 @@ async function openRecordDetail() {
   await waitFor(() => expect(host.textContent).toContain("RECORD 01"));
 }
 
+async function openManagementMenu() {
+  const trigger = host.querySelector<HTMLButtonElement>('[aria-label="打开管理菜单"]');
+  expect(trigger).not.toBeNull();
+  await act(async () => trigger!.click());
+  await waitFor(() => expect(host.querySelector('[role="menu"][aria-label="管理操作"]')).not.toBeNull());
+}
+
 beforeEach(() => {
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   host = document.createElement("div");
@@ -181,6 +188,8 @@ describe("capability gating in the workspace", () => {
     expectButtonVisible("批量解析 →", false);
     expectButtonVisible("导出结果 ↗", true);
     expect(host.querySelector('input[aria-label^="选择记录"]')).toBeNull();
+    expect(host.querySelector(".list-head")?.classList.contains("list-head-without-selection")).toBe(true);
+    expect(host.querySelector(".record")?.classList.contains("record-without-selection")).toBe(true);
 
     await openRecordDetail();
     expectButtonVisible("保存复核", true);
@@ -212,6 +221,7 @@ describe("capability gating in the workspace", () => {
 
   it("shows configuration entries only to configuration and admin roles", async () => {
     await renderWorkspace("config");
+    await openManagementMenu();
     expectButtonVisible("板块配置", true);
     expectButtonVisible("模型配置", true);
     expectButtonVisible("＋ 导入 Excel", false);
@@ -226,6 +236,7 @@ describe("capability gating in the workspace", () => {
 
   it("shows the account, audit and backup management entries only to administrators", async () => {
     await renderWorkspace("admin");
+    await openManagementMenu();
     expectButtonVisible("账号管理", true);
     expectButtonVisible("审计日志", true);
     expectButtonVisible("备份管理", true);

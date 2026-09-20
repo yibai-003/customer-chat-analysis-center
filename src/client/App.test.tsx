@@ -496,6 +496,246 @@ async function flushMicrotasks() {
   });
 }
 
+function useDrawerViewport(matches: boolean) {
+  vi.stubGlobal("matchMedia", vi.fn().mockImplementation(() => ({
+    matches,
+    media: "(max-width: 1199px)",
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })));
+}
+
+describe("responsive detail drawer", () => {
+  it("keeps the closed drawer inert and exposes modal semantics when opened", async () => {
+    useDrawerViewport(true);
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+
+    const panel = host.querySelector<HTMLElement>(".detail")!;
+    expect(panel.getAttribute("role")).toBe("dialog");
+    expect(panel.getAttribute("aria-hidden")).toBe("true");
+    expect(panel.hasAttribute("inert")).toBe(true);
+
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")!.click());
+    await waitFor(() => expect(panel.classList.contains("detail-drawer-open")).toBe(true));
+
+    expect(panel.getAttribute("aria-modal")).toBe("true");
+    expect(panel.hasAttribute("inert")).toBe(false);
+    expect(host.querySelector(".detail-drawer-backdrop")).not.toBeNull();
+    expect(host.querySelector(".topbar")?.hasAttribute("inert")).toBe(true);
+    expect(host.querySelector(".sidebar")?.hasAttribute("inert")).toBe(true);
+    expect(host.querySelector(".content")?.hasAttribute("inert")).toBe(true);
+    expect(panel.querySelector(".detail-shell > .detail-scroll")).not.toBeNull();
+    expect(panel.querySelector(".detail-shell > .detail-actions")).not.toBeNull();
+  });
+
+  it("closes on Escape and restores focus to the record trigger", async () => {
+    useDrawerViewport(true);
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+
+    const trigger = host.querySelector<HTMLButtonElement>(".record-select")!;
+    await act(async () => trigger.click());
+    await waitFor(() => expect(host.querySelector(".detail")?.classList.contains("detail-drawer-open")).toBe(true));
+
+    expect(document.body.classList.contains("detail-drawer-active")).toBe(true);
+    expect(host.querySelector(".detail-close")).not.toBeNull();
+
+    const focusTrigger = trigger.focus.bind(trigger);
+    vi.spyOn(trigger, "focus").mockImplementation(() => {
+      if (!host.querySelector(".detail")?.classList.contains("detail-drawer-open")) focusTrigger();
+    });
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+
+    expect(host.querySelector(".detail")?.classList.contains("detail-drawer-open")).toBe(false);
+    expect(document.body.classList.contains("detail-drawer-active")).toBe(false);
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  it("cycles keyboard focus inside the open drawer", async () => {
+    useDrawerViewport(true);
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")!.click());
+    await waitFor(() => expect(host.querySelector(".detail-drawer-open .detail-close")).not.toBeNull());
+
+    const panel = host.querySelector<HTMLElement>(".detail")!;
+    const first = panel.querySelector<HTMLButtonElement>(".detail-close")!;
+    const focusable = [...panel.querySelectorAll<HTMLElement>("button, textarea, input, select, [tabindex]:not([tabindex='-1'])")]
+      .filter((element) => !element.hasAttribute("disabled"));
+    const last = focusable.at(-1)!;
+
+    last.focus();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    });
+    expect(document.activeElement).toBe(first);
+
+    first.focus();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", shiftKey: true, bubbles: true }));
+    });
+    expect(document.activeElement).toBe(last);
+
+    host.querySelector<HTMLButtonElement>('[aria-label="刷新进度"]')!.focus();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Tab", bubbles: true }));
+    });
+    expect(document.activeElement).toBe(first);
+  });
+
+  it("keeps the detail drawer open when Escape closes the image preview", async () => {
+    useDrawerViewport(true);
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")!.click());
+    await waitFor(() => expect(host.querySelector(".detail-drawer-open")).not.toBeNull());
+
+    const imageTrigger = host.querySelector<HTMLButtonElement>(".detail-image-button")!;
+    await act(async () => imageTrigger.click());
+    await waitFor(() => expect(host.querySelector(".image-preview-backdrop")).not.toBeNull());
+    expect(document.activeElement).toBe(host.querySelector('[aria-label="关闭图片预览"]'));
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+
+    await waitFor(() => expect(host.querySelector(".image-preview-backdrop")).toBeNull());
+    expect(host.querySelector(".detail")?.classList.contains("detail-drawer-open")).toBe(true);
+    await waitFor(() => expect(document.activeElement).toBe(imageTrigger));
+  });
+
+  it("does not reopen a stale record while a different detail is loading", async () => {
+    useDrawerViewport(true);
+    const secondDetail = deferred<Response>();
+    const fallback = responseFor;
+    responseFor = (url, init) => {
+      if (url.startsWith("/api/jobs/job-1/records")) {
+        return jsonResponse(page([record("page-1", 1), record("page-2", 2)], 2, 1));
+      }
+      if (url === "/api/records/page-2") return secondDetail.promise;
+      return fallback(url, init);
+    };
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 02"));
+
+    const triggers = host.querySelectorAll<HTMLButtonElement>(".record-select");
+    await act(async () => triggers[0]!.click());
+    await waitFor(() => expect(host.textContent).toContain("RECORD 01"));
+    await act(async () => host.querySelector<HTMLButtonElement>(".detail-close")!.click());
+    await act(async () => triggers[1]!.click());
+
+    expect(host.textContent).not.toContain("RECORD 01");
+    expect(host.querySelector(".detail")?.classList.contains("detail-drawer-open")).toBe(false);
+
+    await act(async () => {
+      secondDetail.resolve(jsonResponse(detail(record("page-2", 2))));
+      await secondDetail.promise;
+    });
+    await waitFor(() => expect(host.textContent).toContain("RECORD 02"));
+    expect(host.querySelector(".detail")?.classList.contains("detail-drawer-open")).toBe(true);
+  });
+
+  it("keeps the wide detail panel non-modal", async () => {
+    useDrawerViewport(false);
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+    await act(async () => host.querySelector<HTMLButtonElement>(".record-select")!.click());
+    await waitFor(() => expect(host.textContent).toContain("RECORD 01"));
+
+    const panel = host.querySelector<HTMLElement>(".detail")!;
+    expect(panel.getAttribute("role")).toBe("complementary");
+    expect(panel.hasAttribute("aria-modal")).toBe(false);
+    expect(panel.hasAttribute("inert")).toBe(false);
+    expect(host.querySelector(".detail-drawer-backdrop")).toBeNull();
+    expect(document.body.classList.contains("detail-drawer-active")).toBe(false);
+  });
+});
+
+describe("workbench topbar menus", () => {
+  it("groups management actions and exposes the current user menu", async () => {
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+
+    expect(host.querySelector(".top-management-actions")).toBeNull();
+    expect(host.querySelector('[aria-label="打开管理菜单"]')).toBeTruthy();
+    expect(host.querySelector('[aria-label="打开用户菜单"]')).toBeTruthy();
+
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="打开管理菜单"]')!.click());
+    expect(host.textContent).toContain("板块配置");
+    expect(host.textContent).toContain("模型配置");
+    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="打开用户菜单"]')!.click());
+    expect(host.textContent).toContain("测试管理员");
+    expect(host.textContent).toContain("管理员");
+    expect(host.querySelector('[aria-label="关闭管理菜单"]')).toBeNull();
+    expect(host.querySelector('[aria-label="关闭用户菜单"]')).toBeTruthy();
+  });
+
+  it("closes the open menu on Escape and outside pointer interaction", async () => {
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="打开管理菜单"]')!.click());
+    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector('[aria-label="打开管理菜单"]'));
+
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="打开用户菜单"]')!.click());
+    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+    await act(async () => {
+      document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    });
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(host.querySelector('[aria-label="打开用户菜单"]'));
+  });
+
+  it("keeps export disabled and import prominent when there is no task", async () => {
+    responseFor = (url) => url === "/api/jobs" ? jsonResponse([]) : defaultResponse(url);
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("等待导入解析文件"));
+
+    expect(host.querySelector('label.button.task-action-primary')?.textContent).toContain("导入 Excel");
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="刷新进度"]')?.classList.contains("task-action-tertiary")).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="刷新进度"]')?.disabled).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="导出结果"]')?.classList.contains("task-action-secondary")).toBe(true);
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="导出结果"]')?.disabled).toBe(true);
+  });
+
+  it("keeps one primary task action and lighter refresh and export actions with a loaded task", async () => {
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+
+    expect(host.querySelectorAll(".top-actions .task-action-primary")).toHaveLength(1);
+    expect(host.querySelector(".top-actions .task-action-primary")?.textContent).toContain("导入 Excel");
+    expect(host.querySelector('[aria-label="刷新进度"]')?.classList.contains("task-action-tertiary")).toBe(true);
+    expect(host.querySelector('[aria-label="导出结果"]')?.classList.contains("task-action-secondary")).toBe(true);
+  });
+
+  it("does not render the management menu for an operator without management capabilities", async () => {
+    responseFor = (url) => url === "/api/auth/me"
+      ? jsonResponse({ user: { ...currentUser, role: "operator", displayName: "测试操作员" }, capabilities: capabilitiesForRole("operator") })
+      : defaultResponse(url);
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+
+    expect(host.querySelector('[aria-label="打开管理菜单"]')).toBeNull();
+    expect(host.querySelector('[aria-label="打开用户菜单"]')).toBeTruthy();
+    expect(host.textContent).not.toContain("板块配置");
+  });
+});
+
 describe("targeted record analysis", () => {
   it("sends only the selected records and keeps checkbox clicks from opening the detail", async () => {
     responseFor = (url, init) => {

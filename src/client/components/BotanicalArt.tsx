@@ -3,12 +3,12 @@ import archingFern from "../assets/botanical/fern-arching.webp";
 import fineFern from "../assets/botanical/fern-fine.webp";
 
 /** Decorative museum illustrations; attribution is available from ArtworkCredits. */
-export function BotanicalArt({ variant = "garden" }: { variant?: "garden" | "specimen" | "leaves" }) {
+export function BotanicalArt({ variant = "garden" }: { variant?: "garden" | "specimen" | "leaves" | "single-specimen" }) {
   return <div className={`botanical-art botanical-art--${variant}`} aria-hidden="true">
     <span className="botanical-art__paper" />
     <span className="botanical-art__scrap" />
-    <img className="botanical-art__leaf botanical-art__leaf--back" src={archingFern} alt="" width="170" height="230" decoding="async" />
-    <img className="botanical-art__leaf botanical-art__leaf--front" src={variant === "specimen" ? broadFern : fineFern} alt="" width="150" height="210" decoding="async" />
+    {variant !== "single-specimen" && <img className="botanical-art__leaf botanical-art__leaf--back" src={archingFern} alt="" width="170" height="230" decoding="async" />}
+    <img className="botanical-art__leaf botanical-art__leaf--front" src={variant === "specimen" || variant === "single-specimen" ? broadFern : fineFern} alt="" width="150" height="210" decoding="async" />
     <span className="botanical-art__tape" />
   </div>;
 }

@@ -16,38 +16,6 @@ export function exportColumns(sections: ReturnType<typeof listSections>) {
   })));
 }
 
-export function exportMetadataHeaders() {
-  return ["解析状态", "复核状态", "复核备注"];
-}
-
-function selectedReviewMetadata(
-  detail: NonNullable<ReturnType<typeof getRecord>>,
-  sections: ReturnType<typeof listSections>,
-) {
-  const selected = sections.map((section) => ({
-    section,
-    review: detail.sectionReviews?.[section.id],
-  }));
-  if (selected.length === 1) {
-    return {
-      status: selected[0].review?.reviewStatus ?? detail.reviewStatus,
-      note: selected[0].review?.reviewNote ?? detail.reviewNote,
-    };
-  }
-  const reviews = selected.map((item) => item.review);
-  if (!reviews.some(Boolean)) return { status: detail.reviewStatus, note: detail.reviewNote };
-  const status = reviews.some((review) => review?.reviewStatus === "needs_review")
-    ? "needs_review"
-    : reviews.length > 0 && reviews.every((review) => review?.reviewStatus === "confirmed")
-      ? "confirmed"
-      : "pending";
-  const note = selected
-    .filter((item) => item.review?.reviewNote)
-    .map((item) => `${item.section.name}：${item.review!.reviewNote}`)
-    .join("；");
-  return { status, note };
-}
-
 export async function exportJob(jobId: string, sectionIds: string[]) {
   const job = getJob(jobId);
   if (!job) throw new Error("任务不存在");
@@ -70,8 +38,7 @@ export async function exportJob(jobId: string, sectionIds: string[]) {
       output.forEach((item) => { headers[item.column - 1] = item.header; });
       plans.push({ section, fields, output });
     }
-    const metadata = exportMetadataHeaders().map((header, index) => ({ header, column: headers.length + index + 1 }));
-    [...plans.flatMap((item) => item.output), ...metadata].forEach((item) => {
+    plans.flatMap((item) => item.output).forEach((item) => {
       if (normalizeExcelHeader(headerRow.getCell(item.column).value) !== item.header
         || headerRow.getCell(item.column).value !== item.header) {
         headerRow.getCell(item.column).value = item.header;
@@ -90,12 +57,6 @@ export async function exportJob(jobId: string, sectionIds: string[]) {
           const target = output.find((item) => item.key === field.key)!;
           row.getCell(target.column).value = (result[field.key] ?? "") as any;
         }
-      }
-      if (metadata.length >= 3) {
-        const review = selectedReviewMetadata(detail, plans.map((plan) => plan.section));
-        row.getCell(metadata[0].column).value = detail.status;
-        row.getCell(metadata[1].column).value = review.status;
-        row.getCell(metadata[2].column).value = review.note;
       }
     }
   }

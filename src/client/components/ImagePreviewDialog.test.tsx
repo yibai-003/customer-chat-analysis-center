@@ -64,6 +64,28 @@ describe("ImagePreviewDialog", () => {
     expect(image.style.transform).toBe("scale(1)");
   });
 
+  it("does not steal focus when the parent supplies a new close callback", () => {
+    act(() => root.render(
+      <ImagePreviewDialog
+        src="/api/records/record-1/image"
+        alt="聊天截图"
+        onClose={() => undefined}
+      />,
+    ));
+    const zoomButton = host.querySelector<HTMLButtonElement>('button[aria-label="放大图片"]')!;
+    zoomButton.focus();
+
+    act(() => root.render(
+      <ImagePreviewDialog
+        src="/api/records/record-1/image"
+        alt="聊天截图"
+        onClose={() => undefined}
+      />,
+    ));
+
+    expect(document.activeElement).toBe(zoomButton);
+  });
+
   it("closes when Escape is pressed", () => {
     let closed = false;
     act(() => root.render(

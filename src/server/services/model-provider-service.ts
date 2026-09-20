@@ -2,10 +2,17 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import type { ModelConfig, ModelProvider, ModelPurpose } from "../../shared/types";
 import { requestModel } from "../ai/model-transport";
-import { buildChatCompletionsUrl } from "../ai/openai-compatible-client";
+import {
+  buildChatCompletionsUrl,
+  classifyModelError,
+} from "../ai/openai-compatible-client";
 import { config } from "../config";
 import { db } from "../db/client";
 import { decryptSecret, encryptSecret, maskSecret } from "../security/secrets";
+import {
+  isPoolMemberEligible,
+  rankModelCandidates,
+} from "./model-pool-policy";
 
 export interface ResolvedPoolMember extends ModelConfig {
   apiKey: string;
@@ -266,54 +273,103 @@ export function findOrCreateModelProvider(name: string, baseUrl: string, apiKey:
 }
 
 export async function testModelProvider(id: string) {
-  const row = db.prepare(`SELECT p.*, m.model
-    FROM model_providers p
-    LEFT JOIN model_configs m ON m.provider_id=p.id AND m.is_enabled=1
-    WHERE p.id=?
-    ORDER BY m.is_purpose_default DESC, m.created_at DESC
-    LIMIT 1`).get(id) as any;
-  if (!row) throw new Error("模型供应商不存在");
-  if (!row.model) throw new Error("请先为供应商配置并启用模型");
+  const provider = db.prepare("SELECT * FROM model_providers WHERE id=?").get(id) as any;
+  if (!provider) throw new Error("模型供应商不存在");
+  const rows = db.prepare(`${modelWithProviderSql}
+    WHERE m.provider_id=? AND m.is_enabled=1`).all(id) as any[];
+  if (!rows.length) throw new Error("请先为供应商配置并启用模型");
+  const candidates = rows.map((row) => ({
+    ...mapModelConfigRow(row),
+    apiKey: decryptSecret(row.provider_api_key, config.encryptionKey),
+    baseUrl: row.provider_base_url,
+    providerEnabled: Boolean(row.provider_enabled),
+  }));
+  const now = Date.now();
+  const eligible = rankModelCandidates(candidates.filter((member) =>
+    isPoolMemberEligible(member, {
+      now,
+      allowPaid: true,
+      failedMemberIds: new Set(),
+    })
+  ));
+  const eligibleIds = new Set(eligible.map((member) => member.id));
+  const fallback = rankModelCandidates(candidates.filter((member) =>
+    !eligibleIds.has(member.id)
+    && member.memberType === "general"
+    && !member.quotaBlocked
+    && (!member.cooldownUntil || Date.parse(member.cooldownUntil) <= now)
+  ));
+  const ordered = [...eligible, ...fallback];
   const started = Date.now();
   const testedAt = new Date().toISOString();
-  const apiKey = decryptSecret(row.api_key_ciphertext, config.encryptionKey);
-  try {
-    const { response, rawText } = await requestModel(buildChatCompletionsUrl(row.base_url), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: row.model,
-        temperature: 0,
-        max_tokens: 32,
-        messages: [{ role: "user", content: "只返回 OK" }],
-      }),
-    }, { attempts: 1, timeoutMs: 30000 });
-    if (!response.ok) {
-      let message = `连接失败 (${response.status})`;
-      try {
-        const body = JSON.parse(rawText);
-        if (typeof body?.error?.message === "string") message = body.error.message.slice(0, 1000);
-      } catch {
-        // Provider returned a non-JSON error.
+  let lastError = "没有可用于连接测试的模型";
+
+  for (const member of ordered) {
+    try {
+      const { response, rawText } = await requestModel(buildChatCompletionsUrl(member.baseUrl), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${member.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: member.model,
+          temperature: 0,
+          max_tokens: 32,
+          messages: [{ role: "user", content: "只返回 OK" }],
+        }),
+      }, { attempts: 1, timeoutMs: 30000 });
+      if (!response.ok) {
+        let message = `连接失败 (${response.status})`;
+        try {
+          const body = JSON.parse(rawText);
+          if (typeof body?.error?.message === "string") message = body.error.message.slice(0, 1000);
+        } catch {
+          // Provider returned a non-JSON error.
+        }
+        const withStatus = /\(\d{3}\)/.test(message) ? message : `${message} (${response.status})`;
+        const classified = classifyModelError(new Error(withStatus));
+        const redacted = redactCredential(classified.message, member.apiKey).slice(0, 1000);
+        lastError = redacted;
+        const timestamp = new Date().toISOString();
+        if (classified.code === "quota_exhausted") {
+          db.prepare(`UPDATE model_configs SET quota_exhausted_at=?,last_failure_at=?,updated_at=?
+            WHERE id=?`).run(timestamp, timestamp, timestamp, member.id);
+          continue;
+        }
+        if (classified.code === "rate_limit" || classified.code === "model") {
+          db.prepare("UPDATE model_configs SET last_failure_at=?,updated_at=? WHERE id=?")
+            .run(timestamp, timestamp, member.id);
+          continue;
+        }
+        db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
+          .run(testedAt, redacted, testedAt, id);
+        throw new Error(redacted);
       }
-      message = redactCredential(message, apiKey);
-      db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
-        .run(testedAt, message, testedAt, id);
-      throw new Error(message);
+      db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=NULL,updated_at=? WHERE id=?")
+        .run(testedAt, testedAt, id);
+      return {
+        success: true,
+        latencyMs: Date.now() - started,
+        modelConfigId: member.id,
+        model: member.model,
+        purpose: member.purpose,
+      };
+    } catch (error) {
+      const message = redactCredential(
+        error instanceof Error ? error.message : String(error),
+        member.apiKey,
+      ).slice(0, 1000);
+      const saved = db.prepare("SELECT last_tested_at FROM model_providers WHERE id=?").get(id) as any;
+      if (saved?.last_tested_at !== testedAt) {
+        db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
+          .run(testedAt, message || "连接请求失败", testedAt, id);
+      }
+      throw new Error(message || "连接请求失败");
     }
-    db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=NULL,updated_at=? WHERE id=?")
-      .run(testedAt, testedAt, id);
-    return { success: true, latencyMs: Date.now() - started };
-  } catch (error) {
-    const saved = db.prepare("SELECT last_tested_at FROM model_providers WHERE id=?").get(id) as any;
-    if (saved?.last_tested_at !== testedAt) {
-      db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
-        .run(testedAt, "连接请求失败", testedAt, id);
-    }
-    if (error instanceof Error) throw new Error(redactCredential(error.message, apiKey));
-    throw error;
   }
+
+  db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
+    .run(testedAt, lastError, testedAt, id);
+  throw new Error(lastError);
 }

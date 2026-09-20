@@ -638,8 +638,8 @@ await step("real-model-parse", async () => {
     await workbook.xlsx.load(exported.buffer);
     const worksheet = workbook.getWorksheet(record.sheetName) ?? workbook.worksheets[0];
     const headers = (worksheet?.getRow(1).values ?? []).map((value) => String(value ?? "")).filter(Boolean);
-    for (const expected of ["解析状态", "复核状态", "复核备注"]) {
-      if (!headers.includes(expected)) throw new Error(`导出缺少验收列：${expected}`);
+    for (const forbidden of ["解析状态", "复核状态", "复核备注"]) {
+      if (headers.includes(forbidden)) throw new Error(`导出包含禁止写入的运行时列：${forbidden}`);
     }
     if (!headers.some((header) => header.endsWith("验收结论"))) {
       throw new Error(`导出缺少模型字段“验收结论”：${JSON.stringify(headers).slice(0, 400)}`);
@@ -654,9 +654,6 @@ await step("real-model-parse", async () => {
     ]));
     const modelHeader = headers.find((header) => header.endsWith("验收结论"));
     if (!modelHeader || values[modelHeader] !== output) throw new Error("导出文件中的模型结果与复核结果不一致");
-    if (values["解析状态"] !== "completed") throw new Error(`导出解析状态异常：${values["解析状态"]}`);
-    if (values["复核状态"] !== "confirmed") throw new Error(`导出复核状态异常：${values["复核状态"]}`);
-    if (!values["复核备注"].includes(RUN_ID)) throw new Error("导出复核备注缺少本次验收标识");
     if (SIGNOFF) {
       for (const target of verifiedRecords) {
         const targetSheet = workbook.getWorksheet(target.record.sheetName);
@@ -665,12 +662,6 @@ await step("real-model-parse", async () => {
           header,
           String(targetSheet.getRow(target.record.rowNumber).getCell(index + 1).value ?? ""),
         ]));
-        if (targetValues["解析状态"] !== "completed") {
-          throw new Error(`记录 ${target.record.id} 导出解析状态异常`);
-        }
-        if (targetValues["复核状态"] !== "confirmed" || !targetValues["复核备注"].includes(RUN_ID)) {
-          throw new Error(`记录 ${target.record.id} 导出复核状态异常`);
-        }
         if (targetValues[modelHeader] !== target.output) {
           throw new Error(`记录 ${target.record.id} 导出模型结果不一致`);
         }

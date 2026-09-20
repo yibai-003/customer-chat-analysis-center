@@ -87,6 +87,7 @@ function createPoolMember(options: {
   priority?: number;
   maxTokens?: number;
   providerId?: string;
+  isPurposeDefault?: boolean;
 }) {
   const purpose = options.purpose ?? "text";
   const provider = options.providerId
@@ -114,7 +115,8 @@ function createPoolMember(options: {
   db.prepare(`UPDATE model_configs SET
     pool_enabled=1, billing_mode=?, quality_tier=?, priority=?,
     quota_total_tokens=?, quota_used_tokens=0, quota_expires_at=?,
-    quota_safety_ratio=0.95, capability_json=?, capability_checked_at=?
+    quota_safety_ratio=0.95, capability_json=?, capability_checked_at=?,
+    is_purpose_default=?
     WHERE id=?`).run(
     options.billingMode ?? "free",
     options.qualityTier ?? "A",
@@ -123,6 +125,7 @@ function createPoolMember(options: {
     options.billingMode === "paid" ? null : "2026-10-01T00:00:00.000Z",
     JSON.stringify(capabilities),
     Date.now(),
+    options.isPurposeDefault ? 1 : 0,
     created.id,
   );
   return created.id;
@@ -157,7 +160,7 @@ describe("pool candidate ranking", () => {
     expect(ranked.map((item) => item.id)).toEqual(["eligible"]);
   });
 
-  it("uses expiry, remaining quota, quality, and non-thinking order", () => {
+  it("uses manual priority before model characteristics", () => {
     const ranked = rankPoolCandidates([
       member("earlier-tier-c", {
         quotaExpiresAt: "2026-09-20T00:00:00.000Z",
@@ -169,33 +172,33 @@ describe("pool candidate ranking", () => {
       member("earlier-less", { quotaExpiresAt: "2026-10-01T00:00:00.000Z", quotaUsedTokens: 800 }),
       member("tier-b", { qualityTier: "B", quotaExpiresAt: "2026-12-01T00:00:00.000Z" }),
       member("tier-c", { qualityTier: "C", quotaExpiresAt: "2026-12-01T00:00:00.000Z" }),
-      member("thinking", { thinkingMode: true, priority: 0 }),
+      member("thinking", { thinkingMode: true, priority: 999 }),
     ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
 
     expect(ranked.map((item) => item.id)).toEqual([
-      "earlier-tier-c",
-      "earlier-less",
-      "earlier-more",
       "later",
+      "earlier-more",
+      "earlier-less",
       "tier-b",
       "tier-c",
+      "earlier-tier-c",
     ]);
   });
 
-  it("proves quality tier order when expiry and remaining quota are equal", () => {
+  it("uses quality tier after manual priority", () => {
     const ranked = rankPoolCandidates([
-      member("tier-c", { qualityTier: "C", priority: 1 }),
-      member("tier-a", { qualityTier: "A", priority: 999 }),
-      member("tier-b", { qualityTier: "B", priority: 100 }),
+      member("tier-c", { qualityTier: "C", priority: 10 }),
+      member("tier-a", { qualityTier: "A", priority: 10 }),
+      member("tier-b", { qualityTier: "B", priority: 10 }),
     ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
 
     expect(ranked.map((item) => item.id)).toEqual(["tier-a", "tier-b", "tier-c"]);
   });
 
-  it("proves non-thinking precedes thinking within the same tier and quota", () => {
+  it("keeps free thinking models as a fallback after free non-thinking models", () => {
     const ranked = rankPoolCandidates([
-      member("thinking", { thinkingMode: true, priority: 1 }),
-      member("non-thinking", { thinkingMode: false, priority: 999 }),
+      member("thinking", { thinkingMode: true, priority: 10 }),
+      member("non-thinking", { thinkingMode: false, priority: 10 }),
     ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
 
     expect(ranked.map((item) => item.id)).toEqual(["non-thinking"]);
@@ -239,18 +242,6 @@ describe("pool candidate ranking", () => {
     ]);
   });
 
-  it("uses thinking free members only when no eligible non-thinking free member remains", () => {
-    const thinking = member("thinking", { thinkingMode: true });
-    expect(rankPoolCandidates(
-      [thinking, member("normal")],
-      { now: NOW, allowPaid: false, failedMemberIds: new Set() },
-    ).map((item) => item.id)).toEqual(["normal"]);
-    expect(rankPoolCandidates(
-      [thinking, member("normal", { capabilityEligible: false })],
-      { now: NOW, allowPaid: false, failedMemberIds: new Set() },
-    ).map((item) => item.id)).toEqual(["thinking"]);
-  });
-
   it("puts paid members last and removes them when paid allowance is zero", () => {
     const paid = member("paid", {
       billingMode: "paid",
@@ -266,6 +257,33 @@ describe("pool candidate ranking", () => {
       [paid, free],
       { now: NOW, allowPaid: true, failedMemberIds: new Set() },
     ).map((item) => item.id)).toEqual(["free", "paid"]);
+  });
+
+  it("keeps purpose defaults as the fallback within each billing mode", () => {
+    const ranked = rankPoolCandidates([
+      member("default-paid", {
+        billingMode: "paid",
+        quotaTotalTokens: undefined,
+        quotaExpiresAt: undefined,
+        priority: 1,
+        isPurposeDefault: true,
+      }),
+      member("regular-paid", {
+        billingMode: "paid",
+        quotaTotalTokens: undefined,
+        quotaExpiresAt: undefined,
+        priority: 99,
+      }),
+      member("default-free", { priority: 1, isPurposeDefault: true }),
+      member("regular-free", { priority: 99 }),
+    ], { now: NOW, allowPaid: true, failedMemberIds: new Set() });
+
+    expect(ranked.map((item) => item.id)).toEqual([
+      "regular-free",
+      "default-free",
+      "regular-paid",
+      "default-paid",
+    ]);
   });
 });
 
@@ -290,6 +308,21 @@ describe("model pool routing", () => {
     expect(events()).toEqual([
       expect.objectContaining({ model_config_id: first, event_type: "success", accounted_tokens: 20 }),
     ]);
+  });
+
+  it("uses a regular free member before the default free fallback", async () => {
+    const fallback = createPoolMember({
+      model: "default-fallback",
+      priority: 1,
+      isPurposeDefault: true,
+    });
+    const regular = createPoolMember({ model: "regular-first", priority: 20 });
+    vi.mocked(callVisionModel).mockResolvedValue(success());
+
+    const result = await callModelPool([], { purpose: "text", operation: "default-fallback" });
+
+    expect(result.model.id).toBe(regular);
+    expect(result.model.id).not.toBe(fallback);
   });
 
   it("marks quota exhaustion and switches immediately", async () => {

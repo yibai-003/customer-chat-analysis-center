@@ -234,6 +234,102 @@ describe("model provider credentials", () => {
     expect(JSON.stringify(tested)).not.toContain("provider-test-secret");
   });
 
+  it("tests a provider with the highest-priority usable free member before its paid default", async () => {
+    const provider = createModelProvider({
+      name: "免费优先测试供应商",
+      baseUrl: "https://provider-free-first.example/v1",
+      apiKey: "provider-free-first-secret",
+    });
+    const paidDefault = createModelConfig({
+      name: "付费默认模型",
+      providerId: provider.id,
+      baseUrl: "https://unused-paid-default.example/v1",
+      model: "paid-default-model",
+      purpose: "text",
+    });
+    const free = createModelConfig({
+      name: "免费优先模型",
+      providerId: provider.id,
+      baseUrl: "https://unused-free-first.example/v1",
+      model: "free-first-model",
+      purpose: "text",
+    });
+    const capability = JSON.stringify({ text: true, json: true, vision: false });
+    db.prepare(`UPDATE model_configs SET pool_enabled=1, billing_mode='paid',
+      is_purpose_default=1, priority=1, capability_json=?, capability_checked_at=?
+      WHERE id=?`).run(capability, Date.now(), paidDefault.id);
+    db.prepare(`UPDATE model_configs SET pool_enabled=1, billing_mode='free',
+      is_purpose_default=0, priority=20, quota_total_tokens=1000000,
+      quota_used_tokens=0, quota_expires_at='2026-10-08T23:59:59+08:00',
+      capability_json=?, capability_checked_at=? WHERE id=?`)
+      .run(capability, Date.now(), free.id);
+    vi.mocked(requestModel).mockResolvedValueOnce({
+      response: new Response("", { status: 200 }),
+      rawText: JSON.stringify({ choices: [{ message: { content: "OK" } }] }),
+      attemptsUsed: 1,
+    });
+
+    await expect(testModelProvider(provider.id)).resolves.toMatchObject({
+      success: true,
+      model: "free-first-model",
+    });
+    const request = vi.mocked(requestModel).mock.calls.at(-1)?.[1];
+    expect(JSON.parse(String(request?.body)).model).toBe("free-first-model");
+  });
+
+  it("marks an exhausted free member and continues testing the next free member", async () => {
+    const provider = createModelProvider({
+      name: "免费额度切换供应商",
+      baseUrl: "https://provider-quota-switch.example/v1",
+      apiKey: "provider-quota-switch-secret",
+    });
+    const first = createModelConfig({
+      name: "首个免费模型",
+      providerId: provider.id,
+      baseUrl: "https://unused-quota-first.example/v1",
+      model: "quota-first-model",
+      purpose: "text",
+    });
+    const second = createModelConfig({
+      name: "第二免费模型",
+      providerId: provider.id,
+      baseUrl: "https://unused-quota-second.example/v1",
+      model: "quota-second-model",
+      purpose: "text",
+    });
+    const capability = JSON.stringify({ text: true, json: true, vision: false });
+    const prepareMember = db.prepare(`UPDATE model_configs SET pool_enabled=1,
+      billing_mode='free', priority=?, quota_total_tokens=1000000,
+      quota_used_tokens=0, quota_expires_at='2026-10-08T23:59:59+08:00',
+      capability_json=?, capability_checked_at=? WHERE id=?`);
+    prepareMember.run(10, capability, Date.now(), first.id);
+    prepareMember.run(20, capability, Date.now(), second.id);
+    vi.mocked(requestModel)
+      .mockResolvedValueOnce({
+        response: new Response("", { status: 429 }),
+        rawText: JSON.stringify({
+          error: { message: "Free quota exhausted. Please add funds." },
+        }),
+        attemptsUsed: 1,
+      })
+      .mockResolvedValueOnce({
+        response: new Response("", { status: 200 }),
+        rawText: JSON.stringify({ choices: [{ message: { content: "OK" } }] }),
+        attemptsUsed: 1,
+      });
+
+    await expect(testModelProvider(provider.id)).resolves.toMatchObject({
+      success: true,
+      model: "quota-second-model",
+    });
+    expect(vi.mocked(requestModel).mock.calls.slice(-2).map((call) =>
+      JSON.parse(String(call[1].body)).model
+    )).toEqual(["quota-first-model", "quota-second-model"]);
+    expect(db.prepare("SELECT quota_exhausted_at FROM model_configs WHERE id=?").get(first.id))
+      .toEqual({ quota_exhausted_at: expect.any(String) });
+    expect(listModelProviders().find((item) => item.id === provider.id)?.isEnabled).toBe(true);
+  });
+
   it("does not persist or return a provider error that echoes the API key", async () => {
     const provider = createModelProvider({
       name: "错误脱敏供应商",

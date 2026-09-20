@@ -135,6 +135,31 @@ describe("authentication gate", () => {
     expect(host.textContent).not.toContain("解析任务");
   });
 
+  it("renders a workspace-oriented sign-in layout with an inaccessible decorative analysis canvas", async () => {
+    stubAuthFetch((url) => {
+      if (url === "/api/auth/me") return jsonResponse({ user: null, capabilities: [] });
+      if (url === "/api/auth/status") return jsonResponse({ hasAdmin: true });
+      return authenticationDefaults(url);
+    });
+
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.querySelector(".signin-layout")).not.toBeNull());
+
+    expect(host.querySelector(".signin-panel--right")).not.toBeNull();
+    const canvas = host.querySelector<HTMLElement>(".signin-analysis-canvas");
+    expect(canvas?.classList.contains("signin-analysis-canvas--left")).toBe(true);
+    expect(canvas?.getAttribute("aria-hidden")).toBe("true");
+    expect(canvas?.querySelectorAll("button, a, input, select, textarea, [tabindex]").length).toBe(0);
+    expect(canvas?.querySelectorAll(".signin-workflow-step")).toHaveLength(4);
+    expect(canvas?.querySelector(".signin-analysis-sheet")).toBeNull();
+    expect(canvas?.querySelector(".signin-canvas-note")).toBeNull();
+    expect(canvas?.querySelectorAll(".signin-ripple-pass-through")).toHaveLength(3);
+    expect(canvas?.querySelectorAll(".signin-canvas-stage > .botanical-art")).toHaveLength(1);
+    expect(canvas?.querySelectorAll(".signin-canvas-stage > .botanical-art img")).toHaveLength(1);
+    expect(host.textContent).toContain("进入客服解析工作台");
+    expect(host.textContent).toContain("仅限内部局域网已授权用户使用");
+  });
+
   it("shows a login error and keeps the form usable on failure", async () => {
     stubAuthFetch((url, _init) => {
       if (url === "/api/auth/me") return jsonResponse({ user: null, capabilities: [] });
@@ -159,6 +184,45 @@ describe("authentication gate", () => {
     const button = host.querySelector<HTMLButtonElement>(".signin-form button");
     expect(button?.disabled).toBe(false);
     expect(host.querySelector("input[aria-label='密码']")?.getAttribute("value")).toBe("wrong");
+  });
+
+  it("marks the form busy and prevents duplicate login submissions", async () => {
+    const pending = deferred<Response>();
+    let loginAttempts = 0;
+    stubAuthFetch((url, init) => {
+      if (url === "/api/auth/me") return jsonResponse({ user: null, capabilities: [] });
+      if (url === "/api/auth/status") return jsonResponse({ hasAdmin: true });
+      if (url === "/api/auth/login" && init?.method === "POST") {
+        loginAttempts += 1;
+        return pending.promise;
+      }
+      return authenticationDefaults(url);
+    });
+
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.querySelector("input[aria-label='账号']")).not.toBeNull());
+    const username = host.querySelector<HTMLInputElement>("input[aria-label='账号']")!;
+    const password = host.querySelector<HTMLInputElement>("input[aria-label='密码']")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(username, "admin");
+      username.dispatchEvent(new Event("input", { bubbles: true }));
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(password, "test-password-123");
+      password.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const form = host.querySelector<HTMLFormElement>(".signin-form")!;
+    const button = form.querySelector<HTMLButtonElement>("button")!;
+    await act(async () => button.click());
+    await waitFor(() => expect(button.disabled).toBe(true));
+    expect(form.getAttribute("aria-busy")).toBe("true");
+    await act(async () => button.click());
+    expect(loginAttempts).toBe(1);
+
+    await act(async () => {
+      pending.resolve(failedResponse(401, "用户名或密码错误"));
+      await pending.promise;
+    });
+    await waitFor(() => expect(button.disabled).toBe(false));
   });
 
   it("enters the workspace after a successful login", async () => {
@@ -196,7 +260,9 @@ describe("authentication gate", () => {
       return failedResponse(401, "未登录或会话已失效");
     });
 
-    await act(async () => host.querySelector<HTMLButtonElement>(".user-signout")!.click());
+    await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="打开用户菜单"]')!.click());
+    await act(async () => [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')]
+      .find((button) => button.textContent?.trim() === "退出")!.click());
     await waitFor(() => expect(host.querySelector("input[aria-label='账号']")).not.toBeNull());
     expect(host.textContent).not.toContain("测试管理员");
     expect(host.textContent).not.toContain("解析任务");

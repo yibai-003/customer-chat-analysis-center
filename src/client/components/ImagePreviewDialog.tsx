@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const MIN_ZOOM = 0.75;
 const MAX_ZOOM = 2.5;
@@ -13,14 +13,42 @@ export function ImagePreviewDialog({
   onClose: () => void;
 }) {
   const [zoom, setZoom] = useState(1);
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const onCloseRef = useRef(onClose);
 
   useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    closeButtonRef.current?.focus();
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key === "Escape") {
+        event.stopImmediatePropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = [...dialog.querySelectorAll<HTMLElement>(
+        "button, input, select, textarea, a[href], [tabindex]:not([tabindex='-1'])",
+      )].filter((element) => !element.hasAttribute("disabled") && element.getAttribute("aria-hidden") !== "true");
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, []);
 
   const changeZoom = (amount: number) => {
     setZoom((current) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Number((current + amount).toFixed(2)))));
@@ -28,6 +56,7 @@ export function ImagePreviewDialog({
 
   return (
     <div
+      ref={dialogRef}
       className="image-preview-backdrop"
       role="dialog"
       aria-modal="true"
@@ -40,7 +69,7 @@ export function ImagePreviewDialog({
             <small>ORIGINAL CHAT SCREENSHOT</small>
             <strong>{alt}</strong>
           </div>
-          <button type="button" aria-label="关闭图片预览" title="关闭" onClick={onClose}>×</button>
+          <button ref={closeButtonRef} type="button" aria-label="关闭图片预览" title="关闭" onClick={onClose}>×</button>
         </header>
         <div className="image-preview-stage">
           <img

@@ -1,0 +1,1645 @@
+/* ATELIER theme: scoped so it can be removed without changing the base UI. */
+body[data-ui-theme="atelier"] {
+  --atelier-paper: #f4f0e6;
+  --atelier-paper-deep: #e9e2d3;
+  --atelier-panel: #fffdf7;
+  --atelier-panel-soft: #f8f4ea;
+  --atelier-ink: #2a2620;
+  --atelier-ink-soft: #5c554a;
+  --atelier-ink-faint: #746d61;
+  --atelier-line: #c9beaa;
+  --atelier-green: #a5bd70;
+  --atelier-green-deep: #6f8446;
+  --atelier-cyan: #a9c9c0;
+  --atelier-orange: #c88f56;
+  --atelier-danger: #a95d4c;
+  --atelier-shadow: #b8b19f;
+  --atelier-shadow-deep: #625d4f;
+  font-family: "Satoshi", "Geist", "Segoe UI", "Microsoft YaHei", sans-serif;
+  color: var(--atelier-ink);
+  background-color: var(--atelier-paper);
+  background-image: radial-gradient(rgba(72, 67, 56, .06) .65px, transparent .65px);
+  background-size: 9px 9px;
+}
+
+body[data-ui-theme="atelier"] *,
+body[data-ui-theme="atelier"] *::before,
+body[data-ui-theme="atelier"] *::after {
+  border-radius: 0;
+}
+
+body[data-ui-theme="atelier"] .app {
+  background: var(--atelier-paper);
+  color: var(--atelier-ink);
+}
+
+body[data-ui-theme="atelier"]:has(.signin-app) {
+  overflow: hidden;
+}
+
+body[data-ui-theme="atelier"] .topbar {
+  position: relative;
+  z-index: 3;
+  min-height: 76px;
+  height: auto;
+  padding: 12px 28px;
+  gap: 18px;
+  border-bottom: 1px solid var(--atelier-ink);
+  background: rgba(255, 253, 247, .96);
+  box-shadow: 0 2px 0 rgba(98, 93, 79, .18);
+}
+
+body[data-ui-theme="atelier"] .brand {
+  flex: 0 0 auto;
+  gap: 13px;
+}
+
+body[data-ui-theme="atelier"] .brand-mark {
+  width: 38px;
+  height: 38px;
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-ink);
+  color: var(--atelier-green);
+  box-shadow: 3px 3px 0 var(--atelier-shadow);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 22px;
+}
+
+body[data-ui-theme="atelier"] .brand strong {
+  color: var(--atelier-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  letter-spacing: .02em;
+}
+
+body[data-ui-theme="atelier"] .brand small {
+  color: var(--atelier-ink-faint);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: .18em;
+}
+
+body[data-ui-theme="atelier"] .top-actions {
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+body[data-ui-theme="atelier"] .top-menu-cluster {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding-left: 10px;
+  border-left: 1px solid var(--atelier-line);
+}
+
+body[data-ui-theme="atelier"] .top-menu {
+  position: relative;
+}
+
+body[data-ui-theme="atelier"] .top-menu-trigger {
+  min-width: 82px;
+  justify-content: center;
+  gap: 7px;
+}
+
+body[data-ui-theme="atelier"] .top-menu-trigger[aria-expanded="true"] {
+  background: var(--atelier-green);
+}
+
+body[data-ui-theme="atelier"] .top-menu-trigger span,
+body[data-ui-theme="atelier"] .user-menu-caret {
+  color: var(--atelier-ink-faint);
+  font-size: 13px;
+  line-height: 1;
+}
+
+body[data-ui-theme="atelier"] .top-menu-panel {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  z-index: 40;
+  display: grid;
+  min-width: 176px;
+  padding: 6px;
+  border: 1px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+  box-shadow: 3px 3px 0 rgba(98, 93, 79, .32);
+}
+
+body[data-ui-theme="atelier"] .top-menu-panel[role="menu"] button {
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--atelier-ink);
+  text-align: left;
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .top-menu-panel[role="menu"] button:hover,
+body[data-ui-theme="atelier"] .top-menu-panel[role="menu"] button:focus-visible {
+  outline: 0;
+  background: #edf3df;
+  color: var(--atelier-green-deep);
+}
+
+body[data-ui-theme="atelier"] .user-menu .user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  margin: 0;
+  padding: 5px 8px 5px 10px;
+  border: 1px solid var(--atelier-line);
+  background: var(--atelier-panel-soft);
+  color: var(--atelier-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .user-menu .user-chip[aria-expanded="true"] {
+  background: var(--atelier-green);
+}
+
+body[data-ui-theme="atelier"] .user-menu-panel {
+  min-width: 196px;
+}
+
+body[data-ui-theme="atelier"] .user-menu-summary {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px 9px;
+  border-bottom: 1px solid var(--atelier-line);
+}
+
+body[data-ui-theme="atelier"] .user-menu-summary strong {
+  overflow: hidden;
+  color: var(--atelier-ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .user-menu-summary span {
+  color: var(--atelier-ink-faint);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .button {
+  min-height: 36px;
+  border: 1px solid var(--atelier-line);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+  box-shadow: none;
+  transition: transform .14s ease, border-color .14s ease, background-color .14s ease, color .14s ease;
+}
+
+body[data-ui-theme="atelier"] .button:hover {
+  transform: translateY(-1px);
+  border-color: var(--atelier-ink);
+  background: #f3efe5;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .button:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .button.primary {
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-green);
+  color: var(--atelier-ink);
+  box-shadow: 2px 2px 0 var(--atelier-shadow);
+}
+
+body[data-ui-theme="atelier"] .button.dark {
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-ink);
+  color: var(--atelier-panel);
+  box-shadow: 2px 2px 0 var(--atelier-shadow-deep);
+}
+
+body[data-ui-theme="atelier"] .button.light,
+body[data-ui-theme="atelier"] .button.ghost {
+  background: var(--atelier-panel);
+}
+
+body[data-ui-theme="atelier"] .button.task-action-secondary {
+  border-color: var(--atelier-ink-soft);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+}
+
+body[data-ui-theme="atelier"] .button.task-action-tertiary {
+  border-color: transparent;
+  background: transparent;
+  color: var(--atelier-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .button.task-action-tertiary:hover {
+  border-color: var(--atelier-line);
+  background: var(--atelier-panel-soft);
+}
+
+body[data-ui-theme="atelier"] .user-chip .user-role {
+  background: var(--atelier-green);
+  color: var(--atelier-ink);
+}
+
+body[data-ui-theme="atelier"] .button:disabled,
+body[data-ui-theme="atelier"] .user-chip:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+  transform: none;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .workspace {
+  grid-template-columns: var(--sidebar-width, 240px) minmax(0, 1fr) clamp(360px, 27vw, 480px);
+  min-height: calc(100dvh - var(--workspace-header-height, 76px));
+}
+
+body[data-ui-theme="atelier"] .sidebar {
+  min-width: 0;
+  padding: 22px 12px 14px;
+  border-right: 2px solid var(--atelier-ink);
+  background: var(--atelier-paper-deep);
+}
+
+body[data-ui-theme="atelier"] .sidebar-scroll {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-gutter: stable;
+}
+
+body[data-ui-theme="atelier"] .sidebar-title {
+  color: var(--atelier-ink);
+  font-size: 11px;
+  letter-spacing: .12em;
+}
+
+body[data-ui-theme="atelier"] .sidebar-title-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+body[data-ui-theme="atelier"] .sidebar-toggle {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+  font-size: 15px;
+  line-height: 1;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .sidebar-toggle:hover {
+  background: var(--atelier-green);
+}
+
+body[data-ui-theme="atelier"] .sidebar.is-collapsed {
+  padding-inline: 10px;
+}
+
+body[data-ui-theme="atelier"] .sidebar.is-collapsed .sidebar-scroll {
+  display: block;
+  overflow: visible;
+}
+
+body[data-ui-theme="atelier"] .sidebar.is-collapsed .sidebar-scroll > :not(.sidebar-title),
+body[data-ui-theme="atelier"] .sidebar.is-collapsed .sidebar-botanical {
+  display: none;
+}
+
+body[data-ui-theme="atelier"] .sidebar.is-collapsed .sidebar-title {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+body[data-ui-theme="atelier"] .sidebar.is-collapsed .sidebar-title > span,
+body[data-ui-theme="atelier"] .sidebar.is-collapsed .sidebar-title-actions > b,
+body[data-ui-theme="atelier"] .sidebar.is-collapsed .server-state b {
+  display: none;
+}
+
+body[data-ui-theme="atelier"] .sidebar.is-collapsed .sidebar-title-actions {
+  display: block;
+}
+
+body[data-ui-theme="atelier"] .sidebar.is-collapsed .server-state {
+  padding-inline: 0;
+  font-size: 0;
+  text-align: center;
+}
+
+body[data-ui-theme="atelier"] .job {
+  color: var(--atelier-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .job:hover,
+body[data-ui-theme="atelier"] .job.active {
+  background: var(--atelier-panel);
+  border-color: var(--atelier-line);
+  border-left-color: var(--atelier-green-deep);
+  box-shadow: inset 3px 0 0 rgba(111, 132, 70, .48);
+}
+
+body[data-ui-theme="atelier"] .xls {
+  border-color: var(--atelier-line);
+  background: var(--atelier-cyan);
+  color: var(--atelier-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .section-group > button:hover,
+body[data-ui-theme="atelier"] .section-group > button.active {
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+  border-left-color: var(--atelier-green-deep);
+}
+
+body[data-ui-theme="atelier"] .section-knowledge {
+  border: 1px solid var(--atelier-line);
+  background: rgba(255, 253, 247, .5);
+  color: var(--atelier-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .server-state {
+  color: var(--atelier-ink-soft);
+  border-top-color: var(--atelier-line);
+}
+
+body[data-ui-theme="atelier"] .server-state i,
+body[data-ui-theme="atelier"] .status i {
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--atelier-ink);
+  background: var(--atelier-green);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .content {
+  min-width: 0;
+  padding: 34px 38px 62px;
+  background: var(--atelier-paper);
+}
+
+body[data-ui-theme="atelier"] .content::before {
+  content: none;
+}
+
+body[data-ui-theme="atelier"] .content-header {
+  align-items: flex-end;
+  gap: 20px;
+  border-bottom: 1px solid var(--atelier-ink);
+  padding-bottom: 18px;
+}
+
+body[data-ui-theme="atelier"] .task-heading {
+  min-width: 0;
+  max-width: 100%;
+}
+
+body[data-ui-theme="atelier"] .task-heading > .botanical-art {
+  width: 76px;
+  height: 58px;
+  opacity: .08;
+  transform: translate(0, 2px);
+  pointer-events: none;
+}
+
+body[data-ui-theme="atelier"] .content-header > .task-heading {
+  padding-right: 84px;
+}
+
+body[data-ui-theme="atelier"] .task-heading > .botanical-art .botanical-art__paper {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  opacity: .4;
+}
+
+body[data-ui-theme="atelier"] .task-heading > .botanical-art .botanical-art__scrap,
+body[data-ui-theme="atelier"] .task-heading > .botanical-art .botanical-art__tape,
+body[data-ui-theme="atelier"] .task-heading > .botanical-art .botanical-art__leaf--back {
+  display: none;
+}
+
+body[data-ui-theme="atelier"] .task-heading > .botanical-art .botanical-art__leaf--front {
+  left: 16%;
+  bottom: -8%;
+  width: 76%;
+  height: 116%;
+  opacity: .78;
+  transform: rotate(15deg);
+}
+
+body[data-ui-theme="atelier"] .top-management-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px;
+  padding-left: 10px;
+  border-left: 2px solid var(--atelier-line);
+}
+
+body[data-ui-theme="atelier"] .top-management-label {
+  color: var(--atelier-ink-faint);
+  font: 10px "Cascadia Mono", Consolas, monospace;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+}
+
+body[data-ui-theme="atelier"] .sidebar-system-status {
+  border-top: 1px solid var(--atelier-line);
+  margin-top: 12px;
+}
+
+body[data-ui-theme="atelier"] .sidebar-system-status .knowledge-sync-status {
+  display: block !important;
+  padding: 8px 0 !important;
+  color: var(--atelier-ink-faint);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+body[data-ui-theme="atelier"] .sidebar-system-status .knowledge-sync-status .button {
+  width: 100%;
+  min-height: 30px;
+  margin-top: 7px;
+  padding-inline: 7px;
+  font-size: 11px;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .detail-empty {
+  min-height: 100%;
+  align-content: center;
+  overflow: hidden;
+  padding: 32px 24px;
+}
+
+body[data-ui-theme="atelier"] .detail-empty > .botanical-art {
+  width: 148px;
+  height: 112px;
+  margin: 0 auto 10px;
+  opacity: .08;
+}
+
+body[data-ui-theme="atelier"] .detail-empty > .botanical-art .botanical-art__paper {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  opacity: .35;
+}
+
+body[data-ui-theme="atelier"] .detail-empty > .botanical-art .botanical-art__scrap,
+body[data-ui-theme="atelier"] .detail-empty > .botanical-art .botanical-art__tape,
+body[data-ui-theme="atelier"] .detail-empty > .botanical-art .botanical-art__leaf--back {
+  display: none;
+}
+
+body[data-ui-theme="atelier"] .detail-empty > .botanical-art .botanical-art__leaf--front {
+  left: 16%;
+  bottom: -8%;
+  width: 76%;
+  height: 116%;
+  opacity: .8;
+  transform: rotate(15deg);
+}
+
+body[data-ui-theme="atelier"] .detail-empty h2 {
+  margin: 8px 0 4px;
+  color: var(--atelier-ink-soft);
+  font-size: 16px;
+}
+
+body[data-ui-theme="atelier"] .detail-empty p {
+  margin: 0;
+  color: var(--atelier-ink-faint);
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .content-header small,
+body[data-ui-theme="atelier"] .detail-head small,
+body[data-ui-theme="atelier"] .sidebar-title {
+  color: var(--atelier-ink-soft);
+  font-family: "Cascadia Mono", Consolas, monospace;
+}
+
+body[data-ui-theme="atelier"] .content-header h1 {
+  max-width: min(100%, 760px);
+  margin: 9px 0 8px;
+  color: var(--atelier-ink);
+  font-family: "Satoshi", "Geist", "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: clamp(24px, 2.35vw, 38px);
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+body[data-ui-theme="atelier"] .content-header p {
+  color: var(--atelier-ink-soft);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+body[data-ui-theme="atelier"] .content-actions {
+  flex: 0 1 auto;
+  align-items: center;
+}
+
+body[data-ui-theme="atelier"] .content-actions select {
+  border: 1px solid var(--atelier-line);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .notice {
+  border: 2px solid var(--atelier-line);
+  border-left: 5px solid var(--atelier-green-deep);
+  background: #edf3df;
+  color: #4d6038;
+  line-height: 1.6;
+}
+
+body[data-ui-theme="atelier"] .analysis-progress {
+  margin-top: 16px;
+}
+
+body[data-ui-theme="atelier"] .analysis-progress-compact {
+  display: flex;
+  width: fit-content;
+  max-width: 100%;
+  align-items: center;
+  gap: 14px;
+  padding: 9px 11px;
+  border: 1px solid var(--atelier-line);
+  border-left: 4px solid var(--atelier-green-deep);
+  background: rgba(255, 253, 247, .76);
+}
+
+body[data-ui-theme="atelier"] .analysis-progress-complete-label {
+  color: var(--atelier-green-deep);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .analysis-progress-compact-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  color: var(--atelier-ink-soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-ui-theme="atelier"] .analysis-progress-compact-stats strong {
+  color: var(--atelier-ink);
+}
+
+body[data-ui-theme="atelier"] .record-list {
+  margin-top: 24px;
+  border-top: 1px solid var(--atelier-ink);
+  background: rgba(255, 253, 247, .72);
+}
+
+body[data-ui-theme="atelier"] .list-head {
+  grid-template-columns: 22px minmax(150px, 1.4fr) minmax(120px, 1fr) 96px 70px 56px;
+  padding: 12px 12px;
+  border-bottom: 1px solid var(--atelier-line);
+  background: var(--atelier-panel-soft);
+  color: var(--atelier-ink-soft);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+
+body[data-ui-theme="atelier"] .record {
+  grid-template-columns: 22px minmax(0, 1fr);
+  min-height: 66px;
+  border-top-color: var(--atelier-line);
+  color: var(--atelier-ink);
+  transition: background-color .16s steps(2, end), box-shadow .16s steps(2, end);
+}
+
+body[data-ui-theme="atelier"] .record.record-without-selection {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+body[data-ui-theme="atelier"] .record-select {
+  grid-template-columns: minmax(150px, 1.4fr) minmax(120px, 1fr) 96px 70px 56px;
+}
+
+body[data-ui-theme="atelier"] .list-head.list-head-without-selection {
+  grid-template-columns: minmax(150px, 1.4fr) minmax(120px, 1fr) 96px 70px 56px;
+}
+
+body[data-ui-theme="atelier"] .record:hover {
+  background: #fbf8ef;
+}
+
+body[data-ui-theme="atelier"] .record.active {
+  background: #eef2de;
+  box-shadow: inset 5px 0 0 var(--atelier-green-deep);
+}
+
+body[data-ui-theme="atelier"] .record-main img {
+  width: 46px;
+  height: 40px;
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-panel-soft);
+  transition: transform .16s steps(2, end);
+}
+
+body[data-ui-theme="atelier"] .record:hover .record-main img {
+  transform: scale(1.04);
+}
+
+body[data-ui-theme="atelier"] .record-main strong {
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .record-main small,
+body[data-ui-theme="atelier"] .view {
+  color: var(--atelier-ink-faint);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .field-tags em {
+  border-color: var(--atelier-line);
+  background: var(--atelier-panel-soft);
+  color: var(--atelier-ink-soft);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .status,
+body[data-ui-theme="atelier"] .review {
+  color: var(--atelier-ink-soft);
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .status.completed,
+body[data-ui-theme="atelier"] .review.confirmed {
+  color: var(--atelier-green-deep);
+}
+
+body[data-ui-theme="atelier"] .status.processing {
+  color: #9a672e;
+}
+
+body[data-ui-theme="atelier"] .status.failed,
+body[data-ui-theme="atelier"] .status.needs_review,
+body[data-ui-theme="atelier"] .review.needs_review {
+  color: var(--atelier-danger);
+}
+
+body[data-ui-theme="atelier"] .status.processing i {
+  background: var(--atelier-cyan);
+}
+
+body[data-ui-theme="atelier"] .status.failed i,
+body[data-ui-theme="atelier"] .status.needs_review i {
+  background: var(--atelier-orange);
+}
+
+body[data-ui-theme="atelier"] .record-bulk-bar {
+  border-bottom: 1px solid var(--atelier-line);
+  background: #f3f5e9;
+  color: var(--atelier-green-deep);
+}
+
+body[data-ui-theme="atelier"] .record-bulk-bar button {
+  border: 1px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .record-bulk-bar button:disabled {
+  opacity: .48;
+}
+
+body[data-ui-theme="atelier"] .detail {
+  min-width: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+}
+
+body[data-ui-theme="atelier"] .detail-shell {
+  background: rgba(255, 253, 247, .72);
+}
+
+body[data-ui-theme="atelier"] .detail-scroll {
+  min-height: 0;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 28px 24px 42px;
+  background: transparent;
+  scrollbar-gutter: stable;
+}
+
+body[data-ui-theme="atelier"] .detail-head {
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+body[data-ui-theme="atelier"] .detail-head h2 {
+  max-width: 260px;
+  margin-top: 7px;
+  color: var(--atelier-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 21px;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .detail-head-actions {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+body[data-ui-theme="atelier"] .detail-close {
+  display: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+  font-size: 20px;
+  line-height: 1;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .detail figure {
+  border: 1px solid var(--atelier-ink);
+  background: var(--atelier-paper-deep);
+  box-shadow: 2px 2px 0 rgba(169, 164, 143, .5);
+}
+
+body[data-ui-theme="atelier"] .detail figcaption {
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-ink);
+  color: var(--atelier-green);
+  font-size: 10px;
+}
+
+body[data-ui-theme="atelier"] .detail-block {
+  border-bottom: 2px dotted var(--atelier-line);
+}
+
+body[data-ui-theme="atelier"] .detail-block h3 {
+  color: var(--atelier-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .source-field span,
+body[data-ui-theme="atelier"] .result-field > span {
+  color: var(--atelier-ink-faint);
+}
+
+body[data-ui-theme="atelier"] .source-field strong {
+  color: var(--atelier-ink);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .result-field textarea,
+body[data-ui-theme="atelier"] .form-grid input,
+body[data-ui-theme="atelier"] .prompt-editor textarea {
+  border: 2px solid var(--atelier-line);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+}
+
+body[data-ui-theme="atelier"] .result-field textarea:focus,
+body[data-ui-theme="atelier"] .form-grid input:focus,
+body[data-ui-theme="atelier"] .prompt-editor textarea:focus {
+  border-color: var(--atelier-ink);
+  box-shadow: 3px 3px 0 var(--atelier-green);
+}
+
+body[data-ui-theme="atelier"] .detail-actions .button {
+  min-height: 40px;
+}
+
+body[data-ui-theme="atelier"] .detail-actions {
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--atelier-line);
+  background: rgba(255, 253, 247, .96);
+}
+
+body[data-ui-theme="atelier"] .backdrop {
+  background: rgba(42, 38, 32, .66);
+}
+
+body[data-ui-theme="atelier"] .modal {
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+  box-shadow: 8px 8px 0 var(--atelier-shadow-deep);
+}
+
+body[data-ui-theme="atelier"] .modal > header {
+  border-bottom: 2px solid var(--atelier-ink);
+}
+
+body[data-ui-theme="atelier"] .modal header h2 {
+  color: var(--atelier-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .modal header p {
+  color: var(--atelier-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .modal-close {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+  box-shadow: 2px 2px 0 var(--atelier-shadow);
+}
+
+body[data-ui-theme="atelier"] .modal-close:hover,
+body[data-ui-theme="atelier"] .detail-close:hover {
+  background: var(--atelier-green);
+}
+
+body[data-ui-theme="atelier"] .blank {
+  min-height: 420px;
+  width: min(100%, 860px);
+  margin: 28px auto 0;
+  border: 2px dashed var(--atelier-line);
+  background: rgba(255, 253, 247, .6);
+}
+
+body[data-ui-theme="atelier"] .blank h2 {
+  color: var(--atelier-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .upload-art {
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+  box-shadow: 5px 5px 0 var(--atelier-shadow);
+}
+
+body[data-ui-theme="atelier"] .upload-art i {
+  border: 2px solid var(--atelier-ink);
+  background: var(--atelier-green);
+  color: var(--atelier-ink);
+}
+
+body[data-ui-theme="atelier"] .signin-app {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: 32px;
+  overflow: hidden;
+  background: var(--atelier-paper);
+}
+
+body[data-ui-theme="atelier"] .signin-app::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(92, 85, 74, .07) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92, 85, 74, .07) 1px, transparent 1px);
+  background-size: 32px 32px;
+  mask-image: linear-gradient(to right, rgba(0, 0, 0, .45), transparent 56%);
+  pointer-events: none;
+}
+
+body[data-ui-theme="atelier"] .signin-layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(560px, 1.16fr) minmax(430px, .84fr);
+  width: min(1360px, 100%);
+  min-height: min(820px, calc(100dvh - 64px));
+  max-height: 900px;
+  border: 1px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+  box-shadow: 9px 9px 0 rgba(98, 93, 79, .28);
+}
+
+body[data-ui-theme="atelier"] .signin {
+  position: relative;
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  width: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 48px 52px 34px;
+  border: 0;
+  background: rgba(255, 253, 247, .98);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .signin-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0;
+  text-align: left;
+}
+
+body[data-ui-theme="atelier"] .signin-mark {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  margin: 0;
+  overflow: hidden;
+  background: var(--atelier-green);
+  box-shadow: 3px 3px 0 var(--atelier-shadow);
+}
+
+body[data-ui-theme="atelier"] .signin-mark .botanical-art {
+  opacity: .2;
+  transform: scale(.72) translate(12px, 3px);
+}
+
+body[data-ui-theme="atelier"] .signin-mark b {
+  position: relative;
+  z-index: 1;
+  color: var(--atelier-ink);
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+body[data-ui-theme="atelier"] .signin-brand h1 {
+  margin: 0;
+  color: var(--atelier-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 21px;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .signin-brand p {
+  margin-top: 5px;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .signin-brand p,
+body[data-ui-theme="atelier"] .signin-foot,
+body[data-ui-theme="atelier"] .signin-meta small {
+  color: var(--atelier-ink-faint);
+}
+
+body[data-ui-theme="atelier"] .signin-intro {
+  margin: auto 0 28px;
+  padding-top: 44px;
+}
+
+body[data-ui-theme="atelier"] .signin-intro > span {
+  display: block;
+  margin-bottom: 12px;
+  color: var(--atelier-green-deep);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .signin-intro h2 {
+  max-width: 360px;
+  margin: 0;
+  color: var(--atelier-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 34px;
+  line-height: 1.24;
+  letter-spacing: 0;
+  text-wrap: balance;
+}
+
+body[data-ui-theme="atelier"] .signin-intro p {
+  max-width: 390px;
+  margin: 14px 0 0;
+  color: var(--atelier-ink-faint);
+  font-size: 13px;
+  line-height: 1.8;
+}
+
+body[data-ui-theme="atelier"] .signin-form {
+  gap: 17px;
+}
+
+body[data-ui-theme="atelier"] .signin-field span {
+  color: var(--atelier-ink-soft);
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .signin-field input {
+  height: 46px;
+  padding: 0 13px;
+  border-width: 1px;
+  border-color: var(--atelier-line);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink);
+  font-size: 13px;
+  transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+
+body[data-ui-theme="atelier"] .signin-field input::placeholder {
+  color: #9b9488;
+}
+
+body[data-ui-theme="atelier"] .signin-field input:focus {
+  border-color: var(--atelier-ink);
+  background: #fff;
+  box-shadow: 3px 3px 0 rgba(165, 189, 112, .78);
+}
+
+body[data-ui-theme="atelier"] .signin-submit {
+  justify-content: space-between;
+  width: 100%;
+  min-height: 48px;
+  margin-top: 2px;
+  padding-inline: 17px;
+}
+
+body[data-ui-theme="atelier"] .signin-submit i {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-style: normal;
+  line-height: 1;
+  transition: transform .18s ease;
+}
+
+body[data-ui-theme="atelier"] .signin-submit:hover:not(:disabled) i {
+  transform: translateX(3px);
+}
+
+body[data-ui-theme="atelier"] .signin-submit:disabled {
+  cursor: wait;
+  opacity: .64;
+}
+
+body[data-ui-theme="atelier"] .signin-error {
+  border-left-color: var(--atelier-danger);
+  background: #f7e7df;
+  color: #824737;
+}
+
+body[data-ui-theme="atelier"] .signin-hint {
+  margin: 0 0 18px;
+  border-left-color: var(--atelier-green-deep);
+  background: #edf3df;
+  color: #4d6038;
+}
+
+body[data-ui-theme="atelier"] .signin-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin-top: auto;
+  padding-top: 30px;
+}
+
+body[data-ui-theme="atelier"] .signin-foot {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  text-align: left;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .signin-foot i {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--atelier-ink);
+  background: var(--atelier-green);
+  box-shadow: 2px 0 0 rgba(98, 93, 79, .24);
+}
+
+body[data-ui-theme="atelier"] .signin-meta small {
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 8px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .signin-analysis-canvas {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow: hidden;
+  isolation: isolate;
+  border-right: 1px solid var(--atelier-ink);
+  background: #e9eadf;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-grid {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background-image:
+    linear-gradient(rgba(74, 82, 62, .1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 82, 62, .1) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+body[data-ui-theme="atelier"] .signin-ripple-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: .82;
+  mix-blend-mode: multiply;
+  pointer-events: auto;
+}
+
+body[data-ui-theme="atelier"] .signin-ripple-pass-through {
+  pointer-events: none;
+  user-select: none;
+}
+
+body[data-ui-theme="atelier"] .signin-analysis-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 8% 6% 9% 8%;
+  z-index: -1;
+  border: 1px solid rgba(42, 38, 32, .28);
+  background: rgba(244, 240, 230, .56);
+  box-shadow: 5px 5px 0 rgba(98, 93, 79, .14);
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-header,
+body[data-ui-theme="atelier"] .signin-canvas-footer {
+  position: absolute;
+  right: 8%;
+  left: 10%;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  font-family: "Cascadia Mono", Consolas, monospace;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-header {
+  top: 11%;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(42, 38, 32, .34);
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-header small,
+body[data-ui-theme="atelier"] .signin-canvas-header strong {
+  display: block;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-header small {
+  color: var(--atelier-ink-faint);
+  font-size: 9px;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-header strong {
+  margin-top: 6px;
+  color: var(--atelier-ink);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--atelier-ink-soft);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-status i {
+  width: 7px;
+  height: 7px;
+  border: 1px solid var(--atelier-ink);
+  background: var(--atelier-green);
+  animation: signin-status-pulse 2.4s ease-in-out infinite;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-stage {
+  position: absolute;
+  inset: 20% 8% 16% 10%;
+  z-index: 1;
+}
+
+body[data-ui-theme="atelier"] .signin-workflow {
+  position: absolute;
+  top: 4%;
+  right: 5%;
+  bottom: 5%;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  width: min(74%, 360px);
+}
+
+body[data-ui-theme="atelier"] .signin-workflow::before {
+  content: "";
+  position: absolute;
+  top: 24px;
+  bottom: 24px;
+  left: 19px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    rgba(42, 38, 32, .18),
+    rgba(111, 132, 70, .7) 48%,
+    rgba(42, 38, 32, .18)
+  );
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 39px minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step > span {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border: 1px solid var(--atelier-ink);
+  background: var(--atelier-panel);
+  color: var(--atelier-ink-soft);
+  font: 10px "Cascadia Mono", Consolas, monospace;
+  box-shadow: 3px 3px 0 rgba(98, 93, 79, .1);
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step:nth-child(3) > span {
+  background: var(--atelier-green);
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step strong,
+body[data-ui-theme="atelier"] .signin-workflow-step small {
+  display: block;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step strong {
+  color: var(--atelier-ink);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step small {
+  margin-top: 5px;
+  color: var(--atelier-ink-faint);
+  font: 9px "Cascadia Mono", Consolas, monospace;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art {
+  position: absolute;
+  right: -8%;
+  bottom: -12%;
+  z-index: 0;
+  width: min(64%, 430px);
+  height: 355px;
+  opacity: .7;
+  transform: rotate(3deg);
+  animation: signin-botanical-drift 7s ease-in-out infinite;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-footer {
+  bottom: 11%;
+  padding-top: 12px;
+  border-top: 1px solid rgba(42, 38, 32, .34);
+  color: var(--atelier-ink-faint);
+  font-size: 8px;
+  letter-spacing: 0;
+}
+
+@keyframes signin-status-pulse {
+  0%, 100% { opacity: .55; }
+  50% { opacity: 1; }
+}
+
+@keyframes signin-botanical-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(3deg); }
+  50% { transform: translate3d(-14px, -10px, 0) rotate(0deg); }
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__paper {
+  animation: signin-botanical-paper 11s ease-in-out infinite;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__scrap {
+  animation: signin-botanical-scrap 8s ease-in-out infinite;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__tape {
+  animation: signin-botanical-tape 10s ease-in-out infinite;
+}
+
+@keyframes signin-botanical-paper {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-9deg); }
+  50% { transform: translate3d(8px, -6px, 0) rotate(-6deg); }
+}
+
+@keyframes signin-botanical-scrap {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(5deg); }
+  50% { transform: translate3d(-9px, 5px, 0) rotate(2deg); }
+}
+
+@keyframes signin-botanical-tape {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-13deg); }
+  50% { transform: translate3d(5px, -4px, 0) rotate(-9deg); }
+}
+
+@media (max-width: 1099px) {
+  body[data-ui-theme="atelier"] .signin-app {
+    min-height: calc(100dvh - 1px);
+    padding: 24px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-layout {
+    display: block;
+    width: min(620px, 100%);
+    min-height: 0;
+  }
+
+  body[data-ui-theme="atelier"] .signin,
+  body[data-ui-theme="atelier"] .signin-analysis-canvas {
+    grid-column: auto;
+    grid-row: auto;
+  }
+
+  body[data-ui-theme="atelier"] .signin {
+    min-height: min(718px, calc(100dvh - 50px));
+    padding: 42px 48px 30px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-analysis-canvas {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  body[data-ui-theme="atelier"] .signin-app {
+    padding: 0;
+    overflow: auto;
+  }
+
+  body[data-ui-theme="atelier"] .signin-layout {
+    width: 100%;
+    min-height: 100dvh;
+    border: 0;
+    box-shadow: none;
+  }
+
+  body[data-ui-theme="atelier"] .signin {
+    min-height: 100dvh;
+    padding: 28px 22px 24px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-intro {
+    margin-bottom: 24px;
+    padding-top: 38px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-intro h2 {
+    font-size: 29px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 1100px) {
+  body[data-ui-theme="atelier"] .signin-app {
+    padding: 18px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-layout {
+    min-height: calc(100dvh - 36px);
+  }
+
+  body[data-ui-theme="atelier"] .signin {
+    padding: 32px 44px 25px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-intro {
+    margin-bottom: 22px;
+    padding-top: 24px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-meta {
+    padding-top: 20px;
+  }
+}
+
+body[data-ui-theme="atelier"] button:focus-visible,
+body[data-ui-theme="atelier"] input:focus-visible,
+body[data-ui-theme="atelier"] textarea:focus-visible,
+body[data-ui-theme="atelier"] select:focus-visible,
+body[data-ui-theme="atelier"] label.button:focus-within {
+  outline: 3px solid var(--atelier-orange);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui-theme="atelier"] .signin-ripple-canvas {
+    display: none;
+  }
+
+  body[data-ui-theme="atelier"] .signin-canvas-status i,
+  body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art,
+  body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__paper,
+  body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__scrap,
+  body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__tape {
+    animation: none;
+  }
+
+  body[data-ui-theme="atelier"] .signin-submit i,
+  body[data-ui-theme="atelier"] .signin-field input {
+    transition: none;
+  }
+}
+
+body[data-ui-theme="atelier"] .detail-drawer-backdrop {
+  display: none;
+}
+
+@media (min-width: 1200px) {
+  body[data-ui-theme="atelier"] .detail {
+    position: sticky;
+    top: var(--workspace-header-height, 76px);
+    align-self: start;
+    height: calc(100dvh - var(--workspace-header-height, 76px));
+    min-height: 0;
+    max-height: calc(100dvh - var(--workspace-header-height, 76px));
+  }
+
+  body[data-ui-theme="atelier"] .detail-empty {
+    min-height: 100%;
+  }
+}
+
+@media (max-width: 1199px) {
+  body[data-ui-theme="atelier"] .workspace {
+    grid-template-columns: var(--sidebar-width, 208px) minmax(0, 1fr);
+  }
+
+  body[data-ui-theme="atelier"] .content-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  body[data-ui-theme="atelier"] .content-actions {
+    width: 100%;
+  }
+
+  body[data-ui-theme="atelier"] .task-heading > .botanical-art {
+    width: 82px;
+    height: 62px;
+    opacity: .1;
+  }
+
+  body[data-ui-theme="atelier"] .content-header > .task-heading {
+    padding-right: 92px;
+  }
+
+  body[data-ui-theme="atelier"] .detail {
+    position: fixed;
+    top: var(--workspace-header-height, 76px);
+    right: 0;
+    bottom: 0;
+    z-index: 21;
+    width: min(480px, calc(100vw - 72px));
+    min-height: 0;
+    border-left: 2px solid var(--atelier-ink);
+    box-shadow: -8px 0 0 rgba(42, 38, 32, .16);
+    transform: translateX(104%);
+    transition: transform .22s steps(4, end);
+  }
+
+  body[data-ui-theme="atelier"] .detail.detail-drawer-open {
+    transform: translateX(0);
+  }
+
+  body[data-ui-theme="atelier"] .detail-scroll {
+    max-height: none;
+    padding: 24px 22px 38px;
+  }
+
+  body[data-ui-theme="atelier"] .detail-close {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  body[data-ui-theme="atelier"] .detail-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    width: 100%;
+    border: 0;
+    background: rgba(42, 38, 32, .34);
+    cursor: default;
+  }
+
+  body[data-ui-theme="atelier"].detail-drawer-active {
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 1050px) {
+  body[data-ui-theme="atelier"] .topbar {
+    align-items: flex-start;
+  }
+
+  body[data-ui-theme="atelier"] .top-actions {
+    flex: 1 1 560px;
+  }
+
+  body[data-ui-theme="atelier"] .top-management-label {
+    display: none;
+  }
+
+  body[data-ui-theme="atelier"] .top-menu-cluster {
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  body[data-ui-theme="atelier"] .top-menu-panel {
+    right: 0;
+    max-width: min(220px, calc(100vw - 24px));
+  }
+
+  body[data-ui-theme="atelier"] .content {
+    padding: 28px 24px 54px;
+  }
+}
+
+@media (max-width: 700px) {
+  body[data-ui-theme="atelier"] .workspace {
+    display: block;
+  }
+
+  body[data-ui-theme="atelier"] .sidebar {
+    border-right: 0;
+    border-bottom: 2px solid var(--atelier-ink);
+  }
+
+  body[data-ui-theme="atelier"] .content {
+    padding: 24px 15px 44px;
+  }
+
+  body[data-ui-theme="atelier"] .detail {
+    width: calc(100vw - 20px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui-theme="atelier"] *,
+  body[data-ui-theme="atelier"] *::before,
+  body[data-ui-theme="atelier"] *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

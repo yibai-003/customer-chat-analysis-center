@@ -203,7 +203,7 @@ describe("dynamic reason knowledge flow", () => {
       maxTokens: 500,
     });
     setDefaultModel(visionModel.id, "vision");
-    setDefaultModel(firstTextModel.id, "text");
+    setDefaultModel(secondTextModel.id, "text");
     const capabilityCheckedAt = Date.now();
     const quotaExpiresAt = "2026-10-01T00:00:00.000Z";
     const enablePoolMember = db.prepare(`
@@ -402,15 +402,15 @@ describe("dynamic reason knowledge flow", () => {
     expect(headers).toContain("三级选项");
     expect(headers).not.toContain("原因路径匹配");
     expect(headers).not.toContain("截图解析");
+    expect(headers).not.toContain("解析状态");
+    expect(headers).not.toContain("复核状态");
+    expect(headers).not.toContain("复核备注");
     expect(exported.worksheets[0].getRow(2).values).toEqual([
       undefined,
       "面板弹簧片掉落",
       "工厂问题",
       "品质-面板故障",
       "弹簧片掉落",
-      "completed",
-      "pending",
-      "",
     ]);
   });
 });

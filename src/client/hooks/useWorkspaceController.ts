@@ -119,6 +119,7 @@ export function useWorkspaceController({ canManageConfig = true }: { canManageCo
     taskAction: actions.taskAction,
     refreshProgress: selection.refreshProgress,
     requestRecordDetail: records.requestRecordDetail,
+    clearSelectedRecord: records.clearSelectedRecord,
     editSelectedRecord: records.editSelectedRecord,
   };
 }

@@ -23,6 +23,29 @@ const job: Job = {
 afterEach(cleanup);
 
 describe("AnalysisProgress", () => {
+  it("collapses a completed task into a compact operational summary", () => {
+    render(<AnalysisProgress job={{
+      ...job,
+      status: "completed",
+      totalRecords: 19,
+      completedRecords: 16,
+      failedRecords: 0,
+      needsReviewRecords: 3,
+      totalFields: 95,
+      completedFields: 92,
+      failedFields: 0,
+      skippedFields: 0,
+      needsReviewFields: 3,
+    }} />);
+
+    expect(screen.getByLabelText("已完成任务摘要")).toBeTruthy();
+    expect(document.body.textContent).toContain("19 条记录");
+    expect(document.body.textContent).toContain("成功 16");
+    expect(document.body.textContent).toContain("待复核 3");
+    expect(document.body.textContent).toContain("失败 0");
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
   it("counts reviews as processed but does not present them as successful", () => {
     render(<AnalysisProgress job={{ ...job, totalRecords: 19, completedRecords: 0, failedRecords: 0, needsReviewRecords: 19,
       totalFields: 95, completedFields: 76, failedFields: 0, skippedFields: 0, needsReviewFields: 19 }} />);

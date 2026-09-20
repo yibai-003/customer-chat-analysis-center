@@ -42,6 +42,20 @@ export function AnalysisProgress({ job }: { job: Job }) {
     Math.max(0, job.completedRecords + job.failedRecords + (job.needsReviewRecords ?? 0)),
   );
 
+  if (job.status === "completed") {
+    return (
+      <section className="analysis-progress analysis-progress-compact" aria-label="已完成任务摘要">
+        <strong className="analysis-progress-complete-label">任务已完成</strong>
+        <div className="analysis-progress-compact-stats">
+          <span><strong>{job.totalRecords}</strong> 条记录</span>
+          <span>成功 <strong>{job.completedRecords}</strong></span>
+          <span>待复核 <strong>{job.needsReviewRecords ?? 0}</strong></span>
+          <span>失败 <strong>{job.failedRecords}</strong></span>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="analysis-progress" aria-label="当前任务解析进度">
       <ProgressMetric label="记录进度" value={processedRecords} total={job.totalRecords} />

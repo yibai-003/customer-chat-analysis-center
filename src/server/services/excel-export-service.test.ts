@@ -6,7 +6,7 @@ import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { db, initDb } from "../db/client";
 import { config } from "../config";
 import { buildOutputPlan } from "./excel-template-service";
-import { exportColumns, exportJob, exportMetadataHeaders } from "./excel-export-service";
+import { exportColumns, exportJob } from "./excel-export-service";
 import { createFieldRun } from "./field-run-service";
 
 function worksheetValues(workbook: ExcelJS.Workbook, sheetName: string) {
@@ -32,10 +32,6 @@ describe("Excel export columns", () => {
     db.prepare("DELETE FROM analysis_sections WHERE id LIKE 'task-5-export%'").run();
     for (const file of generatedFiles) fs.rmSync(file, { force: true });
     generatedFiles.clear();
-  });
-
-  it("adds stable runtime status metadata columns to exported workbooks", () => {
-    expect(exportMetadataHeaders()).toEqual(["解析状态", "复核状态", "复核备注"]);
   });
 
   it("uses field labels in exported headers", () => {
@@ -167,10 +163,11 @@ describe("Excel export columns", () => {
       客服原因: "优惠说明不清晰",
       客户产品需求: "",
       话术逻辑优化建议: "先确认客户预算，再清晰说明到手价和优惠条件，并确认该方案是否可接受。",
-      解析状态: "completed",
-      复核状态: "confirmed",
-      复核备注: "已人工复核",
     });
+    expect(headers).not.toEqual(expect.arrayContaining(["解析状态", "复核状态", "复核备注"]));
+    expect(cells).not.toHaveProperty("解析状态");
+    expect(cells).not.toHaveProperty("复核状态");
+    expect(cells).not.toHaveProperty("复核备注");
     expect(JSON.stringify(cells)).not.toContain("希望优惠到100元");
   });
 
@@ -280,7 +277,6 @@ describe("Excel export columns", () => {
     expect(headers).toEqual([
       "订单号", "问题点-售前", "问题点-售后", "有无违规-售后",
       "客服问题 识别问题并打标签", "接待流程质检结果", "优化建议-售前",
-      "解析状态", "复核状态", "复核备注",
     ]);
     expect(headers).not.toContain("截图内容总结");
     expect(headers).not.toContain("统一质检分析");
@@ -292,15 +288,15 @@ describe("Excel export columns", () => {
       "客服问题 识别问题并打标签": "答非所问、漏回复",
       接待流程质检结果: "B",
       "优化建议-售前": "先准确回答尺寸",
-      解析状态: "completed",
-      复核状态: "pending",
-      复核备注: "",
     });
+    expect(cells).not.toHaveProperty("解析状态");
+    expect(cells).not.toHaveProperty("复核状态");
+    expect(cells).not.toHaveProperty("复核备注");
     expect(JSON.stringify(cells)).not.toContain("内部事实不得导出");
     expect(JSON.stringify(cells)).not.toContain("统一质检分析");
   });
 
-  it("aggregates review state and notes for multi-section exports", async () => {
+  it("does not export review state or notes for multi-section exports", async () => {
     const sourcePath = path.join(os.tmpdir(), `multi-section-export-${Date.now()}.xlsx`);
     generatedFiles.add(sourcePath);
     const source = new ExcelJS.Workbook();
@@ -348,10 +344,9 @@ describe("Excel export columns", () => {
     await exported.xlsx.readFile(outputPath);
     const { cells } = worksheetValues(exported, "Sheet1");
 
-    expect(cells).toMatchObject({
-      复核状态: "needs_review",
-      复核备注: "售前质检：售前已确认；售后质检：售后需复核",
-    });
+    expect(cells).not.toHaveProperty("解析状态");
+    expect(cells).not.toHaveProperty("复核状态");
+    expect(cells).not.toHaveProperty("复核备注");
   });
 
   it("omits fields disabled for export from column and output plans", () => {
