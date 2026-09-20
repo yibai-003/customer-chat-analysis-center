@@ -1,6 +1,7 @@
 import { createSafeUpload, validateXlsx, requireDiskSpace, UploadError } from "./security/upload-safety";
 import { localAccess } from "./security/local-access";
 import { projectRoot } from "./environment";
+import { readRuntimeVersion, type RuntimeVersion } from "./runtime-version";
 import express from "express";
 import fs from "node:fs";
 import path from "node:path";
@@ -36,6 +37,7 @@ interface AppDependencies {
   analysisCapacityProvider?: typeof getAnalysisCapacity;
   analyzeJobRunner?: typeof analyzeJob;
   retryFailedJobStarter?: typeof retryFailedJob;
+  runtimeVersionProvider?: () => RuntimeVersion;
 }
 
 export function createApp(dependencies: AppDependencies = {}) {
@@ -93,6 +95,9 @@ export function createApp(dependencies: AppDependencies = {}) {
   const canManageSystem = requireCapability("admin:manage", "system.manage", "system");
   app.get("/api/health", (_req, res) => {
     res.json({ success: true, data: { status: "ok" }, error: null });
+  });
+  app.get("/api/version", (_req, res) => {
+    return ok(res, (dependencies.runtimeVersionProvider ?? readRuntimeVersion)());
   });
   app.use("/api/auth", createAuthRouter());
   app.use("/api", requireAuth());
