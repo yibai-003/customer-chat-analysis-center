@@ -369,7 +369,26 @@ describe("QuotaMeter", () => {
     expect(progress.getAttribute("aria-valuemax")).toBe("1000000");
   });
 
-  it("renders unlimited and invalid states without a progressbar", () => {
+  it("caps overused progress semantics at max while preserving exact display", () => {
+    render(<QuotaMeter
+      modelName="超额模型"
+      quota={quotaPresentation({
+        quotaUsedTokens: 1_200_000,
+        quotaTotalTokens: 1_000_000,
+        quotaSafetyRatio: 0.95,
+        quotaBlocked: false,
+      })}
+    />);
+    expect(screen.getByText("1,200,000 / 1,000,000")).toBeTruthy();
+    const progress = screen.getByRole("progressbar", { name: "超额模型额度 100%" });
+    const now = Number(progress.getAttribute("aria-valuenow"));
+    const max = Number(progress.getAttribute("aria-valuemax"));
+    expect(now).toBe(1_000_000);
+    expect(max).toBe(1_000_000);
+    expect(now).toBeLessThanOrEqual(max);
+  });
+
+  it("renders unlimited and invalid values and statuses once without a progressbar", () => {
     const { rerender } = render(<QuotaMeter
       modelName="不限额模型"
       quota={quotaPresentation({
@@ -379,7 +398,8 @@ describe("QuotaMeter", () => {
         quotaBlocked: false,
       })}
     />);
-    expect(screen.getByText("不限额")).toBeTruthy();
+    expect(screen.getAllByText("10")).toHaveLength(1);
+    expect(screen.getAllByText("不限额")).toHaveLength(1);
     expect(screen.queryByRole("progressbar")).toBeNull();
 
     rerender(<QuotaMeter
@@ -391,7 +411,44 @@ describe("QuotaMeter", () => {
         quotaBlocked: false,
       })}
     />);
-    expect(screen.getByText("额度数据异常")).toBeTruthy();
+    expect(screen.getAllByText("10")).toHaveLength(1);
+    expect(screen.getAllByText("额度数据异常")).toHaveLength(1);
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("renders exhausted missing-total state once without a progressbar", () => {
+    const { container } = render(<QuotaMeter
+      modelName="无总额耗尽模型"
+      quota={quotaPresentation({
+        quotaUsedTokens: 1_200,
+        quotaSafetyRatio: 0.95,
+        quotaBlocked: true,
+        quotaExhaustedAt: "2026-09-20T08:00:00.000Z",
+      })}
+    />);
+    expect(screen.getAllByText("1,200")).toHaveLength(1);
+    expect(screen.getAllByText("额度已耗尽")).toHaveLength(1);
+    expect(container.querySelector(".quota-meter")?.getAttribute("data-quota-state"))
+      .toBe("exhausted");
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("renders exhausted invalid-total state once without a progressbar", () => {
+    const { container } = render(<QuotaMeter
+      modelName="异常总额耗尽模型"
+      quota={quotaPresentation({
+        quotaUsedTokens: 50,
+        quotaTotalTokens: 0,
+        quotaSafetyRatio: 0.95,
+        quotaBlocked: true,
+        quotaExhaustedAt: "2026-09-20T08:00:00.000Z",
+      })}
+    />);
+    expect(screen.getAllByText("50")).toHaveLength(1);
+    expect(screen.getAllByText("额度已耗尽")).toHaveLength(1);
+    expect(container.querySelector(".quota-meter")?.getAttribute("data-quota-state"))
+      .toBe("exhausted");
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 });
 ```
@@ -424,7 +481,7 @@ export function QuotaMeter({
     return (
       <div className={`quota-meter ${quota.tone}`} data-quota-state={quota.tone}>
         <span className="quota-meter-value">
-          {formatQuotaTokens(quota.used)} / {quota.statusText}
+          {formatQuotaTokens(quota.used)}
         </span>
         <span className="quota-meter-status">{quota.statusText}</span>
       </div>
@@ -441,7 +498,7 @@ export function QuotaMeter({
         aria-label={`${modelName}额度 ${quota.percent}%`}
         aria-valuemin={0}
         aria-valuemax={quota.total}
-        aria-valuenow={quota.used}
+        aria-valuenow={quota.progressValue}
       >
         <span className="quota-meter-fill" style={{ width: `${quota.percent}%` }} />
       </span>
@@ -459,7 +516,7 @@ Run:
 npx vitest run src/client/components/model-config/QuotaMeter.test.tsx
 ```
 
-Expected: 2 tests PASS.
+Expected: 5 tests PASS.
 
 - [ ] **Step 5: Commit**
 

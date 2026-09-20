@@ -6,6 +6,13 @@ import type {
   ModelPurpose,
   ModelQualityTier,
 } from "../../../shared/types";
+import { PoolCheckbox } from "./PoolCheckbox";
+import { QuotaMeter } from "./QuotaMeter";
+import {
+  formatQuotaTokens,
+  quotaPresentation,
+  type QuotaPresentation,
+} from "./quota-presentation";
 
 type PoolSummaryItem = { total: number; enabled: number; verified: number; blocked: number };
 export type PoolData = {
@@ -68,11 +75,6 @@ function displayDate(value?: string) {
   return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "不限";
 }
 
-function formatTokens(value?: number) {
-  if (value == null) return "不限";
-  return new Intl.NumberFormat("zh-CN").format(value);
-}
-
 type CapabilityState = "verified" | "never" | "expired" | "failed";
 
 function capabilityStateFor(
@@ -100,14 +102,19 @@ const capabilityLabels: Record<CapabilityState, { column: string; status: string
   failed: { column: "能力验证失败", status: "能力验证失败", tone: "danger" },
 };
 
-function statusFor(model: ModelConfig, capabilityState: CapabilityState) {
+function statusFor(
+  model: ModelConfig,
+  capabilityState: CapabilityState,
+  quota: QuotaPresentation,
+) {
   if (!model.isEnabled || !model.poolEnabled) return { text: "已禁用", tone: "muted" };
-  if (model.quotaBlocked) return { text: "额度已耗尽", tone: "danger" };
+  if (quota.tone === "exhausted") return { text: quota.statusText, tone: "danger" };
   if (model.cooldownUntil) return { text: "冷却中", tone: "warning" };
   if (capabilityState !== "verified") {
     const capability = capabilityLabels[capabilityState];
     return { text: capability.status, tone: capability.tone };
   }
+  if (quota.tone === "warning") return { text: quota.statusText, tone: "warning" };
   if (model.billingMode === "paid") return { text: "付费可用", tone: "paid" };
   return { text: "可调用", tone: "ready" };
 }
@@ -164,7 +171,10 @@ export function PoolView({
   );
   const summary = pool.summary[purpose];
   const selectedMembers = pool.members.filter((model) => selectedIds.includes(model.id));
-  const visibleSelected = members.length > 0 && members.every((model) => selectedIds.includes(model.id));
+  const visibleSelectedCount = members.filter((model) => selectedIds.includes(model.id)).length;
+  const visibleSelected = members.length > 0 && visibleSelectedCount === members.length;
+  const visiblePartiallySelected = visibleSelectedCount > 0
+    && visibleSelectedCount < members.length;
   const selectedEligible = selectedMembers.filter(eligibleForRouting);
   const affectedPurposes = (["vision", "text"] as const).filter((panelPurpose) => {
     const removing = selectedEligible.filter((model) => model.purpose === panelPurpose);
@@ -589,8 +599,13 @@ export function PoolView({
           <thead>
             <tr>
               <th>
-                <input type="checkbox" aria-label="全选当前用途成员" checked={visibleSelected}
-                  onChange={toggleVisible} />
+                <PoolCheckbox
+                  label="全选当前用途成员"
+                  checked={visibleSelected}
+                  indeterminate={visiblePartiallySelected}
+                  disabled={!members.length}
+                  onChange={toggleVisible}
+                />
               </th>
               <th>模型</th>
               <th>等级</th>
@@ -608,23 +623,25 @@ export function PoolView({
           <tbody>
             {members.map((model) => {
               const editing = editingId === model.id && editState;
-              const remaining = model.quotaTotalTokens == null
-                ? undefined
-                : Math.max(0, model.quotaTotalTokens - model.quotaUsedTokens);
+              const quota = quotaPresentation(model);
+              const selected = selectedIds.includes(model.id);
               const capabilityState = capabilityStateFor(model, settings.capabilityTtlMs);
               const capability = capabilityLabels[capabilityState];
-              const status = statusFor(model, capabilityState);
+              const status = statusFor(model, capabilityState, quota);
+              const providerName = model.providerName ?? "未绑定服务商";
               return (
-                <tr key={model.id}>
+                <tr key={model.id} className={selected ? "selected" : undefined}>
                   <td>
-                    <input type="checkbox" aria-label={`选择成员 ${model.name}`}
-                      checked={selectedIds.includes(model.id)}
-                      onChange={() => toggleSelected(model.id)} />
+                    <PoolCheckbox
+                      label={`选择成员 ${model.name}`}
+                      checked={selected}
+                      onChange={() => toggleSelected(model.id)}
+                    />
                   </td>
                   <td className="model-name-cell">
-                    <strong>{model.name}</strong>
-                    <code>{model.model}</code>
-                    <small>{model.providerName ?? "未绑定服务商"}</small>
+                    <strong title={model.name}>{model.name}</strong>
+                    <code title={model.model}>{model.model}</code>
+                    <small title={providerName}>{providerName}</small>
                     {editing && (
                       <div className="model-row-toggles">
                         <label>
@@ -707,9 +724,11 @@ export function PoolView({
                           })}
                         />
                       </span>
-                    ) : `${formatTokens(model.quotaUsedTokens)} / ${formatTokens(model.quotaTotalTokens)}`}
+                    ) : <QuotaMeter modelName={model.name} quota={quota} />}
                   </td>
-                  <td>{formatTokens(remaining)}</td>
+                  <td>
+                    {quota.remaining == null ? "—" : formatQuotaTokens(quota.remaining)}
+                  </td>
                   <td>
                     {editing ? (
                       <input

@@ -233,20 +233,42 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .model-purpose-tabs button.active{background:var(--pixel-ink);color:#fff}
 .model-table-scroll{width:100%;overflow-x:auto;border-top:2px solid var(--pixel-ink);border-bottom:2px solid var(--pixel-ink)}
 .model-pool-table,.model-usage-table{width:100%;min-width:1080px;border-collapse:collapse;table-layout:fixed;font-variant-numeric:tabular-nums}
-.model-pool-table{min-width:1320px}
+.model-pool-table{min-width:1420px}
 .model-pool-table th,.model-usage-table th{padding:8px 7px;border-bottom:1px solid var(--pixel-ink);background:#eef2ed;color:#65736b;font:8px "Cascadia Mono","Consolas","Microsoft YaHei",monospace;text-align:left;white-space:nowrap}
 .model-pool-table td,.model-usage-table td{padding:9px 7px;border-bottom:1px solid var(--pixel-line);color:#45564c;font-size:9px;line-height:1.4;vertical-align:top;overflow-wrap:anywhere}
 .model-pool-table tbody tr:last-child td,.model-usage-table tbody tr:last-child td{border-bottom:0}
 .model-pool-table tbody tr:hover,.model-usage-table tbody tr:hover{background:#f5f8f2}
-.model-pool-table th:nth-child(1){width:180px}.model-pool-table th:nth-child(2){width:62px}.model-pool-table th:nth-child(3){width:72px}.model-pool-table th:nth-child(4){width:190px}.model-pool-table th:nth-child(5){width:86px}.model-pool-table th:nth-child(6){width:160px}.model-pool-table th:nth-child(7){width:78px}.model-pool-table th:nth-child(8){width:150px}.model-pool-table th:nth-child(9){width:78px}.model-pool-table th:nth-child(10){width:100px}.model-pool-table th:nth-child(11){width:100px}
+.model-pool-table tbody tr.selected{background:#eef6e5}
+.model-pool-table tbody tr.selected:hover{background:#e7f2dc}
+.model-pool-table th:nth-child(1){width:42px}.model-pool-table th:nth-child(2){width:220px}.model-pool-table th:nth-child(3){width:62px}.model-pool-table th:nth-child(4){width:72px}.model-pool-table th:nth-child(5){width:180px}.model-pool-table th:nth-child(6){width:86px}.model-pool-table th:nth-child(7){width:160px}.model-pool-table th:nth-child(8){width:78px}.model-pool-table th:nth-child(9){width:150px}.model-pool-table th:nth-child(10){width:78px}.model-pool-table th:nth-child(11){width:100px}.model-pool-table th:nth-child(12){width:100px}
 .model-name-cell strong,.model-name-cell code,.model-name-cell small,.model-usage-table td:first-child strong,.model-usage-table td:first-child small{display:block}
-.model-name-cell strong,.model-usage-table td:first-child strong{color:var(--pixel-ink);font-size:10px}
-.model-name-cell code{margin-top:3px;color:#60746a;font:9px "Cascadia Mono","Consolas",monospace}
+.model-name-cell strong{display:-webkit-box;min-height:2.8em;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font-size:11px;line-height:1.4}
+.model-name-cell strong,.model-usage-table td:first-child strong{color:var(--pixel-ink)}
+.model-name-cell code{max-width:100%;margin-top:3px;overflow:hidden;color:#60746a;font:9px "Cascadia Mono","Consolas",monospace;text-overflow:ellipsis;white-space:nowrap}
+.model-name-cell small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .model-name-cell small,.model-usage-table td:first-child small{margin-top:3px;color:#8b9891;font-size:8px}
 .model-row-toggles{display:flex;gap:8px;margin-top:7px}
 .model-row-toggles label{display:flex;align-items:center;gap:3px;color:#55685d;font-size:8px;white-space:nowrap}
 .model-inline-inputs{display:grid;grid-template-columns:1fr 1fr;gap:4px}
 .model-pool-table input,.model-pool-table select{height:27px;margin:0;padding:0 4px;font:9px "Cascadia Mono","Consolas",monospace}
+.model-pool-table .pool-checkbox{-webkit-appearance:none;appearance:none;display:inline-grid;place-content:center;width:16px;height:16px;margin:0;padding:0;border:1px solid #81948a;border-radius:0;background:#fff;color:var(--pixel-ink);vertical-align:middle;cursor:pointer}
+.model-pool-table .pool-checkbox::before{content:"";width:8px;height:8px;transform:scale(0);background:var(--pixel-ink)}
+.model-pool-table .pool-checkbox:not(:disabled):hover{border-color:#789f43}
+.model-pool-table .pool-checkbox:checked,.model-pool-table .pool-checkbox:indeterminate{border-color:#789f43;background:var(--pixel-green)}
+.model-pool-table .pool-checkbox:checked::before{transform:scale(1);clip-path:polygon(14% 44%,0 59%,39% 100%,100% 19%,84% 4%,38% 70%)}
+.model-pool-table .pool-checkbox:indeterminate::before{height:2px;transform:scale(1)}
+.model-pool-table .pool-checkbox:focus-visible{outline:2px solid var(--pixel-orange);outline-offset:2px}
+.model-pool-table .pool-checkbox:disabled{cursor:not-allowed;opacity:.45}
+.quota-meter{display:grid;gap:4px;min-width:130px}
+.quota-meter-value{font:9px "Cascadia Mono","Consolas",monospace;white-space:nowrap}
+.quota-meter-track{display:block;height:8px;border:1px solid currentColor;background:#edf0ee;overflow:hidden}
+.quota-meter-fill{display:block;height:100%;background:currentColor}
+.quota-meter-status{font-size:8px;font-weight:700}
+.quota-meter.normal{color:#547638}
+.quota-meter.warning{color:#946027}
+.quota-meter.exhausted{color:#9d543f}
+.quota-meter.unlimited{color:#3b7067}
+.quota-meter.invalid{color:#707d76}
 .model-row-actions{display:flex;gap:4px}
 .model-status,.usage-event{display:inline-block;padding:3px 5px;border-left:3px solid currentColor;background:#eef2ed;font-size:8px;font-weight:700;white-space:nowrap}
 .model-status.ready,.usage-event.success{color:#547638;background:#edf5e4}
