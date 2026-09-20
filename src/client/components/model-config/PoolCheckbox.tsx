@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 
 export function PoolCheckbox({
   label,
@@ -15,9 +15,16 @@ export function PoolCheckbox({
 }) {
   const ref = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  function syncIndeterminate() {
     if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
+  }
+
+  useLayoutEffect(syncIndeterminate);
+
+  function handleChange() {
+    onChange();
+    syncIndeterminate();
+  }
 
   return (
     <input
@@ -27,7 +34,7 @@ export function PoolCheckbox({
       aria-label={label}
       checked={checked}
       disabled={disabled}
-      onChange={onChange}
+      onChange={handleChange}
     />
   );
 }

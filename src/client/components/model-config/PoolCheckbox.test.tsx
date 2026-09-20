@@ -26,4 +26,40 @@ describe("PoolCheckbox", () => {
     expect(checkbox.indeterminate).toBe(false);
     expect(checkbox.checked).toBe(true);
   });
+
+  it("restores indeterminate after native activation when controlled props stay the same", () => {
+    const onChange = vi.fn();
+    const props = {
+      label: "全选",
+      checked: false,
+      indeterminate: true,
+      onChange,
+    };
+    const { rerender } = render(<PoolCheckbox {...props} />);
+    const checkbox = screen.getByRole("checkbox", { name: "全选" }) as HTMLInputElement;
+
+    fireEvent.click(checkbox);
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(checkbox.indeterminate).toBe(true);
+    rerender(<PoolCheckbox {...props} />);
+    expect(checkbox.indeterminate).toBe(true);
+  });
+
+  it("passes through disabled state and ignores activation", () => {
+    const onChange = vi.fn();
+    render(<PoolCheckbox label="禁用成员" checked={false} disabled onChange={onChange} />);
+    const checkbox = screen.getByRole("checkbox", { name: "禁用成员" }) as HTMLInputElement;
+
+    expect(checkbox.disabled).toBe(true);
+    checkbox.click();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("uses the model-pool checkbox class", () => {
+    render(<PoolCheckbox label="选择成员 B" checked={false} onChange={() => undefined} />);
+    const checkbox = screen.getByRole("checkbox", { name: "选择成员 B" });
+
+    expect(checkbox.classList.contains("pool-checkbox")).toBe(true);
+  });
 });
