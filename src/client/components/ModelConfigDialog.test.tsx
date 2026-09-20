@@ -80,6 +80,7 @@ const usageEvents: ModelUsageEvent[] = [{
 type RequestRecord = { url: string; init?: RequestInit };
 let requests: RequestRecord[];
 let responseFor: (url: string, init?: RequestInit) => unknown;
+let currentMembers: ModelConfig[];
 
 function success(data: unknown) {
   return new Response(JSON.stringify({ success: true, data, error: null }), {
@@ -97,12 +98,21 @@ function failure(error: string, status = 500) {
 
 function defaultData(url: string) {
   if (url === "/api/model-pools") {
+    const summaryFor = (purpose: ModelConfig["purpose"]) => {
+      const purposeMembers = currentMembers.filter((model) => model.purpose === purpose);
+      return {
+        total: purposeMembers.length,
+        enabled: purposeMembers.filter((model) => model.isEnabled && model.poolEnabled).length,
+        verified: purposeMembers.filter((model) => model.capabilityEligible).length,
+        blocked: purposeMembers.filter((model) => model.quotaBlocked || model.cooldownUntil).length,
+      };
+    };
     return {
-      members,
+      members: currentMembers,
       summary: {
-        total: members.length,
-        vision: { total: 1, enabled: 1, verified: 1, blocked: 0 },
-        text: { total: 1, enabled: 1, verified: 1, blocked: 0 },
+        total: currentMembers.length,
+        vision: summaryFor("vision"),
+        text: summaryFor("text"),
       },
     };
   }
@@ -111,13 +121,14 @@ function defaultData(url: string) {
     return { paidDailyTokenLimit: 0, paidMonthlyTokenLimit: 0, capabilityTtlMs: 86_400_000 };
   }
   if (url.startsWith("/api/model-usage-events")) return usageEvents;
-  if (url.startsWith("/api/model-pool-members/")) return members[0];
+  if (url.startsWith("/api/model-pool-members/")) return currentMembers[0];
   if (url.startsWith("/api/model-providers/")) return provider;
   throw new Error(`Unhandled request: ${url}`);
 }
 
 beforeEach(() => {
   requests = [];
+  currentMembers = members;
   responseFor = (url) => defaultData(url);
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -135,6 +146,7 @@ afterEach(() => {
 });
 
 async function renderDialog(models = members) {
+  currentMembers = models;
   await act(async () => {
     render(<ModelConfigDialog models={models} close={() => undefined} saved={() => undefined} />);
   });
@@ -151,6 +163,152 @@ describe("ModelConfigDialog", () => {
     fireEvent.click(screen.getByRole("tab", { name: "文本模型" }));
     expect(await screen.findByText("千问文本")).toBeTruthy();
     expect(screen.queryByText("千问视觉")).toBeNull();
+  });
+
+  it("tracks none, partial, and full visible selection with selected rows", async () => {
+    const first = member({ id: "first", name: "模型甲" });
+    const second = member({ id: "second", name: "模型乙" });
+    await renderDialog([first, second]);
+
+    const selectAll = (
+      await screen.findByRole("checkbox", { name: "全选当前用途成员" })
+    ) as HTMLInputElement;
+    const firstCheckbox = screen.getByRole(
+      "checkbox",
+      { name: "选择成员 模型甲" },
+    ) as HTMLInputElement;
+    const secondCheckbox = screen.getByRole(
+      "checkbox",
+      { name: "选择成员 模型乙" },
+    ) as HTMLInputElement;
+    const firstRow = screen.getByText("模型甲").closest("tr")!;
+    const secondRow = screen.getByText("模型乙").closest("tr")!;
+
+    expect(selectAll.checked).toBe(false);
+    expect(selectAll.indeterminate).toBe(false);
+    expect(firstRow.classList.contains("selected")).toBe(false);
+    expect((screen.getByRole("button", { name: "验证已选" }) as HTMLButtonElement).disabled)
+      .toBe(true);
+
+    fireEvent.click(firstCheckbox);
+    expect(selectAll.checked).toBe(false);
+    expect(selectAll.indeterminate).toBe(true);
+    expect(firstRow.classList.contains("selected")).toBe(true);
+    expect(secondRow.classList.contains("selected")).toBe(false);
+    expect((screen.getByRole("button", { name: "验证已选" }) as HTMLButtonElement).disabled)
+      .toBe(false);
+
+    fireEvent.click(selectAll);
+    expect(selectAll.checked).toBe(true);
+    expect(selectAll.indeterminate).toBe(false);
+    expect(firstCheckbox.checked).toBe(true);
+    expect(secondCheckbox.checked).toBe(true);
+    expect(firstRow.classList.contains("selected")).toBe(true);
+    expect(secondRow.classList.contains("selected")).toBe(true);
+
+    fireEvent.click(selectAll);
+    expect(selectAll.checked).toBe(false);
+    expect(selectAll.indeterminate).toBe(false);
+    expect(firstCheckbox.checked).toBe(false);
+    expect(secondCheckbox.checked).toBe(false);
+  });
+
+  it("disables visible selection for an empty pool", async () => {
+    await renderDialog([]);
+
+    expect((
+      await screen.findByRole("checkbox", { name: "全选当前用途成员" }) as HTMLInputElement
+    ).disabled).toBe(true);
+  });
+
+  it("preserves model identity and exposes truncated values through titles", async () => {
+    const identity = member({
+      id: "identity",
+      name: "用于验证稳定双行布局的超长模型显示名称",
+      model: "qwen-model-id-with-a-long-suffix-for-truncation",
+      providerName: "用于验证单行省略的超长服务商名称",
+    });
+    await renderDialog([identity]);
+
+    const row = (await screen.findByText(identity.name)).closest("tr")!;
+    expect(within(row).getByText(identity.name).getAttribute("title")).toBe(identity.name);
+    expect(within(row).getByText(identity.model).getAttribute("title")).toBe(identity.model);
+    expect(within(row).getByText(identity.providerName!).getAttribute("title"))
+      .toBe(identity.providerName);
+  });
+
+  it("renders quota progress and consistent warning, unlimited, invalid, and exhausted states", async () => {
+    const quotaMembers = [
+      member({ id: "normal", name: "正常额度", quotaUsedTokens: 800, quotaTotalTokens: 1_000 }),
+      member({ id: "warning", name: "接近阈值", quotaUsedTokens: 950, quotaTotalTokens: 1_000 }),
+      member({
+        id: "unlimited",
+        name: "无限额模型",
+        quotaUsedTokens: 10,
+        quotaTotalTokens: undefined,
+      }),
+      member({ id: "invalid", name: "异常额度", quotaUsedTokens: 10, quotaTotalTokens: 0 }),
+      member({
+        id: "exhausted",
+        name: "实际耗尽",
+        quotaUsedTokens: 1_000,
+        quotaTotalTokens: 1_000,
+      }),
+      member({
+        id: "threshold-blocked",
+        name: "安全阈值阻断",
+        quotaUsedTokens: 200,
+        quotaTotalTokens: 1_000,
+        quotaBlocked: true,
+      }),
+    ];
+    await renderDialog(quotaMembers);
+
+    const normalRow = (await screen.findByText("正常额度")).closest("tr")!;
+    const normalMeter = normalRow.querySelector(".quota-meter")!;
+    expect(within(normalRow).getByRole("progressbar", { name: "正常额度额度 80%" })).toBeTruthy();
+    expect(within(normalRow).getByText("800 / 1,000")).toBeTruthy();
+    expect(normalRow.cells[5]?.textContent).toBe("200");
+    expect(normalMeter.classList.contains("normal")).toBe(true);
+    expect(normalMeter.getAttribute("data-quota-state")).toBe("normal");
+
+    const warningRow = screen.getByText("接近阈值").closest("tr")!;
+    const warningMeter = warningRow.querySelector(".quota-meter")!;
+    expect(within(warningRow).getByRole("progressbar", { name: "接近阈值额度 95%" })).toBeTruthy();
+    expect(warningMeter.classList.contains("warning")).toBe(true);
+    expect(warningMeter.getAttribute("data-quota-state")).toBe("warning");
+    expect(within(warningRow.cells[10]!).getByText("接近安全阈值")).toBeTruthy();
+    expect(within(warningRow.cells[10]!).getByText("接近安全阈值")
+      .classList.contains("warning")).toBe(true);
+
+    const unlimitedRow = screen.getByText("无限额模型").closest("tr")!;
+    const unlimitedMeter = unlimitedRow.querySelector(".quota-meter")!;
+    expect(within(unlimitedRow).getByText("不限额")).toBeTruthy();
+    expect(unlimitedRow.cells[5]?.textContent).toBe("—");
+    expect(unlimitedMeter.classList.contains("unlimited")).toBe(true);
+    expect(unlimitedMeter.getAttribute("data-quota-state")).toBe("unlimited");
+
+    const invalidRow = screen.getByText("异常额度").closest("tr")!;
+    const invalidMeter = invalidRow.querySelector(".quota-meter")!;
+    expect(within(invalidRow).getByText("额度数据异常")).toBeTruthy();
+    expect(invalidRow.cells[5]?.textContent).toBe("—");
+    expect(invalidMeter.classList.contains("invalid")).toBe(true);
+    expect(invalidMeter.getAttribute("data-quota-state")).toBe("invalid");
+
+    const exhaustedRow = screen.getByText("实际耗尽").closest("tr")!;
+    const exhaustedMeter = exhaustedRow.querySelector(".quota-meter")!;
+    expect(exhaustedMeter.classList.contains("exhausted")).toBe(true);
+    expect(exhaustedMeter.getAttribute("data-quota-state")).toBe("exhausted");
+    expect(within(exhaustedRow.cells[10]!).getByText("额度已耗尽")
+      .classList.contains("danger")).toBe(true);
+
+    const blockedRow = screen.getByText("安全阈值阻断").closest("tr")!;
+    const blockedMeter = blockedRow.querySelector(".quota-meter")!;
+    expect(blockedMeter.classList.contains("warning")).toBe(true);
+    expect(blockedMeter.getAttribute("data-quota-state")).toBe("warning");
+    expect(within(blockedRow.cells[10]!).getByText("接近安全阈值")
+      .classList.contains("warning")).toBe(true);
+    expect(within(blockedRow.cells[10]!).queryByText("额度已耗尽")).toBeNull();
   });
 
   it("installs presets, reports created count, and verifies every required ID in safe batches", async () => {
@@ -398,7 +556,12 @@ describe("ModelConfigDialog", () => {
     vi.setSystemTime(new Date("2026-09-16T03:00:00.000Z"));
     const statusMembers = [
       member({ id: "paid", name: "付费备用", billingMode: "paid" }),
-      member({ id: "quota", name: "额度耗尽", quotaBlocked: true }),
+      member({
+        id: "quota",
+        name: "额度耗尽",
+        quotaUsedTokens: 1_000_000,
+        quotaBlocked: true,
+      }),
       member({ id: "cooldown", name: "冷却模型", cooldownUntil: "2026-09-17T00:00:00.000Z" }),
       member({
         id: "capability",
@@ -423,7 +586,8 @@ describe("ModelConfigDialog", () => {
     await renderDialog(statusMembers);
 
     await screen.findByText("付费可用");
-    expect(screen.getByText("额度已耗尽")).toBeTruthy();
+    const quotaRow = screen.getByText("额度耗尽").closest("tr") as HTMLTableRowElement;
+    expect(within(quotaRow.cells[10]!).getByText("额度已耗尽")).toBeTruthy();
     expect(screen.getByText("冷却中")).toBeTruthy();
     expect(screen.getAllByText("能力验证失败")).toHaveLength(2);
     expect(screen.getByText("已禁用")).toBeTruthy();
@@ -716,9 +880,9 @@ describe("ModelConfigDialog", () => {
       }
       if (url === "/api/model-pools") {
         poolLists += 1;
-        const currentMembers = poolLists === 1 ? [staleMember] : [invalidatedMember];
+        const refreshedMembers = poolLists === 1 ? [staleMember] : [invalidatedMember];
         return {
-          members: currentMembers,
+          members: refreshedMembers,
           summary: {
             total: 1,
             vision: { total: 1, enabled: 1, verified: poolLists === 1 ? 1 : 0, blocked: 0 },
