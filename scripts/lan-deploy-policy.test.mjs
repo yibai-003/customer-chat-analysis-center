@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -201,6 +202,47 @@ const invalidImageTagCases = [
 ];
 
 describe("LAN deployment policy", () => {
+  it("wires Docker metadata and the deployment entry point", () => {
+    const dockerfile = fs.readFileSync(`${projectRoot}/Dockerfile`, "utf8");
+    const compose = fs.readFileSync(`${projectRoot}/deploy/docker-compose.yml`, "utf8");
+    const script = fs.readFileSync(`${projectRoot}/scripts/lan-deploy.ps1`, "utf8");
+
+    expect(dockerfile).toContain("ARG APP_VERSION");
+    expect(dockerfile).toContain("ARG APP_COMMIT_SHA");
+    expect(dockerfile).toContain("ARG APP_BUILD_TIME");
+    expect(dockerfile).toContain("ARG APP_IMAGE");
+    expect(dockerfile).toContain("ENV APP_COMMIT_SHA=");
+    expect(compose).toContain("APP_CONTAINER_NAME");
+    for (const name of [
+      "APP_VERSION",
+      "APP_COMMIT_SHA",
+      "APP_BUILD_TIME",
+      "APP_IMAGE",
+    ]) {
+      expect(compose).toContain(`${name}:`);
+      expect(compose).toContain(`${name}:-`);
+    }
+    expect(script).toContain("npm run ready:check");
+    expect(script).toContain("lan-deploy-policy.mjs");
+    expect(script).toContain("RollbackImage");
+    expect(script).toContain("npm run check:installation");
+    expect(script).toContain("npm run typecheck");
+    expect(script).toContain("npm run lint");
+    expect(script).toContain("npm run build");
+    expect(script).toContain("--build-arg \"APP_COMMIT_SHA=$commit\"");
+    expect(script).toContain("docker compose");
+  });
+
+  it("checks the restored runtime image without deleting persistent directories", () => {
+    const script = fs.readFileSync(`${projectRoot}/scripts/lan-deploy.ps1`, "utf8");
+
+    expect(script).toContain("$restoredRuntime = Get-RuntimeVersion");
+    expect(script).toContain("$restoredRuntime.image -ne $previousImage");
+    expect(script).not.toMatch(
+      /Remove-Item[^\r\n]*(DEPLOY_DATA_DIR|DEPLOY_KNOWLEDGE_DIR)/i,
+    );
+  });
+
   it("binds the package version to a lowercase twelve-character commit prefix", () => {
     expect(createImageTag({
       repository: "customer-chat-analysis-center",

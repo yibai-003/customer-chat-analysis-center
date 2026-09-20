@@ -20,10 +20,18 @@ COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=dev --no-audit --no-fund
 
 FROM node:22.23.2-bookworm-slim AS runtime
+ARG APP_VERSION=0.1.0
+ARG APP_COMMIT_SHA=development
+ARG APP_BUILD_TIME=development
+ARG APP_IMAGE=development
 ENV NODE_ENV=production \
     PORT=8787 \
     DATA_DIR=/app/data \
     DATABASE_PATH=/app/data/app.db
+ENV APP_VERSION=${APP_VERSION}
+ENV APP_COMMIT_SHA=${APP_COMMIT_SHA} \
+    APP_BUILD_TIME=${APP_BUILD_TIME} \
+    APP_IMAGE=${APP_IMAGE}
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json package-lock.json .npmrc tsconfig.json ./

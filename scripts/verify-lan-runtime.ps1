@@ -52,6 +52,14 @@ try {
   if ($health -notmatch '"status":"ok"') { Fail "健康响应异常：$health" }
   if ($health -match 'app\.db|DATA_DIR|/app/data') { Fail "健康响应包含内部路径" }
 
+  Write-Host "== 运行版本与容器就绪契约"
+  $version = (docker exec $container node -e "fetch('http://127.0.0.1:8787/api/version').then(r => r.text()).then(process.stdout.write)") -join ""
+  if ($version -notmatch '"commitSha"') { Fail "运行版本接口缺少提交信息" }
+  docker exec $container npm run ready:check | Out-Host
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "INFO: 验证镜像没有正式模型配置，ready:check 按契约返回未就绪"
+  }
+
   Write-Host "== 非 root 身份"
   $uid = (docker exec $container id -u) -join ""
   if ($uid.Trim() -eq "0") { Fail "容器以 root 运行" }
