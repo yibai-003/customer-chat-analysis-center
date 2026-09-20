@@ -238,9 +238,16 @@ describe("ModelConfigDialog", () => {
   });
 
   it("renders quota progress and consistent warning, unlimited, invalid, and exhausted states", async () => {
+    vi.setSystemTime(new Date("2026-09-16T03:00:00.000Z"));
     const quotaMembers = [
       member({ id: "normal", name: "正常额度", quotaUsedTokens: 800, quotaTotalTokens: 1_000 }),
-      member({ id: "warning", name: "接近阈值", quotaUsedTokens: 950, quotaTotalTokens: 1_000 }),
+      member({
+        id: "warning",
+        name: "接近阈值",
+        quotaUsedTokens: 950,
+        quotaTotalTokens: 1_000,
+        quotaBlocked: true,
+      }),
       member({
         id: "unlimited",
         name: "无限额模型",
@@ -255,11 +262,34 @@ describe("ModelConfigDialog", () => {
         quotaTotalTokens: 1_000,
       }),
       member({
-        id: "threshold-blocked",
-        name: "安全阈值阻断",
-        quotaUsedTokens: 200,
+        id: "cooldown-warning",
+        name: "阈值冷却",
+        quotaUsedTokens: 950,
         quotaTotalTokens: 1_000,
         quotaBlocked: true,
+        cooldownUntil: "2026-12-31T00:00:00.000Z",
+      }),
+      member({
+        id: "capability-warning",
+        name: "阈值能力失败",
+        quotaUsedTokens: 950,
+        quotaTotalTokens: 1_000,
+        quotaBlocked: true,
+        capabilityEligible: false,
+        capabilityCheckedAt: "2026-09-16T02:00:00.000Z",
+        capabilityStatus: { text: false, json: true, vision: true },
+      }),
+      member({
+        id: "exhausted-conflict",
+        name: "耗尽优先",
+        quotaUsedTokens: 1_000,
+        quotaTotalTokens: 1_000,
+        quotaBlocked: true,
+        quotaExhaustedAt: "2026-09-20T08:00:00.000Z",
+        cooldownUntil: "2026-12-31T00:00:00.000Z",
+        capabilityEligible: false,
+        capabilityCheckedAt: "2026-09-16T02:00:00.000Z",
+        capabilityStatus: { text: false, json: true, vision: true },
       }),
     ];
     await renderDialog(quotaMembers);
@@ -302,13 +332,26 @@ describe("ModelConfigDialog", () => {
     expect(within(exhaustedRow.cells[10]!).getByText("额度已耗尽")
       .classList.contains("danger")).toBe(true);
 
-    const blockedRow = screen.getByText("安全阈值阻断").closest("tr")!;
-    const blockedMeter = blockedRow.querySelector(".quota-meter")!;
-    expect(blockedMeter.classList.contains("warning")).toBe(true);
-    expect(blockedMeter.getAttribute("data-quota-state")).toBe("warning");
-    expect(within(blockedRow.cells[10]!).getByText("接近安全阈值")
-      .classList.contains("warning")).toBe(true);
-    expect(within(blockedRow.cells[10]!).queryByText("额度已耗尽")).toBeNull();
+    const cooldownRow = screen.getByText("阈值冷却").closest("tr")!;
+    expect(within(cooldownRow).getByRole("progressbar", { name: "阈值冷却额度 95%" }))
+      .toBeTruthy();
+    expect(cooldownRow.querySelector(".quota-meter")?.getAttribute("data-quota-state"))
+      .toBe("warning");
+    expect(within(cooldownRow.cells[10]!).getByText("冷却中")).toBeTruthy();
+    expect(within(cooldownRow.cells[10]!).queryByText("接近安全阈值")).toBeNull();
+
+    const capabilityRow = screen.getByText("阈值能力失败").closest("tr")!;
+    expect(within(capabilityRow).getByRole("progressbar", { name: "阈值能力失败额度 95%" }))
+      .toBeTruthy();
+    expect(capabilityRow.querySelector(".quota-meter")?.getAttribute("data-quota-state"))
+      .toBe("warning");
+    expect(within(capabilityRow.cells[10]!).getByText("能力验证失败")).toBeTruthy();
+    expect(within(capabilityRow.cells[10]!).queryByText("接近安全阈值")).toBeNull();
+
+    const exhaustedConflictRow = screen.getByText("耗尽优先").closest("tr")!;
+    expect(within(exhaustedConflictRow.cells[10]!).getByText("额度已耗尽")).toBeTruthy();
+    expect(within(exhaustedConflictRow.cells[10]!).queryByText("冷却中")).toBeNull();
+    expect(within(exhaustedConflictRow.cells[10]!).queryByText("能力验证失败")).toBeNull();
   });
 
   it("installs presets, reports created count, and verifies every required ID in safe batches", async () => {
@@ -421,6 +464,45 @@ describe("ModelConfigDialog", () => {
     expect(close).not.toHaveBeenCalled();
   });
 
+  it("restores selected members with the established method and request body", async () => {
+    const restored = member({ id: "restore-me", name: "待恢复成员" });
+    await renderDialog([restored]);
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "选择成员 待恢复成员" }));
+    fireEvent.click(screen.getByRole("button", { name: "恢复已选" }));
+
+    await waitFor(() => expect(requests.some((request) => (
+      request.url === "/api/model-pool-members/restore" && request.init?.method === "POST"
+    ))).toBe(true));
+    const restoreRequest = requests.find((request) => (
+      request.url === "/api/model-pool-members/restore"
+    ))!;
+    expect(restoreRequest.init?.headers).toEqual({ "Content-Type": "application/json" });
+    expect(JSON.parse(String(restoreRequest.init?.body))).toEqual({ ids: ["restore-me"] });
+  });
+
+  it("saves pool settings with the established method and request body", async () => {
+    await renderDialog();
+
+    fireEvent.change(screen.getByLabelText("付费日预算"), { target: { value: "1234" } });
+    fireEvent.change(screen.getByLabelText("付费月预算"), { target: { value: "5678" } });
+    fireEvent.change(screen.getByLabelText("能力验证有效期（毫秒）"), { target: { value: "9000" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存池设置" }));
+
+    await waitFor(() => expect(requests.some((request) => (
+      request.url === "/api/model-pool-settings" && request.init?.method === "PATCH"
+    ))).toBe(true));
+    const settingsRequest = requests.find((request) => (
+      request.url === "/api/model-pool-settings" && request.init?.method === "PATCH"
+    ))!;
+    expect(settingsRequest.init?.headers).toEqual({ "Content-Type": "application/json" });
+    expect(JSON.parse(String(settingsRequest.init?.body))).toEqual({
+      paidDailyTokenLimit: 1234,
+      paidMonthlyTokenLimit: 5678,
+      capabilityTtlMs: 9000,
+    });
+  });
+
   it("marks a successful provider creation dirty before a failed refresh and does not invite a duplicate retry", async () => {
     const close = vi.fn();
     const saved = vi.fn();
@@ -457,9 +539,16 @@ describe("ModelConfigDialog", () => {
     });
 
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("已创建"));
-    expect(requests.filter((request) => (
+    const createRequests = requests.filter((request) => (
       request.url === "/api/model-providers" && request.init?.method === "POST"
-    ))).toHaveLength(1);
+    ));
+    expect(createRequests).toHaveLength(1);
+    expect(JSON.parse(String(createRequests[0].init?.body))).toEqual({
+      name: "新服务商",
+      baseUrl: "https://new.example/v1",
+      isEnabled: true,
+      apiKey: "new-secret",
+    });
     expect(poolLists).toBe(2);
     expect(settingsLists).toBe(1);
     expect((screen.getByLabelText("名称") as HTMLInputElement).value).toBe("");

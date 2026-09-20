@@ -109,12 +109,12 @@ function statusFor(
 ) {
   if (!model.isEnabled || !model.poolEnabled) return { text: "已禁用", tone: "muted" };
   if (quota.tone === "exhausted") return { text: quota.statusText, tone: "danger" };
-  if (quota.tone === "warning") return { text: quota.statusText, tone: "warning" };
   if (model.cooldownUntil) return { text: "冷却中", tone: "warning" };
   if (capabilityState !== "verified") {
     const capability = capabilityLabels[capabilityState];
     return { text: capability.status, tone: capability.tone };
   }
+  if (quota.tone === "warning") return { text: quota.statusText, tone: "warning" };
   if (model.billingMode === "paid") return { text: "付费可用", tone: "paid" };
   return { text: "可调用", tone: "ready" };
 }
