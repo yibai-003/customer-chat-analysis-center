@@ -459,13 +459,28 @@ server {
   $evidence.singleInstance = @{ rejected = $true }
 
   $evidence.finishedAt = (Get-Date).ToString("o")
-  $evidencePath = Join-Path $root "acceptance-evidence.json"
+  $requestedEvidencePath = if ($EvidencePath) {
+    [IO.Path]::GetFullPath($EvidencePath)
+  } else {
+    $null
+  }
+  $evidencePath = if ($requestedEvidencePath) {
+    $parent = Split-Path -Parent $requestedEvidencePath
+    if ($parent) {
+      New-Item -ItemType Directory -Force -Path $parent | Out-Null
+    }
+    $requestedEvidencePath
+  } else {
+    Join-Path $root "acceptance-evidence.json"
+  }
   [IO.File]::WriteAllText($evidencePath, ($evidence | ConvertTo-Json -Depth 8))
   Write-Host ""
   Write-Host "ACCEPTANCE OK"
   Write-Host "证据文件：$evidencePath"
   Write-Host ($evidence | ConvertTo-Json -Depth 4)
-  if (-not $Keep) { Copy-Item $evidencePath (Join-Path $env:TEMP "lan-acceptance-evidence.json") -Force }
+  if (-not $Keep -and -not $requestedEvidencePath) {
+    Copy-Item $evidencePath (Join-Path $env:TEMP "lan-acceptance-evidence.json") -Force
+  }
 } catch {
   foreach ($name in @($appContainer, $proxyContainer)) {
     if ((docker ps -aq -f "name=^/${name}$")) { docker logs $name 2>&1 | Select-Object -Last 20 }

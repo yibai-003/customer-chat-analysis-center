@@ -1,16 +1,16 @@
 {
-  "startedAt": "2026-09-21T13:15:32.8902115+08:00",
+  "startedAt": "2026-09-21T13:31:10.9023441+08:00",
   "host": {
-    "memoryGb": 7.8,
     "os": "Microsoft Windows NT 10.0.19045.0",
-    "docker": "29.6.2",
-    "cpu": "Intel(R) Core(TM) i9-10900KF CPU @ 3.70GHz"
+    "cpu": "Intel(R) Core(TM) i9-10900KF CPU @ 3.70GHz",
+    "memoryGb": 7.8,
+    "docker": "29.6.2"
   },
   "image": "customer-chat-analysis:verify-b1c6920",
-  "entry": "https://chat.example.lan:18444",
-  "dataDir": "C:\\Users\\DY-01\\AppData\\Local\\Temp\\lan-acceptance-b3e016470dec4c09b552447ab86d92e3\\data",
-  "knowledgeDir": "C:\\Users\\DY-01\\AppData\\Local\\Temp\\lan-acceptance-b3e016470dec4c09b552447ab86d92e3\\knowledge",
-  "imageId": "sha256:852fe3d947fcf34e3493e0dab199d6dc9c32dcdd06142b15f3b2fee6f8ca7fe7",
+  "entry": "https://chat.example.lan:18445",
+  "dataDir": "C:\\Users\\DY-01\\AppData\\Local\\Temp\\lan-acceptance-b064e6190acd47d78a0188fb5994633f\\data",
+  "knowledgeDir": "C:\\Users\\DY-01\\AppData\\Local\\Temp\\lan-acceptance-b064e6190acd47d78a0188fb5994633f\\knowledge",
+  "imageId": "sha256:b39bf02517e055f2e0be6771f5004491b8bbf54a85b88719b22b28a1bd4cd4b4",
   "realModel": {
     "configured": true,
     "credentialSource": "workstation",
@@ -21,17 +21,7 @@
     "supportsVision": true
   },
   "acceptanceClient": {
-    "signoff": {
-      "eligible": false,
-      "missing": [
-        "trusted-tls",
-        "internal-dns",
-        "real-model-provider",
-        "sample-count",
-        "cross-machine"
-      ]
-    },
-    "realModel": true,
+    "backupName": "full-2026-09-21T05-32-03-407Z-fce11f5f-1ba5-470d-bc61-0876b3bf4566",
     "modelEvidence": {
       "recordStatus": "completed",
       "modelField": "acceptanceConclusion",
@@ -44,7 +34,33 @@
       "reviewed": true,
       "exported": true
     },
-    "seconds": 10.2,
+    "seconds": 9.4,
+    "modelEndpoint": {
+      "configured": true,
+      "host": "host.docker.internal",
+      "protocol": "http:",
+      "signable": false,
+      "reason": "https-required",
+      "providerName": "验收桩模型",
+      "credentialSource": "workstation"
+    },
+    "cleanup": {
+      "disabledUsers": 5,
+      "removedModels": 3,
+      "removedProviders": 2
+    },
+    "auditEventCount": 81,
+    "signoff": {
+      "eligible": false,
+      "missing": [
+        "trusted-tls",
+        "internal-dns",
+        "real-model-provider",
+        "sample-count",
+        "cross-machine"
+      ]
+    },
+    "realModel": true,
     "steps": [
       {
         "name": "https-health",
@@ -53,7 +69,7 @@
           "status": "ok",
           "entry": {
             "host": "chat.example.lan",
-            "port": 18444,
+            "port": 18445,
             "origin": "https://chat.example.lan",
             "tlsVerified": false
           },
@@ -100,8 +116,8 @@
         "name": "import-as-operator",
         "ok": true,
         "detail": {
-          "jobId": "52b59f10-1119-4b8c-9b85-65fa6c2c306e",
-          "recordId": "ed08455a-b68c-496c-9e2e-3c763a22b636",
+          "jobId": "aec72364-c871-401a-89d1-9b34e5819ff6",
+          "recordId": "3b01182c-c9cd-4f31-b3d1-e32f691d0967",
           "totalRecords": 1
         }
       },
@@ -109,7 +125,7 @@
         "name": "image-shared-view",
         "ok": true,
         "detail": {
-          "path": "/api/records/ed08455a-b68c-496c-9e2e-3c763a22b636/image"
+          "path": "/api/records/3b01182c-c9cd-4f31-b3d1-e32f691d0967/image"
         }
       },
       {
@@ -143,8 +159,8 @@
         "ok": true,
         "detail": {
           "configured": true,
-          "vision": "71bb9eeb-a46b-4a3d-94ec-2bdfc1095f30",
-          "text": "5cb35ea2-fdc5-461f-ab06-9e3a712c2c8c",
+          "vision": "842bddd4-5972-4d63-a8a9-1b17b00ee2cd",
+          "text": "05d5038c-53eb-445c-a372-cf91332b83ae",
           "visionModel": "stub-vision",
           "textModel": "stub-text",
           "supportsVision": true,
@@ -200,7 +216,7 @@
         "name": "account-disable",
         "ok": true,
         "detail": {
-          "disabledUser": "3a9f9b7d-ba83-4ecf-870f-d96ee517a051"
+          "disabledUser": "c0bee685-ae75-4af7-8cc8-1e67f13ccdf7"
         }
       },
       {
@@ -217,7 +233,7 @@
         "name": "backup-through-api",
         "ok": true,
         "detail": {
-          "name": "full-2026-09-21T05-16-30-003Z-75b84a96-3985-4fb5-b15d-687c392fa5d2",
+          "name": "full-2026-09-21T05-32-03-407Z-fce11f5f-1ba5-470d-bc61-0876b3bf4566",
           "files": 8,
           "references": 6
         }
@@ -226,7 +242,7 @@
         "name": "backup-restore-drill",
         "ok": true,
         "detail": {
-          "name": "full-2026-09-21T05-16-30-003Z-75b84a96-3985-4fb5-b15d-687c392fa5d2",
+          "name": "full-2026-09-21T05-32-03-407Z-fce11f5f-1ba5-470d-bc61-0876b3bf4566",
           "checks": [
             {
               "name": "restored-marker",
@@ -261,33 +277,15 @@
         }
       }
     ],
-    "ok": true,
-    "backupName": "full-2026-09-21T05-16-30-003Z-75b84a96-3985-4fb5-b15d-687c392fa5d2",
-    "modelEndpoint": {
-      "configured": true,
-      "host": "host.docker.internal",
-      "protocol": "http:",
-      "signable": false,
-      "reason": "https-required",
-      "providerName": "验收桩模型",
-      "credentialSource": "workstation"
-    },
-    "auditEventCount": 81,
-    "cleanup": {
-      "disabledUsers": 5,
-      "removedModels": 3,
-      "removedProviders": 2
-    }
+    "ok": true
   },
   "restore": {
-    "backup": "full-2026-09-21T05-16-30-003Z-75b84a96-3985-4fb5-b15d-687c392fa5d2",
-    "verified": true,
     "checks": [
       {
         "name": "restored-marker",
         "ok": true,
         "detail": {
-          "restoredAt": "2026-09-21T05:16:34.863Z"
+          "restoredAt": "2026-09-21T05:32:07.464Z"
         }
       },
       {
@@ -308,7 +306,7 @@
         "name": "knowledge-catalog",
         "ok": true,
         "detail": {
-          "hash": "a9cef16762cc89aec08f0db9ced5971bec455db12a02db978ea29c5cb6ceebff"
+          "hash": "9cafc17ec1b38b1e42c182f28ce5da8f84e7b2a2dfc76c483b39c42d6c52c302"
         }
       },
       {
@@ -321,13 +319,15 @@
           "pending": false
         }
       }
-    ]
+    ],
+    "backup": "full-2026-09-21T05-32-03-407Z-fce11f5f-1ba5-470d-bc61-0876b3bf4566",
+    "verified": true
   },
   "persistence": {
     "managedKey": true,
     "jobsAfterUpgrade": 2,
-    "upgradeImage": "customer-chat-analysis:verify-b1c6920",
-    "realUpgradeVerified": false
+    "realUpgradeVerified": false,
+    "upgradeImage": "customer-chat-analysis:verify-b1c6920"
   },
   "rollback": {
     "image": "customer-chat-analysis:verify-b1c6920",
@@ -336,5 +336,5 @@
   "singleInstance": {
     "rejected": true
   },
-  "finishedAt": "2026-09-21T13:17:04.9460957+08:00"
+  "finishedAt": "2026-09-21T13:32:39.4750756+08:00"
 }
