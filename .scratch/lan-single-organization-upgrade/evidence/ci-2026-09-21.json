@@ -1,0 +1,40 @@
+{
+  "schemaVersion": 1,
+  "mode": "github-actions",
+  "collectedAt": "2026-09-21T12:48:00+08:00",
+  "repository": "yibai-003/customer-chat-analysis-center",
+  "ref": "main",
+  "commit": "8686c5e6e2df3c721539ab6395a1c64b35dfc1ce",
+  "run": {
+    "id": 35562060219,
+    "runNumber": 16,
+    "status": "completed",
+    "conclusion": "success"
+  },
+  "jobs": [
+    {
+      "name": "Quality gates (clean checkout)",
+      "id": 106216683703,
+      "conclusion": "success"
+    },
+    {
+      "name": "Release artifact",
+      "id": 106216834118,
+      "conclusion": "success"
+    }
+  ],
+  "artifact": {
+    "id": 10622367767,
+    "name": "customer-chat-analysis-center-release-candidate",
+    "sizeBytes": 758943,
+    "digest": "sha256:56783f2dbd4b59e2f3e7c3bdcf8472bdc44d4f79a7b5675f5df59b5dae1a8b2c",
+    "expired": false,
+    "expiresAt": "2026-10-21T04:45:35Z"
+  },
+  "expectedImageTag": "customer-chat-analysis-center:0.1.0-8686c5e6e2df",
+  "limitations": [
+    "当前工作流在 GitHub Actions runner 内构建镜像但不推送镜像仓库。",
+    "未使用仓库认证下载 artifact 压缩包，因此本证据不填写 runner 生成的不可变 imageId。",
+    "正式主机升级、回滚和 host-signoff 仍需使用可在正式主机取得的批准镜像标签及 imageId。"
+  ]
+}

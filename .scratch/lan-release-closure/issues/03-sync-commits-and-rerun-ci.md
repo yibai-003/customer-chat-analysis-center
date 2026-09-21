@@ -23,3 +23,8 @@
 - 工件核验：`manifest.json` 的 version `0.1.0`、commit、runId、镜像标签 `customer-chat-analysis-center:0.1.0-ebc4946d0455`、CI 镜像 ID `sha256:63f119b1…` 与运行一致；源码包 218 个条目，无 `node_modules`、`.env`、密钥、数据库或业务 Excel。
 - 部署：同一提交本地重建镜像（本地 ID `sha256:08ec9a76…`，与 CI 构建环境不同、ID 不同）替换局域网容器 `lan-preview`；部署前已备份（`npm run backup` 成功），旧容器保留为 `lan-preview-previous`。部署后健康检查 healthy、管理员登录成功（11 项能力）、`/api/ready` 200、默认模型 `qwen3-vl-plus`/`qwen-plus`、任务 10 条记录与 91 条审计、原图哈希均不变。
 - 记录更新：`docs/archive/lan-release-acceptance-2026-09-17.md` 新增“发布候选同步与部署”，`docs/architecture-remediation-progress.md` 更新恢复入口与时间线，Issue 07/11/12 引用统一到 2026-09-18 事实。
+
+**2026-09-21 当前提交复跑：**
+
+- 当前 `main` 已同步到 `8686c5e6e2df3c721539ab6395a1c64b35dfc1ce`，运行 `35562060219` 的质量与发布两个 job 均为 `success`。
+- 当前发布候选工件 id `10622367767`、摘要 `sha256:56783f2dbd4b59e2f3e7c3bdcf8472bdc44d4f79a7b5675f5df59b5dae1a8b2c` 已归档；现场部署仍受“镜像只在 runner 构建、不推送仓库”和正式 HTTPS/主机条件限制。
