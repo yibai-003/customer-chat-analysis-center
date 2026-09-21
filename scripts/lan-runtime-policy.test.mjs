@@ -14,5 +14,8 @@ describe("LAN runtime verification policy", () => {
     expect(script).toContain('--build-arg "APP_COMMIT_SHA=$commitSha"');
     expect(script).toContain('--build-arg "APP_BUILD_TIME=$buildTime"');
     expect(script).toContain('--build-arg "APP_IMAGE=$Image"');
+    expect(script).toContain("$runtimeVersion.version -ne $packageVersion");
+    expect(script).toContain("$runtimeVersion.commitSha -ne $commitSha");
+    expect(script).toContain("$runtimeVersion.image -ne $Image");
   });
 });
