@@ -29,11 +29,22 @@ $root = Join-Path $env:TEMP ("lan-runtime-verify-" + [guid]::NewGuid().ToString(
 $dataDir = Join-Path $root "data"
 $knowledgeDir = Join-Path $root "knowledge"
 $container = "lan-runtime-verify-app"
+$projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$packageVersion = ((& node -p "require('./package.json').version" 2>$null) | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $packageVersion) { Fail "无法读取 package.json 版本" }
+$commitSha = ((& git -C $projectRoot rev-parse HEAD 2>$null) | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or -not $commitSha) { Fail "无法读取当前 Git 提交 SHA" }
+$buildTime = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
 New-Item -ItemType Directory -Force -Path $dataDir, $knowledgeDir | Out-Null
 
 try {
   Write-Host "== 构建镜像 $Image"
-  docker build -t $Image (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+  docker build `
+    --build-arg "APP_VERSION=$packageVersion" `
+    --build-arg "APP_COMMIT_SHA=$commitSha" `
+    --build-arg "APP_BUILD_TIME=$buildTime" `
+    --build-arg "APP_IMAGE=$Image" `
+    -t $Image $projectRoot
   if ($LASTEXITCODE -ne 0) { Fail "镜像构建失败" }
 
   Write-Host "== 首次启动容器（不注入 ENCRYPTION_KEY，验证托管密钥落盘）"
