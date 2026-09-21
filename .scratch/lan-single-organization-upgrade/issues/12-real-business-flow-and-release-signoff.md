@@ -35,7 +35,6 @@
 - [局域网现场验收执行手册](../../../docs/guides/lan-acceptance-runbook.md) 步骤 5 更新为携带真实模型参数的命令，并新增 5.1 桩模型预演小节与通过标准（`tlsVerified: true`、`realModel.configured: true`、至少一次真实模型调用成功）。
 - 本机验证：桩模型下 `scripts/verify-lan-acceptance.ps1` 全流程 `ACCEPTANCE OK`，`real-model-parse` 记录一次模型调用成功（`recordStatus: completed`、30 tokens）；不提供模型时演练模式仍 `ACCEPTANCE OK` 且两步 `skipped`。
 - 升级/回滚预演（第 7 项）已在演练模式中由脚本覆盖（换标签重建→数据保留→切回原标签），现场版本替换 Issue 10 的 CI 镜像标签即可；真实镜像标签与主机重启证据仍需现场执行。
-- 2026-09-21 本机 Field Drill 补充：18/18 步骤通过，包含五角色权限、真实业务闭环、审计、备份恢复、持久化、回滚和单实例；使用 `customer-chat-analysis:verify`，未使用 Issue 10 的 CI 批准镜像，因此不关闭升级回滚项。
-- 2026-09-21 当前提交 Field Drill 补充：使用 `customer-chat-analysis:verify-b1c6920` 完成 18/18 步骤，证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-b1c6920-2026-09-21.json`；模型为桩模型、样本为 1 条、证书为自签名，故仅证明当前提交的预演闭环，不关闭正式升级回滚项。
-- 2026-09-21 当前提交已通过 CI 运行 `35562060219` 并生成发布候选工件 `10622367767`；由于当前工作流不推送镜像仓库，正式主机仍未取得可直接部署的 CI 镜像及不可变 `imageId`，第 7 项继续保持未完成。
+- 2026-09-21 本机 Field Drill 补充：使用 `customer-chat-analysis:verify-b11b8d0` 完成 18/18 步骤，证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-b11b8d0-2026-09-21.json`；升级、回滚、独立恢复和单实例保护均通过，但模型为桩模型、样本为 1 条、证书为自签名，故仅证明当前提交的预演闭环，不关闭正式升级回滚项。
+- 2026-09-21 当前提交已通过 CI 运行 `35565226085` 并生成发布候选工件 `10623912039`，摘要见 `.scratch/lan-single-organization-upgrade/evidence/ci-2026-09-21-run18.json`；由于当前工作流不推送镜像仓库，正式主机仍未取得可直接部署的 CI 镜像及不可变 `imageId`，第 7 项继续保持未完成。
 - 待现场执行：第 3、4、5、7、9 项依赖真实复核/只读抽查、正式 HTTPS 与 CI 工件；当前环境无法提供，保持未完成。

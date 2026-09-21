@@ -24,7 +24,7 @@
 
 **2026-09-21 当前提交复跑：**
 
-- 提交 `8686c5e6e2df3c721539ab6395a1c64b35dfc1ce` 已推送到 `main`，GitHub Actions 运行 `35562060219`（run #16）完成且结论为 `success`。
-- `Quality gates (clean checkout)` job `106216683703` 与 `Release artifact` job `106216834118` 均成功。
-- 发布候选工件 `customer-chat-analysis-center-release-candidate` 的 id 为 `10622367767`，工件摘要为 `sha256:56783f2dbd4b59e2f3e7c3bdcf8472bdc44d4f79a7b5675f5df59b5dae1a8b2c`，证据见 `.scratch/lan-single-organization-upgrade/evidence/ci-2026-09-21.json`。
-- 按工作流规则，本次 runner 内构建的镜像标签应为 `customer-chat-analysis-center:0.1.0-8686c5e6e2df`；工作流不推送镜像仓库，正式主机仍需取得可部署镜像及其不可变 `imageId` 后才能完成现场升级/回滚。
+- 提交 `b11b8d08d8b4aba1a96a1b14aa33227f95f71368` 已推送到 `main`，GitHub Actions 运行 `35565226085`（run #18）完成且结论为 `success`。
+- `Quality gates (clean checkout)` job `106225587111` 与 `Release artifact` job `106225721722` 均成功。
+- 发布候选工件 `customer-chat-analysis-center-release-candidate` 的 id 为 `10623912039`，工件摘要为 `sha256:22563f7a3cb05103e3af00e89f64a2017deb16d9b5c094cfecb57fccbc1cc5fd`，证据见 `.scratch/lan-single-organization-upgrade/evidence/ci-2026-09-21-run18.json`。
+- 按工作流规则，本次 runner 内构建的镜像标签应为 `customer-chat-analysis-center:0.1.0-b11b8d08d8b4`；工作流不推送镜像仓库，正式主机仍需取得可部署镜像及其不可变 `imageId` 后才能完成现场升级/回滚。

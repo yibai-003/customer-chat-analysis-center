@@ -1,0 +1,340 @@
+{
+  "startedAt": "2026-09-21T13:56:17.9718524+08:00",
+  "host": {
+    "os": "Microsoft Windows NT 10.0.19045.0",
+    "docker": "29.6.2",
+    "memoryGb": 7.8,
+    "cpu": "Intel(R) Core(TM) i9-10900KF CPU @ 3.70GHz"
+  },
+  "image": "customer-chat-analysis:verify-b11b8d0",
+  "entry": "https://chat.example.lan:18446",
+  "dataDir": "C:\\Users\\DY-01\\AppData\\Local\\Temp\\lan-acceptance-50db2134e18a47cb90c70d30b93a5234\\data",
+  "knowledgeDir": "C:\\Users\\DY-01\\AppData\\Local\\Temp\\lan-acceptance-50db2134e18a47cb90c70d30b93a5234\\knowledge",
+  "imageId": "sha256:c1c5277d7483aad22960f9c7dfcaced2c41bbe49d04b7673b9ba0483b8977dac",
+  "realModel": {
+    "configured": true,
+    "credentialSource": "workstation",
+    "provider": "验收桩模型",
+    "baseUrl": "http://host.docker.internal:18790/v1",
+    "visionModel": "stub-vision",
+    "textModel": "stub-text",
+    "supportsVision": true
+  },
+  "acceptanceClient": {
+    "signoff": {
+      "eligible": false,
+      "missing": [
+        "trusted-tls",
+        "internal-dns",
+        "real-model-provider",
+        "sample-count",
+        "cross-machine"
+      ]
+    },
+    "modelEndpoint": {
+      "configured": true,
+      "host": "host.docker.internal",
+      "protocol": "http:",
+      "signable": false,
+      "reason": "https-required",
+      "providerName": "验收桩模型",
+      "credentialSource": "workstation"
+    },
+    "realModel": true,
+    "ok": true,
+    "auditEventCount": 81,
+    "modelEvidence": {
+      "recordStatus": "completed",
+      "modelField": "acceptanceConclusion",
+      "outputPreview": "验收模拟结论",
+      "modelCalls": 1,
+      "accountedTokens": 30,
+      "importedRecords": 1,
+      "parsedRecords": 1,
+      "recordsVerified": 1,
+      "reviewed": true,
+      "exported": true
+    },
+    "cleanup": {
+      "disabledUsers": 5,
+      "removedModels": 3,
+      "removedProviders": 2
+    },
+    "steps": [
+      {
+        "name": "https-health",
+        "ok": true,
+        "detail": {
+          "status": "ok",
+          "entry": {
+            "host": "chat.example.lan",
+            "port": 18446,
+            "origin": "https://chat.example.lan",
+            "tlsVerified": false
+          },
+          "certificate": null
+        }
+      },
+      {
+        "name": "admin-login",
+        "ok": true,
+        "detail": {
+          "capabilities": 11
+        }
+      },
+      {
+        "name": "create-role-accounts",
+        "ok": true,
+        "detail": {
+          "accounts": 5
+        }
+      },
+      {
+        "name": "shared-reads",
+        "ok": true,
+        "detail": {
+          "admin": "ok",
+          "config": "ok",
+          "operator": "ok",
+          "reviewer": "ok",
+          "readonly": "ok"
+        }
+      },
+      {
+        "name": "anonymous-denied",
+        "ok": true,
+        "detail": {
+          "denied": [
+            "/api/jobs",
+            "/api/records/:id/image",
+            "/api/admin/audit-events"
+          ]
+        }
+      },
+      {
+        "name": "import-as-operator",
+        "ok": true,
+        "detail": {
+          "jobId": "e7f46494-fe41-4cf5-b1d4-2c4ace2f1378",
+          "recordId": "0f802cde-b3ff-4c6e-9b40-da075fac5e64",
+          "totalRecords": 1
+        }
+      },
+      {
+        "name": "image-shared-view",
+        "ok": true,
+        "detail": {
+          "path": "/api/records/0f802cde-b3ff-4c6e-9b40-da075fac5e64/image"
+        }
+      },
+      {
+        "name": "review-matrix",
+        "ok": true,
+        "detail": {
+          "reviewerStatus": "confirmed"
+        }
+      },
+      {
+        "name": "export-matrix",
+        "ok": true,
+        "detail": {
+          "allowed": [
+            "admin",
+            "operator",
+            "reviewer"
+          ]
+        }
+      },
+      {
+        "name": "configuration-and-pool",
+        "ok": true,
+        "detail": {
+          "configWrites": "config/admin only",
+          "credentialProbe": "temporary-drill-model"
+        }
+      },
+      {
+        "name": "real-model-configure",
+        "ok": true,
+        "detail": {
+          "configured": true,
+          "vision": "400b457e-0eb5-4b87-893a-6a77dcf103a8",
+          "text": "7aeeef5a-e597-45c0-9900-e9c0a6c6d2e3",
+          "visionModel": "stub-vision",
+          "textModel": "stub-text",
+          "supportsVision": true,
+          "credentialSource": "workstation",
+          "verified": [
+            {
+              "purpose": "vision",
+              "passed": true,
+              "capabilities": {
+                "text": true,
+                "json": true,
+                "vision": true,
+                "errors": {}
+              }
+            },
+            {
+              "purpose": "text",
+              "passed": true,
+              "capabilities": {
+                "text": true,
+                "json": true,
+                "vision": false,
+                "errors": {}
+              }
+            }
+          ]
+        }
+      },
+      {
+        "name": "analysis-lifecycle",
+        "ok": true,
+        "detail": {
+          "startedBy": "operator"
+        }
+      },
+      {
+        "name": "real-model-parse",
+        "ok": true,
+        "detail": {
+          "recordStatus": "completed",
+          "modelField": "acceptanceConclusion",
+          "outputPreview": "验收模拟结论",
+          "modelCalls": 1,
+          "accountedTokens": 30,
+          "importedRecords": 1,
+          "parsedRecords": 1,
+          "recordsVerified": 1,
+          "reviewed": true,
+          "exported": true
+        }
+      },
+      {
+        "name": "account-disable",
+        "ok": true,
+        "detail": {
+          "disabledUser": "8f62aad7-71c2-4afa-b5a6-9e9798ea2151"
+        }
+      },
+      {
+        "name": "restore-acceptance-state",
+        "ok": true,
+        "detail": {
+          "disabledUsers": 5,
+          "removedModels": 3,
+          "removedProviders": 2,
+          "poolSettingsRestored": true
+        }
+      },
+      {
+        "name": "backup-through-api",
+        "ok": true,
+        "detail": {
+          "name": "full-2026-09-21T05-57-04-282Z-3e22b87f-31b8-4b47-b840-35eb392e9cda",
+          "files": 8,
+          "references": 6
+        }
+      },
+      {
+        "name": "backup-restore-drill",
+        "ok": true,
+        "detail": {
+          "name": "full-2026-09-21T05-57-04-282Z-3e22b87f-31b8-4b47-b840-35eb392e9cda",
+          "checks": [
+            {
+              "name": "restored-marker",
+              "ok": true
+            },
+            {
+              "name": "database",
+              "ok": true
+            },
+            {
+              "name": "file-references",
+              "ok": true
+            },
+            {
+              "name": "knowledge-catalog",
+              "ok": true
+            },
+            {
+              "name": "model-credentials",
+              "ok": true
+            }
+          ]
+        }
+      },
+      {
+        "name": "audit-trail",
+        "ok": true,
+        "detail": {
+          "events": 81,
+          "failures": 25,
+          "actions": 29
+        }
+      }
+    ],
+    "backupName": "full-2026-09-21T05-57-04-282Z-3e22b87f-31b8-4b47-b840-35eb392e9cda",
+    "seconds": 9.4
+  },
+  "restore": {
+    "checks": [
+      {
+        "name": "restored-marker",
+        "ok": true,
+        "detail": {
+          "restoredAt": "2026-09-21T05:57:09.864Z"
+        }
+      },
+      {
+        "name": "database",
+        "ok": true,
+        "detail": {
+          "version": 17
+        }
+      },
+      {
+        "name": "file-references",
+        "ok": true,
+        "detail": {
+          "checked": 4
+        }
+      },
+      {
+        "name": "knowledge-catalog",
+        "ok": true,
+        "detail": {
+          "hash": "67ec298ca7f7dea73a6f9ba6597a37e76e996fffed7602f809176a205d04844e"
+        }
+      },
+      {
+        "name": "model-credentials",
+        "ok": true,
+        "detail": {
+          "source": "managed-file",
+          "models": 0,
+          "decryptable": true,
+          "pending": false
+        }
+      }
+    ],
+    "verified": true,
+    "backup": "full-2026-09-21T05-57-04-282Z-3e22b87f-31b8-4b47-b840-35eb392e9cda"
+  },
+  "persistence": {
+    "realUpgradeVerified": true,
+    "upgradeImage": "customer-chat-analysis:verify-b11b8d0",
+    "jobsAfterUpgrade": 2,
+    "managedKey": true
+  },
+  "rollback": {
+    "image": "customer-chat-analysis:verify-b11b8d0",
+    "jobsAfterRollback": 2
+  },
+  "singleInstance": {
+    "rejected": true
+  },
+  "finishedAt": "2026-09-21T13:57:38.9773165+08:00"
+}
