@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "mode": "isolated-runtime-verification",
+  "collectedAt": "2026-09-21T15:51:58+08:00",
+  "repository": "yibai-003/customer-chat-analysis-center",
+  "commit": "67c787c62e3ada4b70c16d33a8ed8e3bb6842b47",
+  "packageVersion": "0.1.0",
+  "image": {
+    "tag": "customer-chat-analysis:verify-67c787c",
+    "id": "sha256:5e3e0b2f65d6cc121f83dbe1530964a26039da422056a83770c3f0965480182e",
+    "created": "2026-09-21T07:47:56.287526972Z",
+    "runtimeMetadata": {
+      "version": "0.1.0",
+      "commitSha": "67c787c62e3ada4b70c16d33a8ed8e3bb6842b47",
+      "buildTime": "2026-09-21T07:47:39Z",
+      "image": "customer-chat-analysis:verify-67c787c"
+    }
+  },
+  "container": {
+    "hostPort": 18793,
+    "temporary": true,
+    "productionLanContainerUntouched": true
+  },
+  "checks": {
+    "imageBuild": true,
+    "healthEndpoint": true,
+    "healthDoesNotLeakInternalPaths": true,
+    "runtimeVersionMatchesPackageCommitAndImage": true,
+    "readyCheckDoesNotClaimReadinessWithoutModel": true,
+    "nonRoot": true,
+    "initialDatabaseSecretsAndKnowledgeFiles": true,
+    "persistenceAfterContainerRebuild": true,
+    "singleInstanceLock": true,
+    "composeConfig": true
+  },
+  "result": "passed",
+  "formalHostSignoff": false,
+  "limitations": [
+    "这是临时隔离容器验证，不是正式局域网主机发布。",
+    "未注入正式模型凭证，因此 ready:check 按契约返回未就绪。",
+    "未证明可信内网 HTTPS、DNS、第二台工作站、批准 CI 镜像导入、真实升级回滚和真实业务数据保留。"
+  ]
+}

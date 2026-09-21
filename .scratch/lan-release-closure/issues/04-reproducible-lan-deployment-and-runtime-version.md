@@ -120,8 +120,9 @@ scripts/lan-deploy.ps1
 
 ## 2026-09-21 自动验收记录
 
-- 已运行 `scripts/verify-lan-runtime.ps1`，使用临时镜像 `customer-chat-analysis:verify` 完成镜像构建和容器验收。
+- 已运行 `scripts/verify-lan-runtime.ps1`，最终使用临时镜像 `customer-chat-analysis:verify-67c787c`（镜像 ID `sha256:5e3e0b2f65d6cc121f83dbe1530964a26039da422056a83770c3f0965480182e`）完成镜像构建和容器验收；完整证据见 `.scratch/lan-release-closure/evidence/runtime-verify-67c787c-2026-09-21.json`。
 - 已通过：健康端点不泄漏内部路径、`/api/version` 返回提交信息、非 root 运行、数据库/托管密钥/知识快照生成、容器重建后的持久化、单实例保护和 Compose 配置校验。
+- `/api/version` 已逐项匹配包版本 `0.1.0`、提交 `67c787c62e3ada4b70c16d33a8ed8e3bb6842b47`、构建时间 `2026-09-21T07:47:39Z` 和镜像标签，避免只验证镜像能启动而未确认实际运行版本。
 - 验证镜像未注入正式模型凭证，`ready:check` 返回 `ready:false` 且数据库和磁盘检查通过，符合“无模型不得误报就绪”的预期。
 - 已完成独立备份/恢复演练：3 个文件、2 个引用恢复成功，数据库、知识目录、图片引用和托管模型凭证校验通过。
 - 已执行一次临时预览部署：镜像构建、Compose 启动和持久化挂载检查通过；因临时环境未配置正式模型，部署策略按预期拒绝 `ready:false` 并返回回滚要求，未记为正式发布通过。
