@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "mode": "github-actions",
+  "collectedAt": "2026-09-21T14:27:05.0092022+08:00",
+  "repository": "yibai-003/customer-chat-analysis-center",
+  "ref": "main",
+  "commit": "9bd7fc741cd5bd6641841b5e7296f10425d50d10",
+  "run": {
+    "id": 35568024843,
+    "runNumber": 20,
+    "status": "completed",
+    "conclusion": "success"
+  },
+  "jobs": [
+    {
+      "name": "Quality gates (clean checkout)",
+      "id": 106233634983,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Release artifact",
+      "id": 106233853131,
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": 10624507458,
+      "name": "customer-chat-analysis-center-release-candidate",
+      "sizeBytes": 758948,
+      "expired": false,
+      "createdAt": "2026-09-21T06:21:50Z",
+      "expiresAt": "2026-10-21T06:21:49Z",
+      "digest": "sha256:8b3882aeaa7c77fe0a6744c237636374531715648cf8b7a33452b02f57119590"
+    }
+  ],
+  "limitations": [
+    "当前工作流在 GitHub Actions runner 内构建镜像但不推送镜像仓库。",
+    "正式主机升级、回滚和 host-signoff 仍需使用可在正式主机取得的批准镜像标签及 imageId。"
+  ]
+}

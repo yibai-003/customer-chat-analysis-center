@@ -34,7 +34,7 @@
 
 ## 2026-09-21 当前提交 Field Drill
 
-- 使用当前提交 `b11b8d0` 重建临时镜像 `customer-chat-analysis:verify-b11b8d0`，本地镜像摘要为 `sha256:c1c5277d7483aad22960f9c7dfcaced2c41bbe49d04b7673b9ba0483b8977dac`。
-- 临时 HTTPS 入口 `https://chat.example.lan:18446` 下 18/18 步骤通过，覆盖五角色、共享读取、越权拒绝、导入、图片、复核、导出、模型配置、模型调用、审计、备份恢复、升级、回滚和单实例。
-- 预演模型调用 1 次、30 tokens，记录完成并完成复核与导出；备份恢复检查 5 项通过，升级和回滚后任务数均为 2，证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-b11b8d0-2026-09-21.json`。
+- 使用当前提交 `9bd7fc7` 重建临时镜像 `customer-chat-analysis:verify-9bd7fc7`，本地镜像摘要为 `sha256:2e2184c1bdc0b4d056fb14a1d74c8a6835609e513bbc6ff44c76e913ebc729f0`；镜像内 `APP_COMMIT_SHA` 与当前完整提交一致。
+- 临时 HTTPS 入口 `https://chat.example.lan:18447` 下 18/18 步骤通过，覆盖五角色、共享读取、越权拒绝、导入、图片、复核、导出、模型配置、模型调用、审计、备份恢复、升级、回滚和单实例。
+- 预演模型调用 1 次、30 tokens，记录完成并完成复核与导出；备份恢复检查 5 项通过，升级和回滚后任务数均为 2，证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-9bd7fc7-2026-09-21.json`。
 - 该结果明确为 Field Drill：使用自签名证书、跳过 DNS、桩模型、单条样本和单机环境；`signoff.eligible=false`，缺口为 `trusted-tls`、`internal-dns`、`real-model-provider`、`sample-count`、`cross-machine`，不替代正式主机签收。
