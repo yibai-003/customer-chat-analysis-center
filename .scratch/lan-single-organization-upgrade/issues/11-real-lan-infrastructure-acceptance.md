@@ -31,3 +31,10 @@
 - 当前容器环境仍为 `ALLOWED_ORIGINS=http://172.16.20.178:8788`、`SESSION_COOKIE_SECURE=false`，不满足正式 HTTPS 配置要求。
 - 本机 Windows `Domain`、`Private`、`Public` 三个防火墙配置文件均为关闭状态，当前不能证明只允许批准网段访问 HTTPS 入口。
 - 以上结果只作为脱敏前置检查记录，不生成正式 `host-signoff`，也不关闭 Issue 07/11/12 的正式 HTTPS、CI 工件和最终发布签字条件。
+
+## 2026-09-21 当前提交 Field Drill
+
+- 使用当前提交 `b1c6920` 重建临时镜像 `customer-chat-analysis:verify-b1c6920`，本地镜像摘要为 `sha256:852fe3d947fcf34e3493e0dab199d6dc9c32dcdd06142b15f3b2fee6f8ca7fe7`。
+- 临时 HTTPS 入口 `https://chat.example.lan:18444` 下 18/18 步骤通过，覆盖五角色、共享读取、越权拒绝、导入、图片、复核、导出、模型配置、模型调用、审计、备份恢复、回滚和单实例。
+- 预演模型调用 1 次、30 tokens，记录完成并完成复核与导出；备份恢复检查 5 项通过，回滚后任务数为 2，证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-b1c6920-2026-09-21.json`。
+- 该结果明确为 Field Drill：使用自签名证书、跳过 DNS、桩模型、单条样本和单机环境；`signoff.eligible=false`，缺口为 `trusted-tls`、`internal-dns`、`real-model-provider`、`sample-count`、`cross-machine`，不替代正式主机签收。
