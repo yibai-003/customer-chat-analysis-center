@@ -21,3 +21,5 @@
 - 新增 [局域网现场验收执行手册](../../../docs/guides/lan-acceptance-runbook.md)：前置条件、主机与持久卷记录、内网 CA/DNS/TLS、部署已通过 CI 的镜像、防火墙与网络边界、跨机自动验收命令、浏览器侧抽查、主机侧重启/单实例/备份恢复检查、证据脱敏清单与通过标准。
 - 预演验证：对保留的演练栈以现场模式复跑两轮均 `FIELD ACCEPTANCE OK`（14/14 步骤、97 条审计事件、备份创建成功，重复执行不冲突）；演练栈同时验证了带端口 Origin 的 `ALLOWED_ORIGINS` 配置。
 - 真实验收进展（2026-09-21）：第二台电脑经 HTTP 入口完成真实业务使用，用户确认管理员、配置人员、操作人员、审核人员和只读人员的各项功能测试均无问题；正式 HTTPS、内网 CA/DNS、防火墙、固定主机与证书受信仍待现场执行。
+- 本机 Field Drill（2026-09-21）：使用临时 HTTPS 反向代理、自签名证书、桩模型和 `sample-chat.xlsx` 完成 18/18 步骤；五角色权限、导入/解析/复核/导出、审计、备份恢复、同镜像升级重启、回滚和单实例保护均通过。证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-2026-09-21.json`，不替代正式 HTTPS/真实供应商/跨机签收。
+- 主机预检（2026-09-21）：已记录 Windows 10、Intel i9-10900KF、7.8 GB 内存、`172.16.20.178/24`（DHCP Disabled）、本地 NVMe SSD、Docker Server 29.6.2 和当前提交 `9a4c0f3e1cd641cf92ee3440a0e0c58b1b5350ca`。证据见 `.scratch/lan-single-organization-upgrade/evidence/host-preflight-2026-09-21.json`；由于当前没有 CI 批准镜像对应的正式容器，暂不生成 `host-signoff`。

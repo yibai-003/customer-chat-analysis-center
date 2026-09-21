@@ -1,0 +1,112 @@
+{
+  "collectedAt": "2026-09-21T12:13:32.4274475+08:00",
+  "formalHostSignoff": false,
+  "reason": "当前仅有本机 Node 局域网服务和本地验证镜像，尚未部署 CI 批准镜像的正式容器。",
+  "host": {
+    "computer": "DESKTOP-UTRMDTD",
+    "os": "Microsoft Windows 10 专业版",
+    "osVersion": "10.0.19045",
+    "cpu": "Intel(R) Core(TM) i9-10900KF CPU @ 3.70GHz",
+    "memoryGb": 7.8,
+    "ips": [
+      {
+        "IPAddress": "192.168.48.1",
+        "InterfaceAlias": "vEthernet (WSL)",
+        "PrefixLength": 20
+      },
+      {
+        "IPAddress": "192.168.152.1",
+        "InterfaceAlias": "VMware Network Adapter VMnet8",
+        "PrefixLength": 24
+      },
+      {
+        "IPAddress": "192.168.230.1",
+        "InterfaceAlias": "VMware Network Adapter VMnet1",
+        "PrefixLength": 24
+      },
+      {
+        "IPAddress": "172.16.20.178",
+        "InterfaceAlias": "以太网",
+        "PrefixLength": 24
+      }
+    ],
+    "disks": [
+      {
+        "Number": 0,
+        "FriendlyName": "Samsung SSD 980 1TB",
+        "BusType": "NVMe",
+        "PartitionStyle": "GPT",
+        "OperationalStatus": "Online",
+        "Size": 1000204886016
+      },
+      {
+        "Number": 1,
+        "FriendlyName": "XIORN YERE Y600",
+        "BusType": "USB",
+        "PartitionStyle": "MBR",
+        "OperationalStatus": "Online",
+        "Size": 1000204886016
+      }
+    ],
+    "volumes": [
+      {
+        "DriveLetter": "C",
+        "FileSystem": "NTFS",
+        "FileSystemLabel": "",
+        "HealthStatus": "Healthy",
+        "Size": 265439637504,
+        "SizeRemaining": 81306095616
+      },
+      {
+        "DriveLetter": "F",
+        "FileSystem": "NTFS",
+        "FileSystemLabel": "",
+        "HealthStatus": "Healthy",
+        "Size": 1000202039296,
+        "SizeRemaining": 582905819136
+      },
+      {
+        "DriveLetter": "E",
+        "FileSystem": "NTFS",
+        "FileSystemLabel": "文件",
+        "HealthStatus": "Healthy",
+        "Size": 545258467328,
+        "SizeRemaining": 432118071296
+      },
+      {
+        "DriveLetter": "D",
+        "FileSystem": "NTFS",
+        "FileSystemLabel": "软件",
+        "HealthStatus": "Healthy",
+        "Size": 188743675904,
+        "SizeRemaining": 158462402560
+      }
+    ]
+  },
+  "docker": {
+    "server": "29.6.2",
+    "image": "customer-chat-analysis:verify",
+    "imageId": "sha256:832f9ca63d65ba3d04277b296f2568437ffe0e3c6db54de5ed4c5ed4437c14bc",
+    "imageCreated": "2026-09-21T02:52:20.693144171Z"
+  },
+  "git": {
+    "commit": "9a4c0f3e1cd641cf92ee3440a0e0c58b1b5350ca",
+    "branch": "main"
+  },
+  "lanService": {
+    "port": 8788,
+    "listeners": [
+      {
+        "LocalAddress": "::1",
+        "LocalPort": 8788,
+        "OwningProcess": 14868
+      },
+      {
+        "LocalAddress": "::",
+        "LocalPort": 8788,
+        "OwningProcess": 22860
+      }
+    ],
+    "health": "verified separately: HTTP 200"
+  }
+}

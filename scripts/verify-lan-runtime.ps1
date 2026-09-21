@@ -53,7 +53,7 @@ try {
   if ($health -match 'app\.db|DATA_DIR|/app/data') { Fail "健康响应包含内部路径" }
 
   Write-Host "== 运行版本与容器就绪契约"
-  $version = (docker exec $container node -e "fetch('http://127.0.0.1:8787/api/version').then(r => r.text()).then(process.stdout.write)") -join ""
+  $version = (docker exec $container node -e "fetch('http://127.0.0.1:8787/api/version').then(r => r.text()).then((text) => process.stdout.write(text))") -join ""
   if ($version -notmatch '"commitSha"') { Fail "运行版本接口缺少提交信息" }
   docker exec $container npm run ready:check | Out-Host
   if ($LASTEXITCODE -ne 0) {
