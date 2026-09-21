@@ -94,9 +94,18 @@ jobs:
           VERSION="$(node -p "require('./package.json').version")"
           SHA="${GITHUB_SHA:0:12}"
           IMAGE="customer-chat-analysis-center:${VERSION}-${SHA}"
-          docker build -t "$IMAGE" .
+          BUILD_TIME="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+          IMAGE_ARCHIVE="customer-chat-analysis-center-${VERSION}-${SHA}.image.tar.gz"
+          docker build \
+            --build-arg "APP_VERSION=$VERSION" \
+            --build-arg "APP_COMMIT_SHA=$GITHUB_SHA" \
+            --build-arg "APP_BUILD_TIME=$BUILD_TIME" \
+            --build-arg "APP_IMAGE=$IMAGE" \
+            -t "$IMAGE" .
           echo "IMAGE_TAG=$IMAGE" >> "$GITHUB_ENV"
           echo "IMAGE_ID=$(docker image inspect "$IMAGE" --format '{{.Id}}')" >> "$GITHUB_ENV"
+          echo "IMAGE_BUILD_TIME=$BUILD_TIME" >> "$GITHUB_ENV"
+          echo "IMAGE_ARCHIVE=$IMAGE_ARCHIVE" >> "$GITHUB_ENV"
 
       - name: Package release artifact
         run: |
@@ -105,7 +114,8 @@ jobs:
           mkdir -p release
           tar -czf "release/customer-chat-analysis-center-${VERSION}-${SHA}.tar.gz" \
             dist src/server src/shared knowledge config package.json package-lock.json
-          node -e 'const fs=require("node:fs"); const pkg=require("./package.json"); fs.writeFileSync("release/manifest.json", JSON.stringify({artifact:"customer-chat-analysis-center", version:pkg.version, commit:process.env.GITHUB_SHA, ref:process.env.GITHUB_REF_NAME, runId:process.env.GITHUB_RUN_ID, node:process.version, image:process.env.IMAGE_TAG, imageId:process.env.IMAGE_ID, requires:"npm ci plus Node 22.12 or newer, or run the built container image", builtAt:new Date().toISOString()}, null, 2)+"\n");'
+          docker save "$IMAGE_TAG" | gzip -9 > "release/$IMAGE_ARCHIVE"
+          node -e 'const fs=require("node:fs"); const pkg=require("./package.json"); const imageArchive=process.env.IMAGE_ARCHIVE; fs.writeFileSync("release/manifest.json", JSON.stringify({artifact:"customer-chat-analysis-center", version:pkg.version, commit:process.env.GITHUB_SHA, ref:process.env.GITHUB_REF_NAME, runId:process.env.GITHUB_RUN_ID, node:process.version, image:process.env.IMAGE_TAG, imageId:process.env.IMAGE_ID, imageArchive, imageBuildTime:process.env.IMAGE_BUILD_TIME, dockerLoad:`docker load -i ${imageArchive}`, requires:"npm ci plus Node 22.12 or newer, or run the built container image", builtAt:new Date().toISOString()}, null, 2)+"\n");'
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4

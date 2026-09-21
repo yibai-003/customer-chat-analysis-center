@@ -40,11 +40,23 @@ docker version --format "{{.Server.Version}}"
 
 ## 步骤 3：部署已通过 CI 的镜像（Issue 11-1/3）
 
-在主机 `deploy/` 下：
+先从通过 CI 的同一发布工件下载 `manifest.json` 和 `*.image.tar.gz`，在目标主机导入并核对不可变镜像 ID：
+
+```powershell
+$manifest = Get-Content .\manifest.json -Raw | ConvertFrom-Json
+docker load -i (Join-Path (Get-Location) $manifest.imageArchive)
+$loadedImageId = docker image inspect $manifest.image --format "{{.Id}}"
+if ($loadedImageId -ne $manifest.imageId) {
+  throw "镜像 ID 不匹配：loaded=$loadedImageId expected=$($manifest.imageId)"
+}
+docker image inspect $manifest.image --format "image={{.RepoTags}} id={{.Id}}"
+```
+
+只有镜像 ID 比对通过后，才在主机 `deploy/` 下：
 
 ```powershell
 Copy-Item .env.example .env
-# APP_IMAGE=<Issue 10 记录中的镜像标签>
+# APP_IMAGE=<manifest.json 中的 image>
 # ENCRYPTION_KEY=<独立强密钥，另行受保护备份>
 # ALLOWED_HOSTS=<内部域名>
 # ALLOWED_ORIGINS=https://<内部域名>        # 与浏览器地址完全一致
@@ -52,6 +64,8 @@ Copy-Item .env.example .env
 # DEPLOY_DATA_DIR / DEPLOY_KNOWLEDGE_DIR=<本机绝对路径>
 docker compose up -d
 ```
+
+不能用旧主机上的同名标签代替 CI 工件，也不能把源码压缩包当作容器镜像导入。部署后继续执行本运行手册的主机证据、TLS、跨机和业务验收步骤。
 
 首次启动通过 `FIRST_ADMIN_USERNAME` / `FIRST_ADMIN_PASSWORD` 环境变量或主机本地 `npm run bootstrap:admin` 创建管理员；随后删除密码配置。
 

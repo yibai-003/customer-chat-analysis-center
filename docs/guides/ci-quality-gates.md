@@ -26,11 +26,14 @@
 `release-artifact` 作业 `needs: quality`，只在闸门通过后运行，且跳过 PR（`if: github.event_name != 'pull_request'`）：
 
 1. `npm ci` + `npm run build`
-2. `docker build -t customer-chat-analysis-center:<version>-<commit12> .` —— 按 `Dockerfile` 构建生产镜像，验证多阶段构建与原生依赖；**只构建、不打标签推送、不登录任何镜像仓库**
+2. `docker build -t customer-chat-analysis-center:<version>-<commit12> .` —— 按 `Dockerfile` 构建生产镜像，并注入 `APP_VERSION`、完整 `APP_COMMIT_SHA`、`APP_BUILD_TIME`、`APP_IMAGE`；**只构建、不打标签推送、不登录任何镜像仓库**
 3. 打包 `dist`、`src/server`、`src/shared`、`knowledge`、`config`、`package.json`、`package-lock.json` 为 `customer-chat-analysis-center-<version>-<commit12>.tar.gz`（版本取自 `package.json`，仓库内为 `0.1.0`）
-4. 生成 `manifest.json`（版本、commit、ref、runId、Node 版本、镜像标签、镜像 ID、运行要求、构建时间），经 `upload-artifact` 保留 30 天
+4. 使用 `docker save | gzip` 生成可导入的 `customer-chat-analysis-center-<version>-<commit12>.image.tar.gz`
+5. 生成 `manifest.json`（版本、完整 commit、ref、runId、Node 版本、镜像标签、镜像 ID、镜像归档文件名、构建时间、`docker load` 命令和运行要求），经 `upload-artifact` 保留 30 天
 
 工件目录使用非隐藏的 `release/`（upload-artifact 默认跳过隐藏文件/目录）；`.dockerignore` 排除 `node_modules`、`data`、`dist`、`.git`、`.env*` 与本地样本，保证构建上下文不含主机数据或密钥。工件与镜像均无任何推送/部署步骤。
+
+主机侧必须下载同一个发布工件中的 `manifest.json` 和 `*.image.tar.gz`，先执行清单中的 `docker load -i <imageArchive>`，再用 `docker image inspect <image> --format "{{.Id}}"` 比对清单的 `imageId`。镜像 ID 不一致时停止部署，不得只凭镜像标签继续。
 
 ## 需要的版本
 
@@ -54,7 +57,7 @@
 ## 验收
 
 - 9 个命令按序执行（`npm ci`、安装检查、测试、类型检查、lint、构建、`db:init`、`db:check`、冒烟），任一失败整条工作流失败，`release-artifact` 因 `needs` 依赖不会运行。
-- `main` 成功运行后产生带版本与提交来源的发布工件与 `manifest.json`。
+- `main` 成功运行后产生带版本与提交来源的发布工件、可导入镜像归档和 `manifest.json`。
 - 工作流无自动推送、无自动部署步骤。
 
 ## 失败排查入口
