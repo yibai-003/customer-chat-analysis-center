@@ -28,3 +28,11 @@
 - `Quality gates (clean checkout)` job `106233634983` 与 `Release artifact` job `106233853131` 均成功。
 - 发布候选工件 `customer-chat-analysis-center-release-candidate` 的 id 为 `10624507458`，工件摘要为 `sha256:8b3882aeaa7c77fe0a6744c237636374531715648cf8b7a33452b02f57119590`，证据见 `.scratch/lan-single-organization-upgrade/evidence/ci-2026-09-21-run20.json`。
 - 按工作流规则，本次 runner 内构建的镜像标签应为 `customer-chat-analysis-center:0.1.0-9bd7fc741cd5`；工作流不推送镜像仓库，正式主机仍需取得可部署镜像及其不可变 `imageId` 后才能完成现场升级/回滚。
+
+**2026-09-21 可导入镜像工件复跑：**
+
+- 提交 `6e13ca0a1853f9a0d780a08f4e97ffd3db5355af` 已推送到 `main`，GitHub Actions 运行 `35571897856`（run #22）完成且结论为 `success`。
+- `Quality gates (clean checkout)` job `106245082214` 与 `Release artifact` job `106245341216` 均成功。
+- 发布候选工件 `customer-chat-analysis-center-release-candidate` 的 id 为 `10626481225`，大小为 `108651719` 字节，摘要为 `sha256:18a63b4cbcc71d2108ffc03322739e083357dd1948f2234b1a738c894cb52d79`，保留至 `2026-10-21T07:15:13Z`。
+- 工作流已把版本、完整提交 SHA、构建时间和镜像标签注入镜像，并在工件中生成源码包、`manifest.json` 与可通过 `docker load` 导入的 `*.image.tar.gz`；预期镜像标签为 `customer-chat-analysis-center:0.1.0-6e13ca0a1853`。
+- 当前环境调用 GitHub Actions artifact 下载接口返回 `401 Requires authentication`，因此本次尚未读取下载包内的 `manifest.json`，也未在正式主机执行 `docker load`。工件摘要不替代 Docker `imageId`，正式主机仍需下载工件后按部署手册核对 `manifest.imageId`。

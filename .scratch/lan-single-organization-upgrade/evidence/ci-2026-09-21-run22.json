@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "mode": "github-actions",
+  "collectedAt": "2026-09-21T15:21:27.4333907+08:00",
+  "repository": "yibai-003/customer-chat-analysis-center",
+  "ref": "main",
+  "commit": "6e13ca0a1853f9a0d780a08f4e97ffd3db5355af",
+  "run": {
+    "id": 35571897856,
+    "runNumber": 22,
+    "status": "completed",
+    "conclusion": "success"
+  },
+  "jobs": [
+    {
+      "name": "Quality gates (clean checkout)",
+      "id": 106245082214,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Release artifact",
+      "id": 106245341216,
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "artifacts": [
+    {
+      "id": 10626481225,
+      "name": "customer-chat-analysis-center-release-candidate",
+      "sizeBytes": 108651719,
+      "expired": false,
+      "createdAt": "2026-09-21T07:15:17Z",
+      "expiresAt": "2026-10-21T07:15:13Z",
+      "digest": "sha256:18a63b4cbcc71d2108ffc03322739e083357dd1948f2234b1a738c894cb52d79"
+    }
+  ],
+  "expectedReleaseContents": {
+    "image": "customer-chat-analysis-center:0.1.0-6e13ca0a1853",
+    "imageArchivePattern": "customer-chat-analysis-center-0.1.0-6e13ca0a1853.image.tar.gz",
+    "manifestFields": [
+      "version",
+      "commit",
+      "runId",
+      "image",
+      "imageId",
+      "imageArchive",
+      "imageBuildTime",
+      "dockerLoad"
+    ]
+  },
+  "limitations": [
+    "当前工作流在 GitHub Actions runner 内构建镜像但不推送镜像仓库。",
+    "当前环境对 GitHub Actions artifact 下载接口返回 401 Requires authentication，因此尚未读取本次 manifest.json，也未在本机执行 docker load。",
+    "正式主机升级、回滚和 host-signoff 仍需使用可在正式主机取得的批准镜像标签及 imageId；artifact digest 是发布工件压缩包摘要，不等同于 Docker imageId。"
+  ]
+}

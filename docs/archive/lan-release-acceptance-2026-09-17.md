@@ -39,6 +39,19 @@
 
 首次运行暴露并修复了两个工件问题：`package.json` 缺少 `version` 导致镜像标签为 `undefined`；发布目录使用点开头的 `.release/` 被 `upload-artifact` 按隐藏路径跳过。修复后重新运行并通过。此前失败运行（质量闸门失败）均未产出发布候选工件，发布作业按 `needs` 依赖跳过。
 
+## 可导入镜像工件复跑（2026-09-21）
+
+| 项目 | 记录 |
+| --- | --- |
+| 成功运行 | [#35571897856](https://github.com/yibai-003/customer-chat-analysis-center/actions/runs/35571897856)（run #22，push 到 `main`，conclusion `success`） |
+| 提交 | `6e13ca0a1853f9a0d780a08f4e97ffd3db5355af` |
+| 质量作业 | `Quality gates (clean checkout)` job `106245082214` success |
+| 发布作业 | `Release artifact` job `106245341216` success；构建时注入版本、完整提交 SHA、构建时间和镜像标签 |
+| 工件 | `customer-chat-analysis-center-release-candidate`（artifact id `10626481225`，108,651,719 字节，保留至 2026-10-21） |
+| 工件摘要 | `sha256:18a63b4cbcc71d2108ffc03322739e083357dd1948f2234b1a738c894cb52d79` |
+| 预期镜像 | `customer-chat-analysis-center:0.1.0-6e13ca0a1853`；工件应包含 `manifest.json`、源码包和 `customer-chat-analysis-center-0.1.0-6e13ca0a1853.image.tar.gz` |
+| 主机导入 | 当前环境下载 artifact 接口返回 `401 Requires authentication`，尚未读取本次 `manifest.json` 或执行 `docker load`；正式主机须按部署手册下载后核对 `manifest.imageId`，工件摘要不等于 Docker `imageId` |
+
 ## 发布候选同步与部署（2026-09-18 更新）
 
 | 项目 | 记录 |
