@@ -1,0 +1,44 @@
+{
+  "mode": "github-actions",
+  "date": "2026-09-21",
+  "workflow": {
+    "name": "Quality gates",
+    "runNumber": 24,
+    "runId": 35577341094,
+    "headSha": "73a8ce62d7a75106a274a203a31b6288ad4c12b9",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  "jobs": [
+    {
+      "name": "Quality gates (clean checkout)",
+      "id": 106262063219,
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "Release artifact",
+      "id": 106262340852,
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "artifact": {
+    "id": 10628083291,
+    "name": "customer-chat-analysis-center-release-candidate",
+    "expired": false,
+    "createdAt": "2026-09-21T08:22:20Z",
+    "expiresAt": "2026-10-21T08:22:16Z"
+  },
+  "scope": {
+    "qualityGatesAndCandidateTraceability": true,
+    "formalHostImportedThisArtifact": false,
+    "immutableImageIdAvailableToFormalHost": false,
+    "formalLanHttpsAcceptance": false
+  },
+  "limitations": [
+    "The workflow publishes a downloadable release artifact but does not push an immutable image to a registry.",
+    "The formal LAN host has not imported this candidate artifact or recorded its immutable imageId.",
+    "This evidence does not close the trusted HTTPS, second-workstation, real-model or formal upgrade/rollback requirements."
+  ]
+}

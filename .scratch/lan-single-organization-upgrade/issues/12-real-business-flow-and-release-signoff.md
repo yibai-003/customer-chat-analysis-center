@@ -36,7 +36,7 @@
 - 本机验证：桩模型下 `scripts/verify-lan-acceptance.ps1` 全流程 `ACCEPTANCE OK`，`real-model-parse` 记录一次模型调用成功（`recordStatus: completed`、30 tokens）；不提供模型时演练模式仍 `ACCEPTANCE OK` 且两步 `skipped`。
 - 升级/回滚预演（第 7 项）已在演练模式中由脚本覆盖（换标签重建→数据保留→切回原标签），现场版本替换 Issue 10 的 CI 镜像标签即可；真实镜像标签与主机重启证据仍需现场执行。
 - 2026-09-21 本机 Field Drill 补充：使用 `customer-chat-analysis:verify-9bd7fc7` 完成 18/18 步骤，证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-9bd7fc7-2026-09-21.json`；升级、回滚、独立恢复和单实例保护均通过，且镜像提交元数据可追溯，但模型为桩模型、样本为 1 条、证书为自签名，故仅证明当前提交的预演闭环，不关闭正式升级回滚项。
-- 2026-09-21 当前提交已通过 CI 运行 `35568024843` 并生成发布候选工件 `10624507458`，摘要见 `.scratch/lan-single-organization-upgrade/evidence/ci-2026-09-21-run20.json`；由于当前工作流不推送镜像仓库，正式主机仍未取得可直接部署的 CI 镜像及不可变 `imageId`，第 7 项继续保持未完成。
+- 2026-09-21 当前提交已通过 CI run `35577341094`（run #24），质量与发布 job 均成功，发布候选工件为 `10628083291`，证据见 `.scratch/lan-single-organization-upgrade/evidence/ci-2026-09-21-run24.json`；由于当前工作流不推送镜像仓库，正式主机仍未取得可直接部署的 CI 镜像及不可变 `imageId`，第 7 项继续保持未完成。
 - 待现场执行：第 3、4、5、7、9 项依赖真实复核/只读抽查、正式 HTTPS 与 CI 工件；当前环境无法提供，保持未完成。
 
 **2026-09-21 HTTPS 预演补充：**
