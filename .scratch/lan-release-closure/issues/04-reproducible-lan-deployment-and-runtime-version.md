@@ -126,6 +126,7 @@ scripts/lan-deploy.ps1
 - 验证镜像未注入正式模型凭证，`ready:check` 返回 `ready:false` 且数据库和磁盘检查通过，符合“无模型不得误报就绪”的预期。
 - 已完成独立备份/恢复演练：3 个文件、2 个引用恢复成功，数据库、知识目录、图片引用和托管模型凭证校验通过。
 - 已执行一次临时预览部署：镜像构建、Compose 启动和持久化挂载检查通过；因临时环境未配置正式模型，部署策略按预期拒绝 `ready:false` 并返回回滚要求，未记为正式发布通过。
+- 已执行一次隔离 HTTPS 发布预演：`customer-chat-analysis:acceptance-10aaf71` → `customer-chat-analysis:verify-67c787c` → 回滚，备份/恢复、托管密钥、任务数据和单实例保护均通过；证据见 `.scratch/lan-single-organization-upgrade/evidence/https-drill-2026-09-21.json`。该预演使用自签名证书和临时容器，不作为正式主机发布、可信 HTTPS 或正式回滚签署证据。
 - 当前局域网项目仍可访问 `http://172.16.20.178:8788`，`/api/health` 返回 HTTP 200；本次临时容器未占用该端口。
 - 本记录不替代真实局域网发布、浏览器最新 UI 核验、上传/导出/模型凭证保留、HTTPS、回滚和发布/回滚/再发布演练。
 

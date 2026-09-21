@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "mode": "automated-interaction-regression",
+  "collectedAt": "2026-09-21T15:59:14+08:00",
+  "commit": "10aaf718228783ea5fcd504a9194fcd04b72c632",
+  "result": "passed",
+  "summary": {
+    "testFiles": 11,
+    "tests": 138,
+    "commands": 3
+  },
+  "suites": [
+    {
+      "scope": "workbench, detail drawer, batch analysis, model-pool client UI",
+      "testFiles": [
+        "src/client/App.test.tsx",
+        "src/client/components/AnalysisRunDialog.test.tsx",
+        "src/client/components/ModelConfigDialog.test.tsx",
+        "src/client/components/model-config/PoolCheckbox.test.tsx",
+        "src/client/components/model-config/quota-presentation.test.ts"
+      ],
+      "testFilesPassed": 5,
+      "testsPassed": 88
+    },
+    {
+      "scope": "login, session loss, capability-gated controls, progress states",
+      "testFiles": [
+        "src/client/auth/auth-gate.test.tsx",
+        "src/client/auth/capability-gating.test.tsx",
+        "src/client/components/AnalysisProgress.test.tsx"
+      ],
+      "testFilesPassed": 3,
+      "testsPassed": 18
+    },
+    {
+      "scope": "model-pool server routes, configuration authorization, migrations",
+      "testFiles": [
+        "src/server/routes/model-pool-router.test.ts",
+        "src/server/auth/configuration-admin.test.ts",
+        "src/server/db/migrations/migrations.test.ts"
+      ],
+      "testFilesPassed": 3,
+      "testsPassed": 32
+    }
+  ],
+  "coveredContracts": [
+    "detail drawer modal semantics, Escape close, focus restoration and focus cycling",
+    "record selection, selected-record payload, task switching, page and status-filter race handling",
+    "batch analysis capacity loading, submit options, polling, pause and cancel states",
+    "model-pool identity, selection and indeterminate checkbox behavior",
+    "quota normal, warning, exhausted, unlimited and invalid-value presentation",
+    "login loading, failure, success, session loss and role capability gating",
+    "model-pool authorization, member operations and migration invariants"
+  ],
+  "manualAcceptanceStillRequired": [
+    "real task long-name and empty/loading/failure/review state visual inspection",
+    "1024x768 real browser detail drawer and batch dialog operation",
+    "real model-pool screenshots at 1366x768 and 1920x1080",
+    "trusted internal HTTPS, DNS, firewall and second-workstation evidence",
+    "real provider credentials and a routed text/vision regression"
+  ]
+}

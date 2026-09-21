@@ -1,0 +1,294 @@
+{
+  "startedAt": "2026-09-21T16:01:28.4743858+08:00",
+  "host": {
+    "cpu": "Intel(R) Core(TM) i9-10900KF CPU @ 3.70GHz",
+    "os": "Microsoft Windows NT 10.0.19045.0",
+    "memoryGb": 7.8,
+    "docker": "29.6.2"
+  },
+  "image": "customer-chat-analysis:acceptance-10aaf71",
+  "entry": "https://chat.acceptance.lan:18443",
+  "dataDir": "C:\\Users\\DY-01\\AppData\\Local\\Temp\\lan-acceptance-016e7585a1fa493090c006dc0c58a665\\data",
+  "knowledgeDir": "C:\\Users\\DY-01\\AppData\\Local\\Temp\\lan-acceptance-016e7585a1fa493090c006dc0c58a665\\knowledge",
+  "imageId": "sha256:943e002d0e37e731b706528fb1ed0433cefe76cd8123da1dcfef34d8c8b7fa0e",
+  "realModel": {
+    "configured": false
+  },
+  "acceptanceClient": {
+    "ok": true,
+    "steps": [
+      {
+        "name": "https-health",
+        "ok": true,
+        "detail": {
+          "status": "ok",
+          "entry": {
+            "host": "chat.acceptance.lan",
+            "port": 18443,
+            "origin": "https://chat.acceptance.lan",
+            "tlsVerified": false
+          },
+          "certificate": null
+        }
+      },
+      {
+        "name": "admin-login",
+        "ok": true,
+        "detail": {
+          "capabilities": 11
+        }
+      },
+      {
+        "name": "create-role-accounts",
+        "ok": true,
+        "detail": {
+          "accounts": 5
+        }
+      },
+      {
+        "name": "shared-reads",
+        "ok": true,
+        "detail": {
+          "admin": "ok",
+          "config": "ok",
+          "operator": "ok",
+          "reviewer": "ok",
+          "readonly": "ok"
+        }
+      },
+      {
+        "name": "anonymous-denied",
+        "ok": true,
+        "detail": {
+          "denied": [
+            "/api/jobs",
+            "/api/records/:id/image",
+            "/api/admin/audit-events"
+          ]
+        }
+      },
+      {
+        "name": "import-as-operator",
+        "ok": true,
+        "detail": {
+          "jobId": "fa7d6c20-259a-43e0-9eee-6e56193de68f",
+          "recordId": "f1179d31-2ac9-4fbd-b8c5-b89d75c1daa8",
+          "totalRecords": 1
+        }
+      },
+      {
+        "name": "image-shared-view",
+        "ok": true,
+        "detail": {
+          "path": "/api/records/f1179d31-2ac9-4fbd-b8c5-b89d75c1daa8/image"
+        }
+      },
+      {
+        "name": "review-matrix",
+        "ok": true,
+        "detail": {
+          "reviewerStatus": "confirmed"
+        }
+      },
+      {
+        "name": "export-matrix",
+        "ok": true,
+        "detail": {
+          "allowed": [
+            "admin",
+            "operator",
+            "reviewer"
+          ]
+        }
+      },
+      {
+        "name": "configuration-and-pool",
+        "ok": true,
+        "detail": {
+          "configWrites": "config/admin only",
+          "credentialProbe": "temporary-drill-model"
+        }
+      },
+      {
+        "name": "real-model-configure",
+        "ok": true,
+        "detail": {
+          "skipped": true,
+          "reason": "模型配置不完整：base-url, vision-model, text-model, api-key"
+        }
+      },
+      {
+        "name": "analysis-lifecycle",
+        "ok": true,
+        "detail": {
+          "startedBy": "operator"
+        }
+      },
+      {
+        "name": "real-model-parse",
+        "ok": true,
+        "detail": {
+          "skipped": true,
+          "reason": "未提供真实模型，无法验证模型解析闭环"
+        }
+      },
+      {
+        "name": "account-disable",
+        "ok": true,
+        "detail": {
+          "disabledUser": "acf0a252-8ff7-41d0-9470-c589f6f45f3c"
+        }
+      },
+      {
+        "name": "restore-acceptance-state",
+        "ok": true,
+        "detail": {
+          "disabledUsers": 5,
+          "removedModels": 1,
+          "removedProviders": 1,
+          "poolSettingsRestored": true
+        }
+      },
+      {
+        "name": "backup-through-api",
+        "ok": true,
+        "detail": {
+          "name": "full-2026-09-21T08-02-33-196Z-e65a2635-801c-43fc-8d21-0b4bd40707a1",
+          "files": 5,
+          "references": 3
+        }
+      },
+      {
+        "name": "backup-restore-drill",
+        "ok": true,
+        "detail": {
+          "name": "full-2026-09-21T08-02-33-196Z-e65a2635-801c-43fc-8d21-0b4bd40707a1",
+          "checks": [
+            {
+              "name": "restored-marker",
+              "ok": true
+            },
+            {
+              "name": "database",
+              "ok": true
+            },
+            {
+              "name": "file-references",
+              "ok": true
+            },
+            {
+              "name": "knowledge-catalog",
+              "ok": true
+            },
+            {
+              "name": "model-credentials",
+              "ok": true
+            }
+          ]
+        }
+      },
+      {
+        "name": "audit-trail",
+        "ok": true,
+        "detail": {
+          "events": 59,
+          "failures": 25,
+          "actions": 21
+        }
+      }
+    ],
+    "auditEventCount": 59,
+    "cleanup": {
+      "disabledUsers": 5,
+      "removedModels": 1,
+      "removedProviders": 1
+    },
+    "seconds": 7.4,
+    "signoff": {
+      "eligible": false,
+      "missing": [
+        "trusted-tls",
+        "internal-dns",
+        "real-model-provider",
+        "model-provider-attestation",
+        "sample-count",
+        "review",
+        "export",
+        "cross-machine"
+      ]
+    },
+    "backupName": "full-2026-09-21T08-02-33-196Z-e65a2635-801c-43fc-8d21-0b4bd40707a1",
+    "modelEvidence": {
+      "skipped": true,
+      "reason": "未提供真实模型，无法验证模型解析闭环"
+    },
+    "realModel": false,
+    "modelEndpoint": {
+      "configured": false,
+      "host": null,
+      "protocol": null,
+      "signable": false,
+      "reason": "not-configured",
+      "providerName": "",
+      "credentialSource": "missing"
+    }
+  },
+  "restore": {
+    "verified": true,
+    "backup": "full-2026-09-21T08-02-33-196Z-e65a2635-801c-43fc-8d21-0b4bd40707a1",
+    "checks": [
+      {
+        "name": "restored-marker",
+        "ok": true,
+        "detail": {
+          "restoredAt": "2026-09-21T08:02:39.21Z"
+        }
+      },
+      {
+        "name": "database",
+        "ok": true,
+        "detail": {
+          "version": 17
+        }
+      },
+      {
+        "name": "file-references",
+        "ok": true,
+        "detail": {
+          "checked": 2
+        }
+      },
+      {
+        "name": "knowledge-catalog",
+        "ok": true,
+        "detail": {
+          "hash": "ad6606c1740a05e88f6059eaee1284c29c4c4828b445189d8ecf41afe20090cb"
+        }
+      },
+      {
+        "name": "model-credentials",
+        "ok": true,
+        "detail": {
+          "source": "managed-file",
+          "models": 0,
+          "decryptable": true,
+          "pending": false
+        }
+      }
+    ]
+  },
+  "persistence": {
+    "jobsAfterUpgrade": 1,
+    "managedKey": true,
+    "upgradeImage": "customer-chat-analysis:verify-67c787c",
+    "realUpgradeVerified": true
+  },
+  "rollback": {
+    "image": "customer-chat-analysis:acceptance-10aaf71",
+    "jobsAfterRollback": 1
+  },
+  "singleInstance": {
+    "rejected": true
+  },
+  "finishedAt": "2026-09-21T16:03:08.9614344+08:00"
+}

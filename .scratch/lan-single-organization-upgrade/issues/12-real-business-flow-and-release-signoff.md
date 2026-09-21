@@ -38,3 +38,8 @@
 - 2026-09-21 本机 Field Drill 补充：使用 `customer-chat-analysis:verify-9bd7fc7` 完成 18/18 步骤，证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-9bd7fc7-2026-09-21.json`；升级、回滚、独立恢复和单实例保护均通过，且镜像提交元数据可追溯，但模型为桩模型、样本为 1 条、证书为自签名，故仅证明当前提交的预演闭环，不关闭正式升级回滚项。
 - 2026-09-21 当前提交已通过 CI 运行 `35568024843` 并生成发布候选工件 `10624507458`，摘要见 `.scratch/lan-single-organization-upgrade/evidence/ci-2026-09-21-run20.json`；由于当前工作流不推送镜像仓库，正式主机仍未取得可直接部署的 CI 镜像及不可变 `imageId`，第 7 项继续保持未完成。
 - 待现场执行：第 3、4、5、7、9 项依赖真实复核/只读抽查、正式 HTTPS 与 CI 工件；当前环境无法提供，保持未完成。
+
+**2026-09-21 HTTPS 预演补充：**
+
+- 隔离 HTTPS 预演完成了五角色权限、审计、备份恢复以及 `customer-chat-analysis:acceptance-10aaf71` → `customer-chat-analysis:verify-67c787c` → 回滚的持久化回归，证据见 `../evidence/https-drill-2026-09-21.json`。
+- 预演结果不能签署本工单：未使用可信内网 CA、内部 DNS、第二台工作站或真实模型，且不是正式主机上的 CI 批准镜像。

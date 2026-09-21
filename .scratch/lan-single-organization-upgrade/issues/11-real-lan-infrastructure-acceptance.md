@@ -38,3 +38,10 @@
 - 临时 HTTPS 入口 `https://chat.example.lan:18447` 下 18/18 步骤通过，覆盖五角色、共享读取、越权拒绝、导入、图片、复核、导出、模型配置、模型调用、审计、备份恢复、升级、回滚和单实例。
 - 预演模型调用 1 次、30 tokens，记录完成并完成复核与导出；备份恢复检查 5 项通过，升级和回滚后任务数均为 2，证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-9bd7fc7-2026-09-21.json`。
 - 该结果明确为 Field Drill：使用自签名证书、跳过 DNS、桩模型、单条样本和单机环境；`signoff.eligible=false`，缺口为 `trusted-tls`、`internal-dns`、`real-model-provider`、`sample-count`、`cross-machine`，不替代正式主机签收。
+
+### 2026-09-21 HTTPS 与升级回滚预演补充
+
+- 临时 HTTPS 入口 `https://chat.acceptance.lan:18443` 通过反向代理转发到隔离应用容器；五角色登录、共享任务/图片读取、匿名拒绝、越权矩阵、审计、备份恢复和单实例检查均通过。
+- 使用 `customer-chat-analysis:acceptance-10aaf71` 启动，升级到 `customer-chat-analysis:verify-67c787c` 后任务数保持为 1，再回滚后任务数仍为 1；托管密钥存在且恢复校验通过。
+- 证据：`../evidence/https-drill-2026-09-21.json`。
+- 限制：自签名证书、临时域名、单机临时环境、无真实模型，未形成 Issue 11 的正式主机、可信 HTTPS、内部 DNS 或第二工作站签收证据。

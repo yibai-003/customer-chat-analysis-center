@@ -1,0 +1,86 @@
+{
+  "mode": "isolated-browser-preview",
+  "date": "2026-09-21",
+  "entry": "http://127.0.0.1:18444/",
+  "image": {
+    "tag": "customer-chat-analysis:acceptance-10aaf71",
+    "id": "sha256:943e002d0e37e731b706528fb1ed0433cefe76cd8123da1dcfef34d8c8b7fa0e"
+  },
+  "authentication": {
+    "account": "visual-admin",
+    "scope": "temporary isolated container"
+  },
+  "actions": [
+    "temporary administrator login",
+    "open management menu",
+    "open model configuration",
+    "inspect model pool tab",
+    "capture semantic snapshots at four desktop viewports",
+    "navigate browser back to the live LAN login page",
+    "remove temporary container and data"
+  ],
+  "viewports": [
+    {
+      "width": 1024,
+      "height": 768,
+      "htmlScroll": [1024, 768],
+      "bodyScroll": [1024, 768],
+      "modelPoolVisible": true,
+      "emptyPoolStateVisible": true,
+      "poolPanelRight": 986,
+      "tableRight": 1466,
+      "result": "controls visible; fixed-width model table extends beyond the panel and is handled by the table region"
+    },
+    {
+      "width": 1366,
+      "height": 768,
+      "htmlScroll": [1366, 768],
+      "bodyScroll": [1366, 768],
+      "modelPoolVisible": true,
+      "emptyPoolStateVisible": true,
+      "poolPanelRight": 1247,
+      "tableRight": 1539,
+      "result": "controls visible; page itself has no horizontal overflow"
+    },
+    {
+      "width": 1440,
+      "height": 900,
+      "htmlScroll": [1440, 900],
+      "bodyScroll": [1440, 900],
+      "modelPoolVisible": true,
+      "emptyPoolStateVisible": true,
+      "poolPanelRight": 1284,
+      "tableRight": 1576,
+      "result": "controls visible; page itself has no horizontal overflow"
+    },
+    {
+      "width": 1920,
+      "height": 1080,
+      "htmlScroll": [1920, 1080],
+      "bodyScroll": [1920, 1080],
+      "modelPoolVisible": true,
+      "emptyPoolStateVisible": true,
+      "poolPanelRight": 1524,
+      "tableRight": 1816,
+      "result": "controls and model table region visible without page overflow"
+    }
+  ],
+  "outcome": {
+    "isolated_visual_regression_passed": true,
+    "real_model_member_identity_verified": false,
+    "real_provider_credentials_verified": false,
+    "formal_lan_acceptance": false,
+    "raw_screenshot_files_persisted": false,
+    "limitations": [
+      "The isolated database contains zero model-pool members, so model name, provider, quota, status, validation and batch-operation visuals were not verified with real rows.",
+      "Semantic preview snapshots were captured for all four sizes, but no raw PNG files were archived by this drill.",
+      "The live LAN instance remains a separate environment and was not modified."
+    ]
+  },
+  "cleanup": {
+    "temporary_container_removed": true,
+    "temporary_data_removed": true,
+    "live_container": "lan-preview",
+    "live_container_status": "healthy"
+  }
+}
