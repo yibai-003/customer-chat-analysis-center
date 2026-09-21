@@ -23,3 +23,11 @@
 - 真实验收进展（2026-09-21）：第二台电脑经 HTTP 入口完成真实业务使用，用户确认管理员、配置人员、操作人员、审核人员和只读人员的各项功能测试均无问题；正式 HTTPS、内网 CA/DNS、防火墙、固定主机与证书受信仍待现场执行。
 - 本机 Field Drill（2026-09-21）：使用临时 HTTPS 反向代理、自签名证书、桩模型和 `sample-chat.xlsx` 完成 18/18 步骤；五角色权限、导入/解析/复核/导出、审计、备份恢复、同镜像升级重启、回滚和单实例保护均通过。证据见 `.scratch/lan-single-organization-upgrade/evidence/field-drill-2026-09-21.json`，不替代正式 HTTPS/真实供应商/跨机签收。
 - 主机预检（2026-09-21）：已记录 Windows 10、Intel i9-10900KF、7.8 GB 内存、`172.16.20.178/24`（DHCP Disabled）、本地 NVMe SSD、Docker Server 29.6.2 和当前提交 `9a4c0f3e1cd641cf92ee3440a0e0c58b1b5350ca`。证据见 `.scratch/lan-single-organization-upgrade/evidence/host-preflight-2026-09-21.json`；由于当前没有 CI 批准镜像对应的正式容器，暂不生成 `host-signoff`。
+
+## 2026-09-21 正式主机前置条件复核
+
+- 当前运行容器为 `lan-preview`，镜像 `customer-chat-analysis-center:0.1.0-ui-atelier-20260920-r5`，不是当前提交对应的 CI 批准镜像。
+- 当前入口为 `http://172.16.20.178:8788`，容器端口发布为 `0.0.0.0:8788 -> 8787`；尚未切换到可信内网 CA 证书、内部 DNS 和 HTTPS 入口。
+- 当前容器环境仍为 `ALLOWED_ORIGINS=http://172.16.20.178:8788`、`SESSION_COOKIE_SECURE=false`，不满足正式 HTTPS 配置要求。
+- 本机 Windows `Domain`、`Private`、`Public` 三个防火墙配置文件均为关闭状态，当前不能证明只允许批准网段访问 HTTPS 入口。
+- 以上结果只作为脱敏前置检查记录，不生成正式 `host-signoff`，也不关闭 Issue 07/11/12 的正式 HTTPS、CI 工件和最终发布签字条件。
