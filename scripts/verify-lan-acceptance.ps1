@@ -274,6 +274,15 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$commitSha = ((& git -C $repoRoot rev-parse HEAD) | Out-String).Trim()
+if (-not $commitSha -or $LASTEXITCODE -ne 0) {
+  Fail "无法读取当前 Git 提交"
+}
+$appVersion = (Get-Content (Join-Path $repoRoot "package.json") -Raw | ConvertFrom-Json).version
+if (-not $appVersion) {
+  Fail "无法读取 package.json 版本"
+}
+$buildTime = [DateTimeOffset]::UtcNow.ToString("o")
 $root = Join-Path $env:TEMP ("lan-acceptance-" + [guid]::NewGuid().ToString("N"))
 $dataDir = Join-Path $root "data"
 $knowledgeDir = Join-Path $root "knowledge"
@@ -300,7 +309,12 @@ $evidence = [ordered]@{
 
 try {
   Write-Host "== 构建镜像 $Image"
-  docker build -t $Image $repoRoot
+  docker build `
+    --build-arg "APP_VERSION=$appVersion" `
+    --build-arg "APP_COMMIT_SHA=$commitSha" `
+    --build-arg "APP_BUILD_TIME=$buildTime" `
+    --build-arg "APP_IMAGE=$Image" `
+    -t $Image $repoRoot
   if ($LASTEXITCODE -ne 0) { Fail "镜像构建失败" }
   $evidence.imageId = (docker image inspect $Image --format "{{.Id}}")
 

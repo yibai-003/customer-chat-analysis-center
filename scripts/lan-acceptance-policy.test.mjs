@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   acceptanceModelConfiguration,
@@ -10,6 +11,15 @@ import {
 } from "./lan-acceptance-policy.mjs";
 
 describe("LAN acceptance sign-off policy", () => {
+  it("builds drill images with traceable Docker version metadata", () => {
+    const script = fs.readFileSync(new URL("./verify-lan-acceptance.ps1", import.meta.url), "utf8");
+
+    expect(script).toContain('--build-arg "APP_VERSION=$appVersion"');
+    expect(script).toContain('--build-arg "APP_COMMIT_SHA=$commitSha"');
+    expect(script).toContain('--build-arg "APP_BUILD_TIME=$buildTime"');
+    expect(script).toContain('--build-arg "APP_IMAGE=$Image"');
+  });
+
   it("uses host-managed provider credentials for sign-off and workstation credentials only for drills", () => {
     const shared = {
       baseUrl: "https://api.model-provider.example/v1",
