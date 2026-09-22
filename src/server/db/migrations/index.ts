@@ -18,6 +18,7 @@ import { applyModelPools } from "./014-model-pools";
 import { applyPoolRemovalAndEfficiencyIndexes } from "./015-pool-removal-and-efficiency-indexes";
 import { applyIdentityAndSessions } from "./016-identity-and-sessions";
 import { applyImmutableAuditEvents } from "./017-immutable-audit-events";
+import { applySectionConfigVersions } from "./018-section-config-versions";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
@@ -37,8 +38,9 @@ export const migrations: Migration[] = [
   { version: 15, name: "pool-removal-and-efficiency-indexes", up: applyPoolRemovalAndEfficiencyIndexes },
   { version: 16, name: "identity-and-sessions", up: applyIdentityAndSessions },
   { version: 17, name: "immutable-audit-events", up: applyImmutableAuditEvents },
+  { version: 18, name: "section-config-versions", up: applySectionConfigVersions },
 ];
-export const currentSchemaVersion = 17;
+export const currentSchemaVersion = 18;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();

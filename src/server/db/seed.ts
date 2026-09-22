@@ -4,6 +4,7 @@ import { applyReceptionQualityConfiguration } from "./migrations/009-reception-q
 import { applyUnifiedReceptionQualityConfiguration } from "./migrations/010-unified-reception-quality";
 import { applyOptimizedReceptionQualityConfiguration } from "./migrations/011-optimized-reception-quality-prompts";
 import { applyReceptionExcelSchemaConfiguration } from "./migrations/013-reception-excel-schema";
+import { ensureSectionConfigV1 } from "./migrations/018-section-config-versions";
 export function seedNewDatabase(db: any) {
   seedSections(db);
   migrateLegacyFields(db);
@@ -13,6 +14,7 @@ export function seedNewDatabase(db: any) {
   applyUnifiedReceptionQualityConfiguration(db);
   applyOptimizedReceptionQualityConfiguration(db);
   applyReceptionExcelSchemaConfiguration(db);
+  ensureSectionConfigV1(db);
 }
 function seedSections(db: any) {
   const count = db.prepare("SELECT COUNT(*) as count FROM analysis_sections").get().count as number;
