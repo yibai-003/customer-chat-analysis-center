@@ -13,6 +13,7 @@ import { cancelAnalysis } from "./analysis-cancellation";
 import { withSingleAnalysisRun } from "./single-analysis-run";
 import { updateRecord } from "../db/repositories";
 import { createDraftVersion, publishSectionVersion } from "./section-config-version-service";
+import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 
 vi.mock("./model-pool-service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./model-pool-service")>();
@@ -42,6 +43,7 @@ function fixture() {
   const fields = ["first", "second"].map((key, index) => upsertField({ sectionId, key, label: key, type: "string", imageEnabled: false, sortOrder: index }));
   publishSectionVersion(createDraftVersion(sectionId).id);
   const job = createJob("cancel.xlsx", "unused", { id: sectionId, name: "cancel" });
+  attachConversationTestPlatform(job.id);
   addRecords(job.id, [1, 2].map(rowNumber => ({ rowNumber, sheetName: "s", anchor: {}, sourceFields: {}, imagePath: "unused" })));
   return { sectionId, job, fields, records: listRecords(job.id) };
 }

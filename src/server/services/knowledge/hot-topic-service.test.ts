@@ -11,6 +11,7 @@ import { HOT_TOPIC_BASE_ID, HOT_TOPIC_PROMPT } from "../../../shared/hot-topic";
 import { withAnalysisCancellation, cancelAnalysis } from "../analysis-cancellation";
 import type { AnalysisField, ModelConfig, ModelRouteResult } from "../../../shared/types";
 import { createDraftVersion, publishSectionVersion } from "../section-config-version-service";
+import { attachConversationTestPlatform } from "../../testing/conversation-platform-fixture";
 
 vi.mock("../../ai/openai-compatible-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../ai/openai-compatible-client")>();
@@ -104,6 +105,7 @@ beforeEach(() => {
   const timestamp = new Date().toISOString();
   db.prepare(`INSERT INTO jobs(id,original_filename,source_path,status,created_at,updated_at)
     VALUES ('job-one','test.xlsx','test.xlsx','ready',?,?)`).run(timestamp, timestamp);
+  attachConversationTestPlatform("job-one");
   for (const id of ["record-one", "record-two"]) db.prepare(`INSERT INTO records
     (id,job_id,sheet_name,row_number,anchor_json,source_fields_json,image_path,status,review_status,created_at,updated_at)
     VALUES (?,'job-one','Sheet1',2,'{}',?,'','pending','pending',?,?)`).run(id, JSON.stringify(dependencies), timestamp, timestamp);

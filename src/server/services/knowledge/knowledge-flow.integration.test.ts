@@ -12,6 +12,7 @@ import { importWorkbook } from "../excel-import-service";
 import { exportJob } from "../excel-export-service";
 import { analyzeField } from "../field-analysis-service";
 import { createDraftVersion, publishSectionVersion } from "../section-config-version-service";
+import { attachConversationTestPlatform } from "../../testing/conversation-platform-fixture";
 import { importKnowledgeWorkbook } from "./knowledge-import-service";
 import { createKnowledgeWorkbook } from "./knowledge-test-fixtures";
 import {
@@ -258,6 +259,7 @@ describe("dynamic reason knowledge flow", () => {
       id: sectionId,
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     generatedDirectories.add(path.join(config.dataDir, "jobs", job.id));
     const recordId = (db.prepare(recordIdQuery).get(job.id) as { id: string }).id;
 

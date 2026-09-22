@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { createApp } from "../app";
 import { db, initDb } from "../db/client";
 import { addRecords, createJob, getJob, getRecord, listRecords, listSections } from "../db/repositories";
+import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 import { bootstrapFirstAdmin, createUser } from "./identity-service";
 import type { UserRole } from "../../shared/types";
 
@@ -62,6 +63,7 @@ function seedFixture() {
   fs.writeFileSync(jobSourcePath, workbookBuffer);
   workbookPaths.push(jobSourcePath);
   const job = createJob("authorization-matrix.xlsx", jobSourcePath, { id: section.id, name: section.name });
+  attachConversationTestPlatform(job.id);
   addRecords(job.id, [{
     sheetName: "Sheet1",
     rowNumber: 2,

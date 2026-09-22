@@ -9,6 +9,7 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { db, initDb } from "../db/client";
 import { addRecords, createJob, getRecord, listRecords, updateRecord } from "../db/repositories";
+import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 import { captureCatalog } from "./knowledge/knowledge-sync-service";
 import { createFullBackup, restoreFullBackup, verifyBackup } from "./backup-service";
 
@@ -32,6 +33,7 @@ beforeEach(async () => {
   fs.mkdirSync(exportsDir, { recursive: true });
   fs.writeFileSync(path.join(exportsDir, "结果导出.xlsx"), Buffer.from("export-bytes"));
   const job = createJob("source.xlsx", workbookPath, { id: "refund", name: "refund" }); jobId = job.id;
+  attachConversationTestPlatform(job.id);
   addRecords(job.id, [{ rowNumber: 2, sheetName: "Sheet1", anchor: {}, sourceFields: { origin: "test" }, imagePath: path.join(root, "screenshot.png") }]);
   recordId = listRecords(job.id)[0].id;
   updateRecord(recordId, { sectionId: "refund", humanResult: { reason: "verified" }, reviewNote: "review note", status: "completed", reviewStatus: "confirmed" });

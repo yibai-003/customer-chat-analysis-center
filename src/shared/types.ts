@@ -137,6 +137,8 @@ export interface RecordSummary {
   imageUrl: string;
   status: RecordStatus;
   reviewStatus: ReviewStatus;
+  conversationId: string | null;
+  conversationIdAssignedAt: string | null;
 }
 
 export interface RecordPageQuery {

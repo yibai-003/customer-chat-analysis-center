@@ -16,7 +16,8 @@ it("recovers an actual crashed process immediately without losing completed reco
     const repo = await import('./src/server/db/repositories.ts');
     initDb();
     if (process.argv[1] === 'create') {
-      const job = repo.createJob('test.xlsx','test.xlsx',{ id:'refund',name:'refund' });
+      const platform = repo.createPlatform({ name:'restart test',code:'RESTARTTEST' });
+      const job = repo.createJob('test.xlsx','test.xlsx',{ id:'refund',name:'refund' },platform);
       repo.addRecords(job.id,[1,2].map(rowNumber=>({sheetName:'s',rowNumber,anchor:{},sourceFields:{},imagePath:'test.png'})));
       const records = repo.listRecords(job.id);
       repo.updateRecord(records[0].id,{status:'completed'});

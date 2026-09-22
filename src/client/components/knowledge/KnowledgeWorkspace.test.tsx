@@ -544,6 +544,7 @@ describe("knowledge workspace", () => {
       id: "record-1", jobId: "job-1", rowNumber: 2, sheetName: "Sheet1",
       sourceFields: {}, imageUrl: "/api/records/record-1/image", imagePath: "image.png",
       status: "completed", reviewStatus: "pending", humanResult: null, reviewNote: "",
+      conversationId: "TEST20260922ABC123", conversationIdAssignedAt: "2026-09-22T09:00:00.000Z",
       analysisRuns: [],
       fieldRuns: [
         {

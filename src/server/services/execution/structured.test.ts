@@ -5,6 +5,7 @@ import { createStructuredAnalysisHandler, createStructuredDeriveHandler, type St
 import { registerFieldExecutionHandler } from "./registry";
 import "./index";
 import { ensureSectionConfigV1 } from "../../db/migrations/018-section-config-versions";
+import { attachConversationTestPlatform } from "../../testing/conversation-platform-fixture";
 
 vi.mock("../model-pool-service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../model-pool-service")>();
@@ -96,6 +97,7 @@ describe("structured field abstraction probe", () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES ('probe-job', 'probe.xlsx', 'probe.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run(timestamp, timestamp);
+    attachConversationTestPlatform("probe-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,

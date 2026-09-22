@@ -28,6 +28,7 @@ import {
   publishSectionVersion,
 } from "./section-config-version-service";
 import type { AnalysisField, ModelConfig, ModelPurpose, ModelRouteResult } from "../../shared/types";
+import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 
 vi.mock("./model-pool-service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./model-pool-service")>();
@@ -239,6 +240,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
       id: sectionId,
       name: "版本执行",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 2,
@@ -294,6 +296,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -430,6 +433,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'reception.xlsx', 'reception.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -622,6 +626,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -812,6 +817,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -847,6 +853,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -896,6 +903,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -946,6 +954,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -994,6 +1003,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-context-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-context-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,

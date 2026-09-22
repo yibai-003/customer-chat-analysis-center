@@ -23,6 +23,7 @@ import { listFields, upsertField } from "./field-config-service";
 import { createFieldRun } from "./field-run-service";
 import { createDraftVersion, publishSectionVersion } from "./section-config-version-service";
 import { paidTokensRemaining } from "../ai/model-budget";
+import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 import {
   analyzeJob,
   prepareTargetedRecordIds,
@@ -77,6 +78,7 @@ describe("batch analysis concurrency", () => {
 describe("batch analysis scheduling", () => {
   it("does not declare the whole job complete after retrying a subset", async () => {
     const job = createJob("partial.xlsx", "partial.xlsx", { id: "refund", name: "refund" });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [1,2].map(rowNumber => ({ sheetName: "Sheet1", rowNumber, anchor: {}, sourceFields: {}, imagePath: "test.png" })));
     const records = listRecords(job.id);
     updateRecord(records[0].id, { status: "failed" });
@@ -112,6 +114,7 @@ describe("batch analysis scheduling", () => {
 
   it("validates targeted record selections and splits executable from skipped records", () => {
     const job = createJob("targeted.xlsx", "targeted.xlsx", { id: "refund", name: "refund" });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [1, 2, 3, 4].map((rowNumber) => ({
       sheetName: "Sheet1", rowNumber, anchor: {}, sourceFields: {}, imagePath: "test.png",
     })));
@@ -119,6 +122,7 @@ describe("batch analysis scheduling", () => {
     updateRecord(records[0].id, { status: "completed" });
     updateRecord(records[1].id, { status: "failed" });
     const otherJob = createJob("other.xlsx", "other.xlsx", { id: "refund", name: "refund" });
+    attachConversationTestPlatform(otherJob.id);
     addRecords(otherJob.id, [{ sheetName: "Sheet1", rowNumber: 1, anchor: {}, sourceFields: {}, imagePath: "other.png" }]);
     const otherRecord = listRecords(otherJob.id)[0];
 
@@ -252,6 +256,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "付费预算",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -272,6 +277,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [
       { sheetName: "Sheet1", rowNumber: 1, anchor: {}, sourceFields: {}, imagePath: "completed.png" },
       { sheetName: "Sheet1", rowNumber: 2, anchor: {}, sourceFields: {}, imagePath: "pending.png" },
@@ -322,6 +328,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -389,6 +396,7 @@ describe("batch analysis scheduling", () => {
       id: sectionId,
       name: "停用字段基线",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -440,6 +448,7 @@ describe("batch analysis scheduling", () => {
       id: sectionId,
       name: "版本进度基线",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -487,6 +496,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, Array.from({ length: 3 }, (_, index) => ({
       sheetName: "Sheet1",
       rowNumber: index + 1,
@@ -539,6 +549,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -585,6 +596,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     const server: Server = createApp({ analyzeJobRunner } as never).listen(0);
     await new Promise<void>((resolve) => server.once("listening", resolve));
     const address = server.address() as AddressInfo;
@@ -621,6 +633,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -655,6 +668,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -700,6 +714,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -761,6 +776,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,

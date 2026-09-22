@@ -26,7 +26,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -65,8 +65,8 @@ describe("versioned migrations", () => {
 
     runMigrations(db);
 
-    expect(currentSchemaVersion).toBe(20);
-    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
+    expect(currentSchemaVersion).toBe(21);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
     const qwenRows = db.prepare(`
       SELECT
         model.provider_id,
@@ -247,6 +247,33 @@ describe("versioned migrations", () => {
       expect.objectContaining({ name: "platform_name" }),
     ]));
   });
+  it("adds globally unique conversation IDs without backfilling historical records", () => {
+    applyLegacyBaseline(db);
+    runMigrations(db);
+
+    expect(db.prepare("PRAGMA table_info(records)").all()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "conversation_id" }),
+      expect.objectContaining({ name: "conversation_id_assigned_at" }),
+    ]));
+    db.prepare(`
+      INSERT INTO jobs (id, original_filename, source_path, status, created_at, updated_at)
+      VALUES ('conversation-job', 'conversation.xlsx', 'conversation.xlsx', 'ready', 'now', 'now')
+    `).run();
+    const insertRecord = db.prepare(`
+      INSERT INTO records (
+        id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
+        image_path, status, review_status, review_note, created_at, updated_at
+      ) VALUES (?, 'conversation-job', 'Sheet1', ?, '{}', '{}', ?, 'pending', 'pending', '', 'now', 'now')
+    `);
+    insertRecord.run("conversation-record-1", 2, "one.png");
+    insertRecord.run("conversation-record-2", 3, "two.png");
+    expect(db.prepare("SELECT conversation_id FROM records WHERE id = 'conversation-record-1'").get())
+      .toEqual({ conversation_id: null });
+    db.prepare("UPDATE records SET conversation_id = 'TEST20260922ABC123' WHERE id = 'conversation-record-1'").run();
+    expect(() => db.prepare(
+      "UPDATE records SET conversation_id = 'TEST20260922ABC123' WHERE id = 'conversation-record-2'",
+    ).run()).toThrow(/UNIQUE constraint failed/);
+  });
   it("does not duplicate V1 snapshots or overwrite existing job bindings when rerun", () => {
     applyLegacyBaseline(db);
     db.exec(`
@@ -322,8 +349,8 @@ describe("versioned migrations", () => {
     runMigrations(db);
 
     expect(appliedMigrations(db).at(-1)).toMatchObject({
-      version: 20,
-      name: "platform-dictionary-task-binding",
+      version: 21,
+      name: "global-conversation-id",
     });
     expect(db.prepare("PRAGMA foreign_key_list(analysis_section_versions)").all())
       .toEqual(expect.arrayContaining([

@@ -256,6 +256,8 @@ function record(id: string, rowNumber: number, status: RecordSummary["status"] =
     imageUrl: `/api/records/${id}/image`,
     status,
     reviewStatus: "pending",
+    conversationId: null,
+    conversationIdAssignedAt: null,
   };
 }
 

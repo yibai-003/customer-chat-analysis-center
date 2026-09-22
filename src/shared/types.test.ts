@@ -19,6 +19,8 @@ describe("shared record types", () => {
       imageUrl: "/api/records/record-1/image",
       status: "pending",
       reviewStatus: "pending",
+      conversationId: null,
+      conversationIdAssignedAt: null,
     };
     expect(summary.status).toBe("pending");
   });

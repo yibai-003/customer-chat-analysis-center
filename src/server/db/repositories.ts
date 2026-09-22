@@ -5,6 +5,10 @@ import { sectionInput, parseConfiguration } from "../security/configuration-inpu
 import { db } from "./client";
 import type { AnalysisSection, ImportJob, Job, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ImportJobStatus, RecordStatus, Platform } from "../../shared/types";
 import { listFieldRuns } from "../services/field-run-service";
+import {
+  ensureConversationId,
+  type ConversationIdDependencies,
+} from "../services/conversation-id-service";
 
 const now = () => new Date().toISOString();
 const json = (value: unknown) => JSON.stringify(value ?? {});
@@ -465,7 +469,17 @@ export function addRecords(jobId: string, records: Array<{ sheetName: string; ro
   transaction();
 }
 function mapRecord(row: any): RecordSummary {
-  return { id: row.id, rowNumber: row.row_number, sheetName: row.sheet_name, sourceFields: JSON.parse(row.source_fields_json), imageUrl: `/api/records/${row.id}/image`, status: row.status, reviewStatus: row.review_status };
+  return {
+    id: row.id,
+    rowNumber: row.row_number,
+    sheetName: row.sheet_name,
+    sourceFields: JSON.parse(row.source_fields_json),
+    imageUrl: `/api/records/${row.id}/image`,
+    status: row.status,
+    reviewStatus: row.review_status,
+    conversationId: row.conversation_id ?? null,
+    conversationIdAssignedAt: row.conversation_id_assigned_at ?? null,
+  };
 }
 export function listRecords(jobId: string): RecordSummary[] { return (db.prepare("SELECT * FROM records WHERE job_id = ? ORDER BY row_number").all(jobId) as any[]).map(mapRecord); }
 export function listBatchRecordIds(
@@ -602,7 +616,11 @@ export function getRecord(id: string): RecordDetail | undefined {
   ]));
   return { ...mapRecord(row), jobId: row.job_id, imagePath: row.image_path, humanResult: row.human_result_json ? JSON.parse(row.human_result_json) : null, reviewNote: row.review_note, sectionReviews, analysisRuns: runs, fieldRuns: listFieldRuns(id) };
 }
-export function updateRecord(id: string, input: { sectionId?: string; humanResult?: Record<string, unknown>; reviewStatus?: string; reviewNote?: string; status?: string }) {
+export function updateRecord(
+  id: string,
+  input: { sectionId?: string; humanResult?: Record<string, unknown>; reviewStatus?: string; reviewNote?: string; status?: string },
+  conversationIdDependencies?: ConversationIdDependencies,
+) {
   return db.transaction(() => {
   assertRecordOwnership(id);
   const row = getRecord(id);
@@ -619,12 +637,18 @@ export function updateRecord(id: string, input: { sectionId?: string; humanResul
       .run(id, input.sectionId, input.humanResult ? json(input.humanResult) : null, input.reviewStatus ?? "pending", input.reviewNote ?? "", now());
   }
   if (!input.sectionId) {
+    if (input.status === "completed" || input.status === "needs_review") {
+      ensureConversationId(db, id, conversationIdDependencies);
+    }
     db.prepare(`UPDATE records SET human_result_json = COALESCE(?, human_result_json), review_status = COALESCE(?, review_status),
       review_note = COALESCE(?, review_note), status = COALESCE(?, status), updated_at = ? WHERE id = ?`)
       .run(input.humanResult ? json(input.humanResult) : null, input.reviewStatus ?? null, input.reviewNote ?? null, input.status ?? null, now(), id);
   } else {
     const job = getJob(row.jobId);
     if (job?.sectionId === input.sectionId) {
+      if (input.status === "completed" || input.status === "needs_review") {
+        ensureConversationId(db, id, conversationIdDependencies);
+      }
       db.prepare("UPDATE records SET status = COALESCE(?, status), review_status = COALESCE(?, review_status), updated_at = ? WHERE id = ?")
         .run(input.status ?? null, input.reviewStatus ?? null, now(), id);
       db.prepare(`UPDATE jobs SET
