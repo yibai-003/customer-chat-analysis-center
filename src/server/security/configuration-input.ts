@@ -111,6 +111,7 @@ export const sectionConfigVersionPatchInput = z.object({
 const receptionIssueRuleInput = z.object({
   id: safeName,
   name: safeName,
+  dimension: safeName,
   scope: z.enum(["preSale", "afterSale"]),
   criterion: z.string().max(20000),
   deduction: z.number().min(0).max(100),

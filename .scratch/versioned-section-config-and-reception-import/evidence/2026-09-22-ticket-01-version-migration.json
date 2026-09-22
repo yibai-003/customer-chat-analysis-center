@@ -2,12 +2,12 @@
   "ticket": "01-section-config-versions-and-v1-migration",
   "date": "2026-09-22",
   "branch": "feat/section-config-versions",
-  "schemaVersion": 18,
+  "schemaVersion": 19,
   "verification": {
     "tests": {
       "command": "npm test",
       "testFiles": 102,
-      "tests": 841,
+      "tests": 844,
       "failures": 0
     },
     "typecheck": {
@@ -30,8 +30,8 @@
       ],
       "integrity": "ok",
       "foreignKeys": 0,
-      "version": 18,
-      "supportedVersion": 18
+      "version": 19,
+      "supportedVersion": 19
     }
   },
   "migration": {
@@ -40,7 +40,7 @@
       "skipped": 0,
       "errors": []
     },
-    "secondRun": {
+      "secondRun": {
       "succeeded": 0,
       "skipped": 6,
       "errors": []
@@ -66,12 +66,27 @@
       "analysisUsesBoundSnapshot": true,
       "retryPreservesBinding": true,
       "exportUsesBoundSnapshot": true,
-      "liveFieldDeletionPreservesHistoricalRuns": true
+      "exportRejectsOtherSections": true,
+      "liveFieldDeletionPreservesHistoricalRuns": true,
+      "progressUsesBoundFieldSnapshots": true,
+      "knowledgeMatchingRanksSnapshotCandidates": true
     },
     "immutability": {
       "publishedDowngradeRejected": true,
       "publishedDeleteRejected": true,
-      "sectionDeleteWithVersionsRejected": true
+      "sectionDeleteWithVersionsRejected": true,
+      "orphanSectionVersionRejectedByForeignKey": true
+    },
+    "upgrade": {
+      "fromSchemaVersion": 18,
+      "toSchemaVersion": 19,
+      "historicalJobBindingPreserved": true,
+      "receptionV1Preserved": true,
+      "dimensionedReceptionVersionActivated": true
+    },
+    "receptionBusinessRulesValidation": {
+      "allIssuesHaveDimensions": true,
+      "missingDimensionRejected": true
     }
   }
 }

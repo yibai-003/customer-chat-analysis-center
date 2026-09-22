@@ -22,6 +22,7 @@ export function receptionAiSourceFields(sourceFields: Record<string, string>) {
 export interface ReceptionIssueRule {
   id: string;
   name: string;
+  dimension: string;
   scope: ReceptionIssueScope;
   criterion: string;
   deduction: number;
@@ -85,6 +86,44 @@ const RULE_DETAILS: Record<string, RuleDetail> = {
   POST_CHALLENGE_CUSTOMER: detail(["客服回应售后问题"], ["以责备、讽刺或不耐烦方式质问反问，未经核实直接否定，或不当质疑客户"], ["正常核实订单、商品状态或退款原因", "依据明确证据礼貌说明事实"], ["客服原文和上下文"]),
 };
 
+const RULE_DIMENSIONS: Record<string, string> = {
+  PRE_DUPLICATE: "服务规范",
+  PRE_FALSE_PROMOTION: "业务准确性",
+  PRE_RESPONSE_TIMEOUT: "响应时效",
+  PRE_LAST_MESSAGE_NON_SERVICE: "响应时效",
+  PRE_PASSIVE_SERVICE: "服务态度",
+  PRE_MISSED_FOLLOWUP: "响应时效",
+  PRE_ANSWER_IRRELEVANT: "问题解决",
+  PRE_PRODUCT_KNOWLEDGE_ERROR: "业务准确性",
+  PRE_CAMPAIGN_ERROR: "业务准确性",
+  PRE_BUSINESS_RULE_ERROR: "业务准确性",
+  PRE_UNRESOLVED: "问题解决",
+  PRE_PRODUCT_RECOMMENDATION: "销售引导",
+  PRE_NO_ORDER_GUIDANCE: "销售引导",
+  PRE_CHALLENGE_CUSTOMER: "服务态度",
+  PRE_NO_EMPATHY: "服务态度",
+  PRE_NO_FOLLOWUP: "响应时效",
+  PRE_IMPOLITE: "服务态度",
+  PRE_AMBIGUOUS: "表达规范",
+  PRE_SELECTIVE_REPLY: "问题解决",
+  PRE_BAD_ATTITUDE: "服务态度",
+  PRE_CROSS_PLATFORM: "销售合规",
+  POST_NO_REPLY: "响应时效",
+  POST_NO_REGISTRATION: "售后执行",
+  POST_NO_NOTE: "售后执行",
+  POST_NO_RESEND: "售后执行",
+  POST_REGISTRATION_ERROR: "售后执行",
+  POST_CHAT_CAUSED_COMPLAINT: "投诉风险",
+  POST_REFUND_COMPLAINT_ERROR: "售后执行",
+  POST_REFUND_REJECT_NO_EVIDENCE: "售后执行",
+  POST_BAD_PROCESS_OR_PRIVACY: "业务合规",
+  POST_ATTITUDE: "服务态度",
+  POST_COLD_DELAY: "响应时效",
+  POST_ABANDON_COMPLAINT: "投诉风险",
+  POST_SOP_VIOLATION: "售后执行",
+  POST_CHALLENGE_CUSTOMER: "服务态度",
+};
+
 const preSaleRules = [
   ["PRE_DUPLICATE", "重复发送", "客服连续两次及以上手动发送完全相同的话术。", 2, false, 1, "合并重复话术，确认客户的新问题后再回复。"],
   ["PRE_FALSE_PROMOTION", "违反宣传", "客服在无权威依据时作出绝对效果、必然结果或无效退款等过度承诺。", 5, false, 1, "仅依据商品资料说明效果和保障，避免绝对化承诺。"],
@@ -110,6 +149,7 @@ const preSaleRules = [
 ].map(([id, name, criterion, deduction, forceD, violationCount, suggestion], index): ReceptionIssueRule => ({
   id: id as string,
   name: name as string,
+  dimension: RULE_DIMENSIONS[id as string],
   scope: "preSale" as const,
   criterion: criterion as string,
   deduction: deduction as number,
@@ -138,6 +178,7 @@ const afterSaleRules = [
 ].map(([id, name, criterion, violationCount, suggestion], index): ReceptionIssueRule => ({
   id: id as string,
   name: name as string,
+  dimension: RULE_DIMENSIONS[id as string],
   scope: "afterSale" as const,
   criterion: criterion as string,
   deduction: 0,
@@ -174,6 +215,7 @@ export function receptionIssueCatalogPrompt(scopes: ReceptionIssueScope[] = ["pr
     .map((rule) => [
       rule.id,
       rule.name,
+      rule.dimension,
       rule.scope === "preSale" ? "售前" : "售后",
       `适用:${rule.applicableWhen.join("；")}`,
       `违规:${rule.triggerWhen.join("；")}`,

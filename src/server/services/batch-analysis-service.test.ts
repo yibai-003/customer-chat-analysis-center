@@ -413,6 +413,69 @@ describe("batch analysis scheduling", () => {
     });
   });
 
+  it("keeps progress based on the bound field snapshot after live fields are deleted", async () => {
+    const sectionId = `snapshot-progress-${Date.now()}`;
+    upsertSection({
+      id: sectionId,
+      name: "版本进度基线",
+      prompt: "测试",
+      outputSchema: [],
+    });
+    const first = upsertField({
+      sectionId,
+      key: "first",
+      label: "字段一",
+      type: "string",
+      isEnabled: true,
+    });
+    const second = upsertField({
+      sectionId,
+      key: "second",
+      label: "字段二",
+      type: "string",
+      isEnabled: true,
+    });
+    publishSectionVersion(createDraftVersion(sectionId).id);
+    const job = createJob("snapshot-progress.xlsx", "snapshot-progress.xlsx", {
+      id: sectionId,
+      name: "版本进度基线",
+    });
+    addRecords(job.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 1,
+      anchor: {},
+      sourceFields: {},
+      imagePath: "snapshot-progress.png",
+    }]);
+    const record = listRecords(job.id)[0];
+    updateRecord(record.id, { status: "completed" });
+    createFieldRun({
+      recordId: record.id,
+      fieldId: first.id,
+      fieldSnapshot: first,
+      status: "completed",
+    });
+    createFieldRun({
+      recordId: record.id,
+      fieldId: second.id,
+      fieldSnapshot: second,
+      status: "completed",
+    });
+    db.prepare("DELETE FROM analysis_fields WHERE section_id = ?").run(sectionId);
+
+    await analyzeJob(job.id, sectionId, { concurrency: 1, batchSize: 5 });
+
+    expect(getJob(job.id)).toMatchObject({
+      status: "completed",
+      completedRecords: 1,
+      totalFields: 2,
+      completedFields: 2,
+      failedFields: 0,
+      skippedFields: 0,
+    });
+    expect(analyzeRecordFields).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["paused", requestJobPause],
     ["cancelled", requestJobCancel],

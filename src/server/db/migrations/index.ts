@@ -19,6 +19,7 @@ import { applyPoolRemovalAndEfficiencyIndexes } from "./015-pool-removal-and-eff
 import { applyIdentityAndSessions } from "./016-identity-and-sessions";
 import { applyImmutableAuditEvents } from "./017-immutable-audit-events";
 import { applySectionConfigVersions } from "./018-section-config-versions";
+import { applySectionVersionIntegrity } from "./019-section-version-integrity";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
@@ -39,8 +40,9 @@ export const migrations: Migration[] = [
   { version: 16, name: "identity-and-sessions", up: applyIdentityAndSessions },
   { version: 17, name: "immutable-audit-events", up: applyImmutableAuditEvents },
   { version: 18, name: "section-config-versions", up: applySectionConfigVersions },
+  { version: 19, name: "section-version-integrity", up: applySectionVersionIntegrity },
 ];
-export const currentSchemaVersion = 18;
+export const currentSchemaVersion = 19;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();
@@ -65,12 +67,24 @@ export function runMigrations(db: any, steps: Migration[] = migrations) {
     try { if (check.pragma("integrity_check", { simple: true }) !== "ok") throw new Error("迁移前备份校验失败"); }
     finally { check.close(); }
   }
-  // Apply all pending steps atomically: no partial schema or premature version stamp.
-  db.transaction(() => {
-    db.exec("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL)");
-    for (const step of pending) {
-      step.up(db);
-      db.prepare("INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)").run(step.version, step.name, new Date().toISOString());
-    }
-  })();
+  // Version 19 rebuilds a referenced parent table. SQLite requires foreign-key
+  // enforcement to be disabled before the transaction; final validation still
+  // occurs before commit so the complete pending set remains atomic.
+  const rebuildsReferencedTable = pending.some((step) => step.version === 19);
+  if (rebuildsReferencedTable) db.pragma("foreign_keys = OFF");
+  try {
+    db.transaction(() => {
+      db.exec("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL)");
+      for (const step of pending) {
+        step.up(db);
+        db.prepare("INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)").run(step.version, step.name, new Date().toISOString());
+      }
+      if (rebuildsReferencedTable) {
+        const violations = db.pragma("foreign_key_check") as unknown[];
+        if (violations.length) throw new Error(`迁移后外键校验失败：${JSON.stringify(violations.slice(0, 20))}`);
+      }
+    })();
+  } finally {
+    if (rebuildsReferencedTable) db.pragma("foreign_keys = ON");
+  }
 }

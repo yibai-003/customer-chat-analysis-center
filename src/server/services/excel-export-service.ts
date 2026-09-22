@@ -26,11 +26,13 @@ export async function exportJob(jobId: string, sectionIds: string[]) {
   if (!sourcePath) throw new Error("原始工作簿不存在");
   await workbook.xlsx.readFile(sourcePath);
   const boundVersion = getJobSectionConfigVersion(jobId);
-  const sections = listSections().filter((section) => sectionIds.includes(section.id));
-  if (boundVersion && sectionIds.includes(boundVersion.sectionId)
-    && !sections.some((section) => section.id === boundVersion.sectionId)) {
-    sections.push(boundVersion.sectionSnapshot);
+  const requestedSectionIds = [...new Set(sectionIds)];
+  if (boundVersion && requestedSectionIds.some((sectionId) => sectionId !== boundVersion.sectionId)) {
+    throw new Error("导出只能包含任务绑定的解析板块");
   }
+  const sections = boundVersion
+    ? [boundVersion.sectionSnapshot]
+    : listSections().filter((section) => requestedSectionIds.includes(section.id));
   for (const worksheet of workbook.worksheets) {
     const records = listRecords(jobId).filter((record) => record.sheetName === worksheet.name);
     if (!records.length) continue;

@@ -132,8 +132,20 @@ describe("section configuration version lifecycle", () => {
         { grade: "D", minScore: 0 },
       ],
     });
-    expect((draft.businessRules.issues as Array<{ id: string }>))
-      .toEqual(expect.arrayContaining([expect.objectContaining({ id: "PRE_ANSWER_IRRELEVANT" })]));
+    const issues = draft.businessRules.issues as Array<{ id: string; dimension: string }>;
+    expect(issues)
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({ id: "PRE_ANSWER_IRRELEVANT", dimension: "问题解决" }),
+      ]));
+    expect(issues.every((issue) => issue.dimension.trim().length > 0)).toBe(true);
+
+    const invalidRules = structuredClone(draft.businessRules) as {
+      issues: Array<Record<string, unknown>>;
+    };
+    delete invalidRules.issues[0].dimension;
+    db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
+      .run(JSON.stringify(invalidRules), draft.id);
+    expect(() => publishSectionVersion(draft.id)).toThrow("配置参数无效");
   });
 
   it("rejects malformed snapshots and runtime model state", () => {

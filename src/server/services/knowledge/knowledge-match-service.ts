@@ -39,6 +39,68 @@ function buildSearchQuery(dependencies: Record<string, unknown>): string {
   return JSON.stringify(dependencies);
 }
 
+function normalizeSearchText(value: string): string {
+  return value.normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+}
+
+function dependencySearchTerms(value: unknown): string[] {
+  if (typeof value === "string" || typeof value === "number") {
+    const normalized = normalizeSearchText(String(value));
+    return normalized ? [normalized] : [];
+  }
+  if (Array.isArray(value)) return value.flatMap(dependencySearchTerms);
+  if (value && typeof value === "object") {
+    return Object.values(value as Record<string, unknown>).flatMap(dependencySearchTerms);
+  }
+  return [];
+}
+
+function trigrams(value: string): Set<string> {
+  const characters = Array.from(value);
+  const result = new Set<string>();
+  if (characters.length < 3) {
+    if (value) result.add(value);
+    return result;
+  }
+  for (let index = 0; index <= characters.length - 3; index += 1) {
+    result.add(characters.slice(index, index + 3).join(""));
+  }
+  return result;
+}
+
+function snapshotCandidateScore(
+  values: Record<string, string>,
+  searchText: string,
+  columns: KnowledgeColumn[],
+  terms: string[],
+  queryText: string,
+  termTrigrams: Array<Set<string>>,
+): number {
+  const normalizedText = normalizeSearchText([
+    searchText,
+    ...Object.values(values),
+  ].join(" "));
+  const resultValues = columns
+    .filter((column) => column.roles.includes("result"))
+    .map((column) => normalizeSearchText(values[column.name] ?? ""))
+    .filter(Boolean);
+  const keywords = columns
+    .filter((column) => column.roles.includes("keyword") || column.roles.includes("search"))
+    .map((column) => normalizeSearchText(values[column.name] ?? ""))
+    .filter(Boolean);
+  let score = 0;
+  score += resultValues.some((value) => queryText.includes(value)) ? 30 : 0;
+  score += keywords.filter((keyword) => queryText.includes(keyword)).length * 20;
+  score += terms.some((term) => normalizedText.includes(term)) ? 10 : 0;
+  const textTrigrams = trigrams(normalizedText);
+  for (const candidateTrigrams of termTrigrams) {
+    for (const trigram of candidateTrigrams) {
+      if (textTrigrams.has(trigram)) score += 1;
+    }
+  }
+  return score;
+}
+
 function buildCacheKey(fieldId: string, knowledgeBaseId: string, query: string, candidates: KnowledgeCandidate[]) {
   return JSON.stringify({
     fieldId,
@@ -104,6 +166,9 @@ async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledg
   }
 
   const query = buildSearchQuery(input.dependencies);
+  const snapshotTerms = dependencySearchTerms(input.dependencies);
+  const snapshotQueryText = snapshotTerms.join("");
+  const snapshotTermTrigrams = snapshotTerms.map(trigrams);
   const candidates = snapshotBase
     ? (Array.isArray(snapshotBase.items) ? snapshotBase.items : [])
       .filter((item) => item && typeof item === "object" && item.isEnabled !== false)
@@ -112,25 +177,22 @@ async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledg
           ? Object.fromEntries(Object.entries(item.values).map(([key, value]) => [key, String(value ?? "")]))
           : {};
         const searchText = String(item.searchText ?? JSON.stringify(values));
-        const normalizedQuery = query.toLowerCase().replace(/\s+/g, "");
-        const normalizedText = searchText.toLowerCase().replace(/\s+/g, "");
         return {
           itemId: String(item.id ?? ""),
           values,
-          score: normalizedQuery && normalizedText.includes(normalizedQuery) ? 1 : 0,
+          score: snapshotCandidateScore(
+            values,
+            searchText,
+            (Array.isArray(snapshotBase.columns) ? snapshotBase.columns : []) as KnowledgeColumn[],
+            snapshotTerms,
+            snapshotQueryText,
+            snapshotTermTrigrams,
+          ),
           matchedText: searchText,
         };
       })
       .filter((candidate) => candidate.itemId)
-      .reduce<KnowledgeCandidate[]>((ordered, candidate) => {
-        const index = ordered.findIndex((existing) => (
-          existing.score < candidate.score
-          || (existing.score === candidate.score && existing.itemId.localeCompare(candidate.itemId) > 0)
-        ));
-        if (index < 0) ordered.push(candidate);
-        else ordered.splice(index, 0, candidate);
-        return ordered;
-      }, [])
+      .sort((left, right) => right.score - left.score || left.itemId.localeCompare(right.itemId))
       .slice(0, input.field.candidateLimit)
     : searchKnowledge({
       knowledgeBaseId: knowledgeBase.id as string,

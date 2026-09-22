@@ -442,7 +442,10 @@ describe("Excel export columns", () => {
     publishSectionVersion(createDraftVersion(sectionId).id);
     db.prepare("DELETE FROM analysis_fields WHERE id = ?").run(field.id);
 
-    const outputPath = await exportJob(job.id, [sectionId]);
+    await expect(exportJob(job.id, [sectionId, "refund"]))
+      .rejects.toThrow("导出只能包含任务绑定的解析板块");
+
+    const outputPath = await exportJob(job.id, []);
     generatedFiles.add(outputPath);
     const exported = new ExcelJS.Workbook();
     await exported.xlsx.readFile(outputPath);

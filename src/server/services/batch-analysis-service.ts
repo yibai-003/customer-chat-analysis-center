@@ -21,8 +21,8 @@ import { analyzeRecordFields } from "./field-analysis-service";
 import { config } from "../config";
 import { db } from "../db/client";
 import type { AnalysisJobOptions, BatchProgress, Job, RecordStatus } from "../../shared/types";
-import { listFields } from "./field-config-service";
 import { withPaidTokenBudget } from "../ai/model-budget";
+import { getJobSectionConfigVersion } from "./section-config-version-service";
 
 interface AnalysisProgress extends BatchProgress {
   completedFields: number;
@@ -41,7 +41,10 @@ interface RunInBatchesOptions<T> {
 
 interface AnalysisPreparationDependencies {
   getProgressBaseline: typeof getAnalysisProgressBaseline;
-  listAnalysisFields: typeof listFields;
+  listAnalysisFields: (
+    jobId: string,
+    sectionId: string,
+  ) => NonNullable<ReturnType<typeof getJobSectionConfigVersion>>["fieldsSnapshot"];
 }
 
 interface PreparedAnalysisJob {
@@ -80,7 +83,11 @@ export function prepareTargetedRecordIds(jobId: string, raw: unknown): {
 }
 const defaultPreparationDependencies: AnalysisPreparationDependencies = {
   getProgressBaseline: getAnalysisProgressBaseline,
-  listAnalysisFields: listFields,
+  listAnalysisFields: (jobId, sectionId) => {
+    const version = getJobSectionConfigVersion(jobId);
+    if (!version || version.sectionId !== sectionId) throw new Error("任务未绑定有效的板块配置版本");
+    return version.fieldsSnapshot;
+  },
 };
 
 export async function runWithConcurrency<T, R>(
@@ -193,7 +200,7 @@ function prepareAcquiredAnalysisJob(
   dependencies: AnalysisPreparationDependencies = defaultPreparationDependencies,
 ): PreparedAnalysisJob {
   const runOptions = resolveAnalysisRunOptions(options);
-  const enabledFields = dependencies.listAnalysisFields(sectionId).filter((field) => field.isEnabled);
+  const enabledFields = dependencies.listAnalysisFields(jobId, sectionId).filter((field) => field.isEnabled);
   const progress: AnalysisProgress = dependencies.getProgressBaseline(jobId, sectionId);
   const totalFields = progress.total * enabledFields.length;
   writeProgress(jobId, progress, "processing", totalFields);

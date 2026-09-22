@@ -352,16 +352,27 @@ export function getAnalysisProgressBaseline(jobId: string, sectionId: string) {
       failed: number;
       needs_review: number;
     };
-  const fieldCounts = db.prepare(`WITH latest_runs AS (
+  const fieldCounts = db.prepare(`WITH bound_fields AS (
+      SELECT json_extract(field.value, '$.id') AS field_id
+      FROM jobs j
+      JOIN analysis_section_versions v ON v.id = j.section_config_version_id
+      JOIN json_each(v.fields_snapshot_json) field
+      WHERE j.id = ?
+        AND v.section_id = ?
+        AND COALESCE(json_extract(field.value, '$.isEnabled'), 1) = 1
+    ),
+    latest_runs AS (
       SELECT afr.status,
         ROW_NUMBER() OVER (
-          PARTITION BY afr.record_id, afr.field_id
+          PARTITION BY afr.record_id,
+            COALESCE(json_extract(afr.field_snapshot_json, '$.id'), afr.field_id)
           ORDER BY afr.created_at DESC, afr.rowid DESC
         ) AS rank
       FROM analysis_field_runs afr
       JOIN records r ON r.id = afr.record_id
-      JOIN analysis_fields f ON f.id = afr.field_id
-      WHERE r.job_id = ? AND f.section_id = ? AND f.is_enabled = 1
+      JOIN bound_fields bf
+        ON bf.field_id = COALESCE(json_extract(afr.field_snapshot_json, '$.id'), afr.field_id)
+      WHERE r.job_id = ?
     )
     SELECT
       COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
@@ -369,7 +380,7 @@ export function getAnalysisProgressBaseline(jobId: string, sectionId: string) {
       COALESCE(SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped,
       COALESCE(SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END), 0) AS needs_review
     FROM latest_runs
-    WHERE rank = 1`).get(jobId, sectionId) as {
+    WHERE rank = 1`).get(jobId, sectionId, jobId) as {
       completed: number;
       failed: number;
       skipped: number;

@@ -405,4 +405,51 @@ describe("knowledge match service", () => {
     });
     expect(callVisionModel).not.toHaveBeenCalled();
   });
+
+  it("ranks relevant snapshot items ahead of earlier unrelated IDs", async () => {
+    const snapshotField = { ...field, candidateLimit: 2 };
+    mockModelResponse('{"knowledgeItemId":"z-relevant"}', "snapshot-selected");
+
+    const result = await matchKnowledgeItem({
+      recordId: "record-match",
+      field: snapshotField,
+      sectionName: "退货分析",
+      dependencies: { 聊天内容: "客户反馈面板里的弹簧片掉了" },
+      knowledgeSnapshot: [{
+        id: "base-match",
+        name: "版本知识库",
+        columns,
+        items: [
+          {
+            id: "a-unrelated",
+            values: { 原因: "物流延迟", 检索词: "快递 超时" },
+            searchText: "物流延迟 快递超时",
+            isEnabled: true,
+          },
+          {
+            id: "b-unrelated",
+            values: { 原因: "颜色不符", 检索词: "色差 颜色" },
+            searchText: "颜色不符 色差",
+            isEnabled: true,
+          },
+          {
+            id: "z-relevant",
+            values: { 原因: "品质-面板故障", 检索词: "面板 弹簧片" },
+            searchText: "品质面板故障 面板内部弹簧片掉落",
+            isEnabled: true,
+          },
+        ],
+      }] as never,
+    });
+
+    expect(result).toMatchObject({
+      status: "completed",
+      result: { reasonMatch: "z-relevant" },
+    });
+    expect(searchKnowledge).not.toHaveBeenCalled();
+    const messages = JSON.stringify(vi.mocked(callModelPool).mock.calls[0][0]);
+    expect(messages).toContain("z-relevant");
+    expect(messages).toContain("a-unrelated");
+    expect(messages).not.toContain("b-unrelated");
+  });
 });

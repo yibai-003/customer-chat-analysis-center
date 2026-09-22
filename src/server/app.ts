@@ -316,8 +316,13 @@ export function createApp(dependencies: AppDependencies = {}) {
   app.get("/api/jobs/:id/export", canExport, async (req, res) => {
     try {
       const ids = String(req.query.sections ?? "").split(",").filter(Boolean);
-      const output = await exportJob(req.params.id, ids.length ? ids : listSections().filter((section) => section.parentId).map((section) => section.id));
-      auditRequest(req, { action: "task.export", targetType: "job", targetId: req.params.id, metadata: { sections: ids } });
+      const output = await exportJob(req.params.id, ids);
+      auditRequest(req, {
+        action: "task.export",
+        targetType: "job",
+        targetId: req.params.id,
+        metadata: { sections: ids.length ? ids : [getJob(req.params.id)?.sectionId].filter(Boolean) },
+      });
       return res.download(output);
     } catch (error) { return fail(res, error); }
   });
