@@ -219,6 +219,22 @@ function validateVersionSnapshot(version: Pick<
     if (resultColumns.has(checked.importContract.imageColumn)) {
       throw new Error("聊天截图列不能属于结果区");
     }
+    const screenshotFacts = fieldsSnapshot.find((field) => field.key === "截图内容总结" && field.isEnabled);
+    if (!screenshotFacts
+      || screenshotFacts.executionType !== "reception_screenshot_facts"
+      || !screenshotFacts.imageEnabled
+      || screenshotFacts.dependsOn.length > 0
+      || !screenshotFacts.prompt.trim()) {
+      throw new Error("接待质检截图事实字段必须启用严格视觉事实抽取、图片输入和版本提示词");
+    }
+    const unifiedQuality = fieldsSnapshot.find((field) => field.key === "统一质检分析" && field.isEnabled);
+    if (!unifiedQuality
+      || unifiedQuality.executionType !== "reception_quality_analysis"
+      || unifiedQuality.imageEnabled
+      || !unifiedQuality.dependsOn.includes("截图内容总结")
+      || !unifiedQuality.prompt.trim()) {
+      throw new Error("接待质检统一质检字段必须依赖截图事实并使用版本提示词");
+    }
   }
   assertNoRuntimeState(version);
 }

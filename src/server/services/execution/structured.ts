@@ -3,7 +3,12 @@ import { classifyModelError } from "../../ai/openai-compatible-client";
 import { db } from "../../db/client";
 import { createFieldRun } from "../field-run-service";
 import { callModelPool } from "../model-pool-service";
-import { dependencyValues, failedRouteSnapshot, routedModelSnapshot } from "./support";
+import {
+  dependencyValues,
+  failedRouteSnapshot,
+  imageDataUrl,
+  routedModelSnapshot,
+} from "./support";
 import { type FieldExecutionHandler } from "./registry";
 import type {
   AnalysisExecutionType,
@@ -17,6 +22,7 @@ export interface StructuredInput {
   configVersion: SectionConfigVersion;
   dependencies: Record<string, unknown>;
   sourceFields: Record<string, string>;
+  imageDataUrl: string;
 }
 
 export interface StructuredStatus {
@@ -56,13 +62,14 @@ export function createStructuredAnalysisHandler<TSource, TParsed>(
 ): FieldExecutionHandler {
   return {
     type,
-    async run({ recordId, field, configVersion, record, context }) {
+    async run({ recordId, field, configVersion, record, context, image }) {
       const input: StructuredInput = {
         recordId,
         field,
         configVersion,
         dependencies: dependencyValues(field, record.sourceFields, context),
         sourceFields: record.sourceFields,
+        imageDataUrl: image ? imageDataUrl(record.imagePath, image) : "",
       };
       const started = Date.now();
       let routed: Awaited<ReturnType<typeof callModelPool>> | undefined;
@@ -153,6 +160,7 @@ export function createStructuredDeriveHandler<TSource, TParsed>(
         configVersion,
         dependencies: dependencyValues(field, record.sourceFields, context),
         sourceFields: record.sourceFields,
+        imageDataUrl: "",
       };
       const started = Date.now();
       const parsed = parsedFromContext<TParsed>(definition.key, context);

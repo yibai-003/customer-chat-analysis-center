@@ -23,6 +23,7 @@ import { applySectionVersionIntegrity } from "./019-section-version-integrity";
 import { applyPlatformDictionaryAndTaskBinding } from "./020-platform-dictionary-task-binding";
 import { applyGlobalConversationId } from "./021-global-conversation-id";
 import { applyReceptionImportContract } from "./022-reception-import-contract";
+import { applyReceptionTwoStageAnalysis } from "./023-reception-two-stage-analysis";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
@@ -47,8 +48,9 @@ export const migrations: Migration[] = [
   { version: 20, name: "platform-dictionary-task-binding", up: applyPlatformDictionaryAndTaskBinding },
   { version: 21, name: "global-conversation-id", up: applyGlobalConversationId },
   { version: 22, name: "reception-import-contract", up: applyReceptionImportContract },
+  { version: 23, name: "reception-two-stage-analysis", up: applyReceptionTwoStageAnalysis },
 ];
-export const currentSchemaVersion = 22;
+export const currentSchemaVersion = 23;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();

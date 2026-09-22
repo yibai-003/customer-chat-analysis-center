@@ -27,6 +27,7 @@ import {
   createDraftVersion,
   publishSectionVersion,
 } from "./section-config-version-service";
+import { sectionBusinessRules } from "./section-business-rules";
 import type { AnalysisField, ModelConfig, ModelPurpose, ModelRouteResult } from "../../shared/types";
 import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 
@@ -448,7 +449,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         export_enabled, candidate_limit, is_enabled, created_at, updated_at
       ) VALUES (?, 'task-5-dispatch', ?, ?, ?, ?, '[]', 0, ?, ?, ?, ?, ?, 15, 1, ?, ?)
     `);
-    insertField.run("reception-facts", "截图内容总结", "截图内容总结", "object", "只抽取事实", 1, "[]", 0, "ai", 0, timestamp, timestamp);
+    insertField.run("reception-facts", "截图内容总结", "截图内容总结", "object", "只抽取事实", 1, "[]", 0, "reception_screenshot_facts", 0, timestamp, timestamp);
     insertField.run("reception-quality", "统一质检分析", "统一质检分析", "object", "统一售前售后标准", 0, '["截图内容总结"]', 1, "reception_quality_analysis", 0, timestamp, timestamp);
     for (const [index, key] of [
       "问题点-售前",
@@ -478,35 +479,41 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         options.purpose,
         JSON.stringify({
           截图内容总结: {
-            会话场景: "混合",
-            聊天内容总结: "客户先咨询尺寸，后申请退款。",
-            证据片段: ["客户：尺寸多大", "客户：我要退款"],
+            sceneHints: ["售前", "售后"],
+            dialogueTurns: [
+              { id: "T1", speaker: "客户", time: "09:30", text: "尺寸多大" },
+              { id: "T2", speaker: "客服", time: "09:31", text: "请看详情页" },
+              { id: "T3", speaker: "客户", time: "09:32", text: "我要退款" },
+            ],
+            customerIntents: ["咨询尺寸", "申请退款"],
+            serviceActions: ["回复详情页"],
+            businessFacts: [],
+            missingSignals: [],
           },
         }),
         '{"facts":true}',
       ))
-      .mockImplementationOnce(async (_messages, options) => routedResponse(
+      .mockImplementation(async (_messages, options) => routedResponse(
         options.purpose,
         JSON.stringify({
           scene: "混合",
+          checkedRuleIds: (sectionBusinessRules("reception").issues as Array<{ id: string }>).map((rule) => rule.id),
           preSaleIssues: [{
-            name: "答非所问",
-            evidence: "客服：请看详情页",
+            issueId: "PRE_ANSWER_IRRELEVANT",
+            evidenceIds: ["T2"],
+            chatQuotes: ["请看详情页"],
+            evidenceExplanation: "客服原文未回应尺寸",
             reason: "未回答客户尺寸问题",
-            deduction: 10,
-            forceD: false,
-            violationCount: 1,
           }],
           afterSaleIssues: [{
-            name: "漏回复",
-            evidence: "客户提出退款后无人工回复",
+            issueId: "POST_NO_REPLY",
+            evidenceIds: ["T3"],
+            chatQuotes: ["我要退款"],
+            evidenceExplanation: "客户提出退款后无人工回复",
             reason: "没有有效回应退款诉求",
-            deduction: 0,
-            forceD: false,
-            violationCount: 1,
           }],
-          unverifiableItems: [],
-          suggestion: "先回答尺寸，再明确说明退款处理步骤",
+          blockingUnverifiableItems: [],
+          informationalUnverifiableItems: [],
           confidence: 0.9,
         }),
         '{"quality":true}',
@@ -516,9 +523,9 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
 
     expect(progress).toEqual({
       total: 8,
-      completed: 8,
+      completed: 1,
       failed: 0,
-      needsReview: 0,
+      needsReview: 7,
       skipped: 0,
     });
     expect(vi.mocked(callModelPool).mock.calls.map(([, options]) => options)).toEqual([
@@ -526,7 +533,8 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         purpose: "vision",
         recordId: "task-5-dispatch-record",
         fieldId: "reception-facts",
-        operation: "ai",
+        operation: "reception_screenshot_facts",
+        validate: expect.any(Function),
       }),
       expect.objectContaining({
         purpose: "text",
@@ -539,10 +547,27 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
     const qualityValidator = vi.mocked(callModelPool).mock.calls[1][1].validate;
     expect(qualityValidator?.('{"scene":"invalid"}')).toEqual({ valid: false });
     expect(qualityValidator?.(JSON.stringify({
+      scene: "售前",
+      checkedRuleIds: [],
+      preSaleIssues: [{
+        issueId: "PRE_NOT_CONFIGURED",
+        evidenceIds: ["T2"],
+        chatQuotes: ["请看详情页"],
+        evidenceExplanation: "说明",
+        reason: "理由",
+      }],
+      afterSaleIssues: [],
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    }))).toEqual({ valid: false });
+    expect(qualityValidator?.(JSON.stringify({
       scene: "无法判断",
+      checkedRuleIds: (sectionBusinessRules("reception").issues as Array<{ id: string }>).map((rule) => rule.id),
       preSaleIssues: [],
       afterSaleIssues: [],
-      unverifiableItems: ["缺少可靠时间戳"],
+      blockingUnverifiableItems: ["缺少可靠时间戳"],
+      informationalUnverifiableItems: [],
       confidence: 0.4,
     }))).toEqual({ valid: true });
     const runs = db.prepare(`
@@ -562,6 +587,51 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
       客服问题识别问题并打标签: "答非所问、漏回复",
     });
     expect(runs.filter((run) => JSON.parse(run.model_config_snapshot_json).strategy === "local_rules")).toHaveLength(6);
+
+    const retried = await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+    expect(retried).toEqual({
+      total: 8,
+      completed: 1,
+      failed: 0,
+      needsReview: 7,
+      skipped: 0,
+    });
+    expect(vi.mocked(callModelPool).mock.calls).toHaveLength(3);
+    expect(vi.mocked(callModelPool).mock.calls.filter(([, options]) => options.purpose === "vision"))
+      .toHaveLength(1);
+    expect(vi.mocked(callModelPool).mock.calls.filter(([, options]) => options.purpose === "text"))
+      .toHaveLength(2);
+
+    vi.mocked(callModelPool).mockImplementationOnce(async (_messages, options) => routedResponse(
+      options.purpose,
+      JSON.stringify({
+        scene: "售前",
+        checkedRuleIds: [],
+        preSaleIssues: [{
+          issueId: "PRE_NOT_CONFIGURED",
+          evidenceIds: ["T2"],
+          chatQuotes: ["请看详情页"],
+          evidenceExplanation: "说明",
+          reason: "理由",
+        }],
+        afterSaleIssues: [],
+        blockingUnverifiableItems: [],
+        informationalUnverifiableItems: [],
+        confidence: 0.9,
+      }),
+      '{"unknownIssue":true}',
+    ));
+    const failedRun = await analyzeField(
+      "task-5-dispatch-record",
+      "task-5-dispatch",
+      "统一质检分析",
+    );
+    expect(failedRun).toMatchObject({
+      status: "failed",
+      errorMessage: expect.stringContaining("目录外问题 ID"),
+    });
+    expect(vi.mocked(callModelPool).mock.calls.filter(([, options]) => options.purpose === "vision"))
+      .toHaveLength(1);
   });
 
   it("reuses a completed summary and recalculates descendants after an upstream retry", async () => {

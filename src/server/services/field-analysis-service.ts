@@ -9,7 +9,6 @@ import { isHotTopicField } from "../../shared/hot-topic";
 import { dependencyValues } from "./execution/support";
 import { executeFieldGraph, fieldExecutionHandler, type FieldExecutionOutput } from "./execution";
 import {
-  DEFAULT_EXECUTION_TYPE,
   type AnalysisField,
   type AnalysisFieldRun,
   type SectionConfigVersion,
@@ -129,7 +128,7 @@ function createSkippedRuns(
 }
 
 function requiresImage(fields: AnalysisField[]) {
-  return fields.some((field) => (field.executionType ?? DEFAULT_EXECUTION_TYPE) === DEFAULT_EXECUTION_TYPE && field.imageEnabled);
+  return fields.some((field) => field.imageEnabled);
 }
 
 async function analyzeRecordFieldsWithinRun(recordId: string, sectionId: string): Promise<FieldBatchProgress> {

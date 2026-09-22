@@ -270,6 +270,7 @@ export const ANALYSIS_EXECUTION_TYPES = [
   "lost_deal_attribution",
   "lost_deal_derive",
   "lost_deal_script",
+  "reception_screenshot_facts",
   "reception_quality_analysis",
   "reception_quality_derive",
 ] as const;

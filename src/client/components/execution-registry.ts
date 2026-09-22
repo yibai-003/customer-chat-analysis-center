@@ -70,6 +70,7 @@ export const EXECUTION_TYPE_SETTINGS: Record<AnalysisExecutionType, ExecutionTyp
   lost_deal_attribution: { type: "lost_deal_attribution", label: "未成交归因", ...derivedDefaults },
   lost_deal_derive: { type: "lost_deal_derive", label: "未成交字段派生", ...derivedDefaults },
   lost_deal_script: { type: "lost_deal_script", label: "话术建议", ...derivedDefaults },
+  reception_screenshot_facts: { type: "reception_screenshot_facts", label: "接待截图事实抽取", ...derivedDefaults },
   reception_quality_analysis: { type: "reception_quality_analysis", label: "统一质检分析", ...derivedDefaults },
   reception_quality_derive: { type: "reception_quality_derive", label: "质检字段派生", ...derivedDefaults },
 };

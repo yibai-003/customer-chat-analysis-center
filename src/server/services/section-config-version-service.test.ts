@@ -177,6 +177,14 @@ describe("section configuration version lifecycle", () => {
     db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
       .run(JSON.stringify(invalidContractRules), invalidContract.id);
     expect(() => publishSectionVersion(invalidContract.id)).toThrow("完整历史结果必填字段不属于结果区");
+
+    const invalidTwoStage = createDraftVersion("reception");
+    const invalidTwoStageFields = structuredClone(invalidTwoStage.fieldsSnapshot);
+    invalidTwoStageFields.find((field) => field.key === "截图内容总结")!.executionType = "ai";
+    db.prepare("UPDATE analysis_section_versions SET fields_snapshot_json = ? WHERE id = ?")
+      .run(JSON.stringify(invalidTwoStageFields), invalidTwoStage.id);
+    expect(() => publishSectionVersion(invalidTwoStage.id))
+      .toThrow("接待质检截图事实字段必须启用严格视觉事实抽取");
   });
 
   it("rejects malformed snapshots and runtime model state", () => {
