@@ -6,6 +6,8 @@ release
 deploy/.env
 deploy/data
 deploy/knowledge
+deploy/proxy-data
+deploy/proxy-config
 .secrets/
 *.key.json
 *.log

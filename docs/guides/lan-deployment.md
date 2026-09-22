@@ -67,6 +67,48 @@ pwsh -File scripts/lan-deploy.ps1 `
   - Linux/ufw：`sudo ufw allow from 192.168.10.0/24 to any port 443 proto tcp`。
 - **禁止公网暴露**：不做路由器端口映射/DMZ，不配置公网 DNS，不把 `8787`、`443` 直接发布到公网。允许访问的客户端必须能解析并使用内网证书链。
 
+### 本机最实用配置（Windows + Docker Desktop）
+
+仓库提供了本机可复跑的 nginx 内网 HTTPS 入口。应用仍只发布到宿主机回环地址，
+nginx 与应用在同一个 Compose 网络中，脚本使用本机生成的根 CA 签发
+`LAN_HOSTNAME` 证书。首次配置请使用管理员 PowerShell：
+
+```powershell
+.\scripts\setup-local-lan-https.ps1 `
+  -Hostname chat.customer.lan `
+  -LanIp 172.16.20.178 `
+  -ApplyFirewall `
+  -Start `
+  -InstallRoot
+```
+
+脚本会：
+
+- 创建或更新 `deploy/.env`，设置 `ALLOWED_HOSTS`、`ALLOWED_ORIGINS` 和安全 Cookie；
+- 启动应用与 nginx HTTPS 代理；
+- 将本机根 CA 和服务器证书生成到 `deploy/proxy-data/tls/`，并安装根证书到当前 Windows 用户的信任根；
+- 在本机 hosts 写入内网域名；
+- 仅对 `LAN_ALLOWED_CIDR` 放行 80/443 入站。
+- 将代理端口只绑定到指定的 `LanIp`，不监听 VMware、WSL 或其他本机接口。
+
+默认使用 `8080/8443`，避免与本机其他服务占用标准 `80/443`；入口为
+`https://chat.customer.lan:8443`。如果标准端口空闲，可以通过
+`-HttpPort 80 -HttpsPort 443` 改用标准端口。
+
+其他内网电脑需要复制 `deploy/proxy-data/tls/root-ca.cer`，
+安装到受信任的根证书，并将 `chat.customer.lan` 解析到本机内网 IP。不要复制
+`deploy/.env`、模型 API Key、数据库或整个 `proxy-data` 目录。面向普通使用者的
+逐步配置、验收和故障排查见 [局域网其他电脑访问使用手册](lan-client-access.md)。
+
+如果 Docker Desktop 尚未启动，先启动后再执行脚本。停止入口使用：
+
+```powershell
+docker compose --env-file deploy/.env `
+  -f deploy/docker-compose.yml `
+  -f deploy/docker-compose.lan-https.yml `
+  down
+```
+
 ## 可复跑验证
 
 ```powershell

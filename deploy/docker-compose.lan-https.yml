@@ -1,0 +1,17 @@
+services:
+  proxy:
+    image: nginx:latest
+    container_name: ${LAN_PROXY_CONTAINER_NAME:-customer-chat-analysis-proxy}
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "${LAN_BIND_ADDRESS:-127.0.0.1}:${LAN_HTTP_PORT:-8080}:80"
+      - "${LAN_BIND_ADDRESS:-127.0.0.1}:${LAN_HTTPS_PORT:-8443}:443"
+    environment:
+      LAN_HOSTNAME: ${LAN_HOSTNAME:-chat.customer.lan}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
+    volumes:
+      - ${LAN_PROXY_CONFIG_DIR:-./proxy-config}/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${LAN_PROXY_DATA_DIR:-./proxy-data}/tls:/etc/nginx/tls:ro

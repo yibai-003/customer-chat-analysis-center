@@ -22,7 +22,6 @@ services:
       APP_COMMIT_SHA: ${APP_COMMIT_SHA:-development}
       APP_BUILD_TIME: ${APP_BUILD_TIME:-development}
       APP_IMAGE: ${APP_IMAGE:-customer-chat-analysis:lan}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?请在 deploy/.env 中提供独立的加密密钥}
       ALLOWED_HOSTS: ${ALLOWED_HOSTS:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}

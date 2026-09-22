@@ -10,6 +10,7 @@
 
 ### 局域网部署与运维
 - [局域网部署与单实例运行](guides/lan-deployment.md)
+- [局域网其他电脑访问使用手册](guides/lan-client-access.md)
 - [局域网运维手册](guides/lan-operations.md)
 - [局域网现场验收执行手册](guides/lan-acceptance-runbook.md)
 
