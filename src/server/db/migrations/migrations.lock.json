@@ -16,5 +16,6 @@
   "016-identity-and-sessions.ts": "8064e21d7b38fb90d417eb18ef0a7f81d1851a6cd255156c08824db74fd465c0",
   "017-immutable-audit-events.ts": "a0b5bc81b52e2f4def3c6fcb4ac0070525eded25d575cca07e731e2594fa7cab",
   "018-section-config-versions.ts": "7e05946e3d27e608de2ab2449646fcc2d33baced7cdea53bea69c5d34c60154a",
-  "019-section-version-integrity.ts": "ef0527fe3bc173e0c486ef41052a8965b9d3e61f094ed31bd455c7395eb41c35"
+  "019-section-version-integrity.ts": "ef0527fe3bc173e0c486ef41052a8965b9d3e61f094ed31bd455c7395eb41c35",
+  "020-platform-dictionary-task-binding.ts": "474d35a9a47c622fdf083d238fea501071919f9f979abccb216bb47bb20cb3d4"
 }

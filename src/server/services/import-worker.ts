@@ -1,7 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { getImportJob, getSection, claimImportJob, listImportJobs, updateImportJob } from "../db/repositories";
-import { importWorkbook } from "./excel-import-service";
 import { importWorkbookStreaming } from "./streaming-xlsx-import-service";
 
 const running = new Set<string>();
@@ -19,15 +18,27 @@ export async function runImportJob(importJobId: string) {
   try {
     const section = importJob.sectionId ? getSection(importJob.sectionId) : undefined;
     if (importJob.sectionId && !section) throw new Error("导入任务对应的解析板块不存在");
-    const created = await importWorkbookStreaming(importJob.sourcePath, importJob.filename, section && { id: section.id, name: section.name }, (progress) => {
-      updateImportJob(importJobId, {
-        totalImages: progress.totalImages,
-        processedImages: progress.processedImages,
-        processedRecords: progress.processedImages,
-        currentSheet: progress.currentSheet,
-        currentRow: progress.currentRow,
-      });
-    });
+    const created = await importWorkbookStreaming(
+      importJob.sourcePath,
+      importJob.filename,
+      section && {
+        id: section.id,
+        name: section.name,
+        sectionConfigVersionId: importJob.sectionConfigVersionId ?? section.currentVersionId ?? undefined,
+      },
+      (progress) => {
+        updateImportJob(importJobId, {
+          totalImages: progress.totalImages,
+          processedImages: progress.processedImages,
+          processedRecords: progress.processedImages,
+          currentSheet: progress.currentSheet,
+          currentRow: progress.currentRow,
+        });
+      },
+      importJob.platformId && importJob.platformName && importJob.platformCode
+        ? { id: importJob.platformId, name: importJob.platformName, code: importJob.platformCode }
+        : undefined,
+    );
     updateImportJob(importJobId, {
       status: "completed",
       jobId: created.id,

@@ -14,6 +14,8 @@ import { normalizeExcelHeader } from "./excel-template-service";
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", isArray: (name) => ["sheet", "Relationship", "row", "c", "si", "r", "oneCellAnchor", "twoCellAnchor"].includes(name) });
 type StreamingAnchor = { row: number; column: number; embed: string; mediaPath?: string };
+type PlatformInput = { id: string; name: string; code: string };
+type SectionInput = { id: string; name: string; sourceFields?: string[]; sectionConfigVersionId?: string; sectionVersionNumber?: number };
 
 function asArray<T>(value: T | T[] | undefined): T[] {
   return value === undefined ? [] : Array.isArray(value) ? value : [value];
@@ -66,6 +68,36 @@ function worksheetRows(xml: string, sharedStrings: string[]) {
   return rows;
 }
 
+function normalizedPlatformValue(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function platformConflicts(
+  sheetData: Array<{ name: string; rows: Map<number, Record<number, string>> }>,
+  platform?: PlatformInput,
+) {
+  if (!platform) return [];
+  const accepted = new Set([normalizedPlatformValue(platform.name), normalizedPlatformValue(platform.code)]);
+  const conflicts: Array<{ sheetName: string; rowNumber: number; value: string }> = [];
+  for (const sheet of sheetData) {
+    const headers = sheet.rows.get(1) ?? {};
+    const platformColumn = Object.entries(headers).find(([, value]) => normalizeExcelHeader(value) === "平台")?.[0];
+    if (!platformColumn) continue;
+    for (const [rowNumber, row] of sheet.rows) {
+      if (rowNumber === 1) continue;
+      const value = String(row[Number(platformColumn)] ?? "").trim();
+      if (value && !accepted.has(normalizedPlatformValue(value))) {
+        conflicts.push({ sheetName: sheet.name, rowNumber, value });
+      }
+    }
+  }
+  return conflicts;
+}
+
+function platformConflictMessage(conflicts: Array<{ sheetName: string; rowNumber: number; value: string }>) {
+  return `Excel 中的平台字段与所选平台不一致：${conflicts.map((conflict) => `${conflict.sheetName} 第 ${conflict.rowNumber} 行“${conflict.value}”`).join("；")}`;
+}
+
 function drawingAnchors(xml: string): StreamingAnchor[] {
   const drawing = parser.parse(xml)?.["xdr:wsDr"] ?? {};
   return [...asArray(drawing["xdr:oneCellAnchor"]), ...asArray(drawing["xdr:twoCellAnchor"])]
@@ -95,7 +127,8 @@ async function readOptionalEntry(directory: unzipper.CentralDirectory, entryPath
 export async function previewWorkbookStreaming(
   filePath: string,
   originalFilename: string,
-  section?: { id: string; name: string; sourceFields?: string[] },
+  section?: SectionInput,
+  platform?: PlatformInput,
 ) {
   const directory = await unzipper.Open.file(filePath);
   const workbookXml = await readEntry(directory, "xl/workbook.xml");
@@ -104,11 +137,13 @@ export async function previewWorkbookStreaming(
   const sharedStrings = sharedStringsPath ? sharedStringValues(await readEntry(directory, resolveZipPath("xl/workbook.xml", sharedStringsPath))) : [];
   const sheets = asArray(parser.parse(workbookXml)?.workbook?.sheets?.sheet);
   const summaries = [];
+  const previewSheetRows: Array<{ name: string; rows: Map<number, Record<number, string>> }> = [];
   for (const sheet of sheets) {
     const name = String((sheet as any)["@_name"]);
     const sheetPath = resolveZipPath("xl/workbook.xml", workbookRelationships.get((sheet as any)["@_r:id"]) ?? "");
     const sheetXml = await readEntry(directory, sheetPath);
     const rows = worksheetRows(sheetXml, sharedStrings);
+    previewSheetRows.push({ name, rows });
     const relationshipsPath = resolveZipPath(sheetPath, `_rels/${path.posix.basename(sheetPath)}.rels`);
     const sheetRelationships = await readOptionalEntry(directory, relationshipsPath);
     const drawingTarget = [...relationshipMap(sheetRelationships ?? "").entries()]
@@ -128,12 +163,19 @@ export async function previewWorkbookStreaming(
   }
   const imageCount = summaries.reduce((sum, sheet) => sum + sheet.imageCount, 0);
   const headers = new Set(summaries.flatMap((sheet) => sheet.headers));
+  const conflicts = platformConflicts(previewSheetRows, platform);
   return {
     originalFilename: normalizeUploadedFilename(originalFilename),
     sheetCount: summaries.length,
     imageCount,
     sectionId: section?.id,
     sectionName: section?.name,
+    sectionConfigVersionId: section?.sectionConfigVersionId,
+    sectionVersionNumber: section?.sectionVersionNumber,
+    platformId: platform?.id,
+    platformCode: platform?.code,
+    platformName: platform?.name,
+    platformConflicts: conflicts,
     missingHeaders: (section?.sourceFields ?? []).filter((field) => !headers.has(field)),
     sheets: summaries,
   };
@@ -142,8 +184,9 @@ export async function previewWorkbookStreaming(
 export async function importWorkbookStreaming(
   filePath: string,
   originalFilename: string,
-  section?: { id: string; name: string },
+  section?: SectionInput,
   onProgress?: (progress: { totalImages?: number; processedImages: number; currentSheet: string; currentRow: number }) => void,
+  platform?: PlatformInput,
 ) {
   const directory = await unzipper.Open.file(filePath);
   const workbookXml = await readEntry(directory, "xl/workbook.xml");
@@ -183,6 +226,8 @@ export async function importWorkbookStreaming(
   }
   const allImages = sheetData.flatMap((sheet) => sheet.anchors);
   if (!allImages.length) throw new Error("工作簿中没有识别到嵌入图片");
+  const conflicts = platformConflicts(sheetData, platform);
+  if (conflicts.length) throw new Error(platformConflictMessage(conflicts));
   const stagingDir = path.join(config.dataDir, "job-staging", crypto.randomUUID());
   const stagingImageDir = path.join(stagingDir, "images");
   let jobId: string | undefined;
@@ -228,7 +273,13 @@ export async function importWorkbookStreaming(
         if (processedImages % 25 === 0) onProgress?.({ totalImages: allImages.length, processedImages, currentSheet: sheet.name, currentRow: image.row });
       }
     }
-    const job = createJob(normalizeUploadedFilename(originalFilename), path.join(stagingDir, "source.xlsx"), section);
+    const job = createJob(
+      normalizeUploadedFilename(originalFilename),
+      path.join(stagingDir, "source.xlsx"),
+      section,
+      platform,
+      section?.sectionConfigVersionId,
+    );
     jobId = job.id;
     const targetJobDir = path.join(config.dataDir, "jobs", job.id);
     finalJobDir = targetJobDir;

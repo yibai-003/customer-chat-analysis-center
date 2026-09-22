@@ -26,7 +26,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -65,8 +65,8 @@ describe("versioned migrations", () => {
 
     runMigrations(db);
 
-    expect(currentSchemaVersion).toBe(19);
-    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
+    expect(currentSchemaVersion).toBe(20);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]);
     const qwenRows = db.prepare(`
       SELECT
         model.provider_id,
@@ -227,6 +227,26 @@ describe("versioned migrations", () => {
       metadata_json: JSON.stringify({ sectionId: "section-a", versionNumber: 1, binding: "legacy-v1" }),
     });
   });
+  it("creates platform dictionary and task binding columns", () => {
+    applyLegacyBaseline(db);
+    runMigrations(db);
+
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='platforms'").get()).toBeTruthy();
+    expect(db.prepare("PRAGMA table_info(platforms)").all()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "code" }),
+      expect.objectContaining({ name: "is_enabled" }),
+    ]));
+    expect(db.prepare("PRAGMA table_info(jobs)").all()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "platform_id" }),
+      expect.objectContaining({ name: "platform_code" }),
+      expect.objectContaining({ name: "platform_name" }),
+    ]));
+    expect(db.prepare("PRAGMA table_info(import_jobs)").all()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "platform_id" }),
+      expect.objectContaining({ name: "platform_code" }),
+      expect.objectContaining({ name: "platform_name" }),
+    ]));
+  });
   it("does not duplicate V1 snapshots or overwrite existing job bindings when rerun", () => {
     applyLegacyBaseline(db);
     db.exec(`
@@ -302,8 +322,8 @@ describe("versioned migrations", () => {
     runMigrations(db);
 
     expect(appliedMigrations(db).at(-1)).toMatchObject({
-      version: 19,
-      name: "section-version-integrity",
+      version: 20,
+      name: "platform-dictionary-task-binding",
     });
     expect(db.prepare("PRAGMA foreign_key_list(analysis_section_versions)").all())
       .toEqual(expect.arrayContaining([

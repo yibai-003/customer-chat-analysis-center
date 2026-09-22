@@ -20,6 +20,7 @@ import { applyIdentityAndSessions } from "./016-identity-and-sessions";
 import { applyImmutableAuditEvents } from "./017-immutable-audit-events";
 import { applySectionConfigVersions } from "./018-section-config-versions";
 import { applySectionVersionIntegrity } from "./019-section-version-integrity";
+import { applyPlatformDictionaryAndTaskBinding } from "./020-platform-dictionary-task-binding";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
@@ -41,8 +42,9 @@ export const migrations: Migration[] = [
   { version: 17, name: "immutable-audit-events", up: applyImmutableAuditEvents },
   { version: 18, name: "section-config-versions", up: applySectionConfigVersions },
   { version: 19, name: "section-version-integrity", up: applySectionVersionIntegrity },
+  { version: 20, name: "platform-dictionary-task-binding", up: applyPlatformDictionaryAndTaskBinding },
 ];
-export const currentSchemaVersion = 19;
+export const currentSchemaVersion = 20;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();

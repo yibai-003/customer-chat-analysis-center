@@ -12,7 +12,7 @@ export function useWorkspaceController({ canManageConfig = true }: { canManageCo
   const headerRef = useRef<HTMLElement>(null);
   const [headerHeight, setHeaderHeight] = useState(76);
   const [notice, setNotice] = useState("");
-  const [dialog, setDialog] = useState<"model" | "section" | "users" | "audit" | "backups" | null>(null);
+  const [dialog, setDialog] = useState<"model" | "section" | "platforms" | "users" | "audit" | "backups" | null>(null);
   const [knowledgeSection, setKnowledgeSection] = useState<AnalysisSection | null>(null);
   const [previewImage, setPreviewImage] = useState<{ src: string; alt: string } | null>(null);
   const [analysisCapacity, setAnalysisCapacity] = useState<AnalysisCapacity | null>(null);
@@ -22,6 +22,7 @@ export function useWorkspaceController({ canManageConfig = true }: { canManageCo
   const modelReadiness = useModelReadiness(selection.models, catalog.activeFields);
   const importWorkflow = useImportWorkflow({
     ...selection.operations,
+    platforms: selection.platforms,
     setNotice,
     refresh: selection.refresh,
     activeJobIdRef: selection.activeJobIdRef,
@@ -83,6 +84,7 @@ export function useWorkspaceController({ canManageConfig = true }: { canManageCo
     pageSize: records.pageSize,
     selected: records.selected,
     sections: selection.sections,
+    platforms: selection.platforms,
     activeFields: catalog.activeFields,
     activeSection: catalog.activeSection,
     setActiveSection: catalog.setActiveSection,

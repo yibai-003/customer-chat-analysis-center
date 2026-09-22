@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AnalysisSection, Job, ModelConfig } from "../../shared/types";
+import type { AnalysisSection, Job, ModelConfig, Platform } from "../../shared/types";
 import { api } from "../api";
 import { useAnalysisPolling } from "./useAnalysisPolling";
 import { EMPTY_RECORD_PAGE, EMPTY_RECORD_QUERY, type RecordQueryIdentity, type useRecordWorkspace } from "./useRecordWorkspace";
@@ -20,6 +20,7 @@ export function useJobSelection({ setNotice, records }: {
   const [job, setJob] = useState<Job | null>(null);
   const [sections, setSections] = useState<AnalysisSection[]>([]);
   const [models, setModels] = useState<ModelConfig[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [busy, setBusy] = useState(false);
   const [taskActionBusy, setTaskActionBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -137,8 +138,11 @@ export function useJobSelection({ setNotice, records }: {
     };
     const requestId = beginListRequest(query);
     try {
-      const [nextJobs, nextSections, nextModels] = await Promise.all([
-        api<Job[]>("/api/jobs", { signal: request.signal }), api<AnalysisSection[]>("/api/sections", { signal: request.signal }), api<ModelConfig[]>("/api/model-configs", { signal: request.signal }),
+      const [nextJobs, nextSections, nextModels, nextPlatforms] = await Promise.all([
+        api<Job[]>("/api/jobs", { signal: request.signal }),
+        api<AnalysisSection[]>("/api/sections", { signal: request.signal }),
+        api<ModelConfig[]>("/api/model-configs", { signal: request.signal }),
+        api<Platform[]>("/api/platforms", { signal: request.signal }),
       ]);
       if (!isLatestListRequest(requestId, query)) return false;
       const target = nextJobs.find((item) => item.id === jobId)
@@ -151,6 +155,7 @@ export function useJobSelection({ setNotice, records }: {
         setJobs(nextJobs);
         setSections(nextSections);
         setModels(nextModels);
+        setPlatforms(nextPlatforms);
         setActiveJob(null);
         const emptyPage = { ...EMPTY_RECORD_PAGE, pageSize: query.pageSize };
         commitRecordPage(query, emptyPage);
@@ -173,6 +178,7 @@ export function useJobSelection({ setNotice, records }: {
       setJobs(nextJobs);
       setSections(nextSections);
       setModels(nextModels);
+      setPlatforms(nextPlatforms);
       setActiveJob(freshJob);
       commitRecordPage(pageResult.query, pageResult.recordPage);
       const currentSelected = selectedRef.current;
@@ -276,6 +282,7 @@ export function useJobSelection({ setNotice, records }: {
     job,
     sections,
     models,
+    platforms,
     busy,
     taskActionBusy,
     refreshing,

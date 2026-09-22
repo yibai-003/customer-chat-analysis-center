@@ -3,7 +3,7 @@ import { cancelAnalysis } from "../services/analysis-cancellation";
 import crypto from "node:crypto";
 import { sectionInput, parseConfiguration } from "../security/configuration-input";
 import { db } from "./client";
-import type { AnalysisSection, ImportJob, Job, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ModelConfig, ImportJobStatus, RecordStatus } from "../../shared/types";
+import type { AnalysisSection, ImportJob, Job, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ImportJobStatus, RecordStatus, Platform } from "../../shared/types";
 import { listFieldRuns } from "../services/field-run-service";
 
 const now = () => new Date().toISOString();
@@ -16,6 +16,10 @@ function mapImportJob(row: any): ImportJob {
     jobId: row.job_id ?? null,
     sectionId: row.section_id ?? null,
     sectionName: row.section_name ?? null,
+    sectionConfigVersionId: row.section_config_version_id ?? null,
+    platformId: row.platform_id ?? null,
+    platformCode: row.platform_code ?? null,
+    platformName: row.platform_name ?? null,
     status: row.status,
     totalImages: row.total_images ?? 0,
     processedImages: row.processed_images ?? 0,
@@ -31,13 +35,117 @@ function mapImportJob(row: any): ImportJob {
 }
 
 export function listSections(): AnalysisSection[] {
-  return (db.prepare("SELECT * FROM analysis_sections ORDER BY sort_order").all() as any[]).map((row) => ({
+  return (db.prepare(`SELECT sections.*,
+      current_versions.id AS current_version_id,
+      current_versions.version_number AS current_version_number
+    FROM analysis_sections sections
+    LEFT JOIN analysis_section_versions current_versions
+      ON current_versions.section_id = sections.id AND current_versions.is_current = 1
+    ORDER BY sections.sort_order`).all() as any[]).map((row) => ({
     id: row.id, parentId: row.parent_id, name: row.name, prompt: row.prompt,
     outputSchema: JSON.parse(row.output_schema_json), sourceFields: JSON.parse(row.source_fields_json || "[]"), sortOrder: row.sort_order, isEnabled: Boolean(row.is_enabled),
     imageEnabled: row.image_enabled === undefined ? true : Boolean(row.image_enabled),
+    currentVersionId: row.current_version_id ?? null,
+    currentVersionNumber: row.current_version_number ?? null,
   }));
 }
 export function getSection(id: string) { return listSections().find((section) => section.id === id); }
+
+function normalizePlatformCode(code: string) {
+  const normalized = code.trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9_-]{0,59}$/.test(normalized)) throw new Error("平台代码必须为 1-60 位字母、数字、下划线或短横线");
+  return normalized;
+}
+
+function normalizePlatformName(name: string) {
+  const normalized = name.trim();
+  if (!normalized || normalized.length > 120) throw new Error("平台名称长度必须为 1-120 个字符");
+  return normalized;
+}
+
+function mapPlatform(row: any): Platform {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code,
+    isEnabled: Boolean(row.is_enabled),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function listPlatforms(includeDisabled = true): Platform[] {
+  const where = includeDisabled ? "" : "WHERE is_enabled = 1";
+  return (db.prepare(`SELECT * FROM platforms ${where} ORDER BY is_enabled DESC, name, code`).all() as any[]).map(mapPlatform);
+}
+
+export function getPlatform(id: string): Platform | undefined {
+  const row = db.prepare("SELECT * FROM platforms WHERE id = ?").get(id) as any;
+  return row ? mapPlatform(row) : undefined;
+}
+
+function resolvePlatform(id: string, requireEnabled = false): Platform {
+  const platform = getPlatform(id);
+  if (!platform) throw new Error("平台不存在");
+  if (requireEnabled && !platform.isEnabled) throw new Error("平台已停用，不能用于新任务");
+  return platform;
+}
+
+export function createPlatform(input: { name: string; code: string; id?: string }): Platform {
+  const id = input.id ?? crypto.randomUUID();
+  const name = normalizePlatformName(input.name);
+  const code = normalizePlatformCode(input.code);
+  try {
+    db.prepare("INSERT INTO platforms (id,name,code,is_enabled,created_at,updated_at) VALUES (?,?,?,1,?,?)")
+      .run(id, name, code, now(), now());
+  } catch (error) {
+    if (String(error).includes("UNIQUE constraint failed")) throw new Error("平台代码已存在");
+    throw error;
+  }
+  return getPlatform(id)!;
+}
+
+export function updatePlatform(id: string, input: { name?: string; code?: string }): Platform {
+  const current = resolvePlatform(id);
+  const name = input.name === undefined ? current.name : normalizePlatformName(input.name);
+  const code = input.code === undefined ? current.code : normalizePlatformCode(input.code);
+  if (code !== current.code) {
+    const used = db.prepare(`SELECT 1 FROM jobs WHERE platform_id = ?
+      UNION ALL SELECT 1 FROM import_jobs WHERE platform_id = ? LIMIT 1`).get(id, id);
+    if (used) throw new Error("平台已被任务使用，代码不可修改");
+  }
+  try {
+    db.prepare("UPDATE platforms SET name = ?, code = ?, updated_at = ? WHERE id = ?").run(name, code, now(), id);
+  } catch (error) {
+    if (String(error).includes("UNIQUE constraint failed")) throw new Error("平台代码已存在");
+    throw error;
+  }
+  return getPlatform(id)!;
+}
+
+export function disablePlatform(id: string): Platform {
+  resolvePlatform(id);
+  db.prepare("UPDATE platforms SET is_enabled = 0, updated_at = ? WHERE id = ?").run(now(), id);
+  return getPlatform(id)!;
+}
+
+export function restorePlatform(id: string): Platform {
+  resolvePlatform(id);
+  db.prepare("UPDATE platforms SET is_enabled = 1, updated_at = ? WHERE id = ?").run(now(), id);
+  return getPlatform(id)!;
+}
+
+function currentSectionVersionId(sectionId: string) {
+  return (db.prepare(`SELECT id FROM analysis_section_versions
+    WHERE section_id = ? AND status = 'published' AND is_current = 1`).get(sectionId) as { id: string } | undefined)?.id;
+}
+
+export type PlatformBinding = Pick<Platform, "id" | "name" | "code">;
+
+function enabledPlatformBinding(platform: PlatformBinding): Platform {
+  const resolved = resolvePlatform(platform.id, true);
+  return resolved;
+}
 export function mergeSectionSourceFields(sectionId: string, headers: string[]) {
   const section = getSection(sectionId);
   if (!section) return;
@@ -76,37 +184,65 @@ export function deleteSection(id: string) {
   db.prepare("DELETE FROM analysis_sections WHERE id = ?").run(id);
 }
 
-export function createJob(filename: string, sourcePath: string, section?: { id: string; name: string }): Job {
+export function createJob(
+  filename: string,
+  sourcePath: string,
+  section?: { id: string; name: string },
+  platform?: PlatformBinding,
+  sectionConfigVersionId?: string,
+): Job {
   const id = crypto.randomUUID(), timestamp = now();
-  const versionId = section
-    ? (db.prepare(`
-        SELECT id FROM analysis_section_versions
-        WHERE section_id = ? AND status = 'published' AND is_current = 1
-      `).get(section.id) as { id: string } | undefined)?.id
-    : null;
+  const versionId = section ? sectionConfigVersionId ?? currentSectionVersionId(section.id) : null;
   if (section && !versionId) throw new Error("解析板块没有当前启用的已发布配置版本");
+  if (section && sectionConfigVersionId) {
+    const version = db.prepare("SELECT section_id FROM analysis_section_versions WHERE id = ?").get(sectionConfigVersionId) as { section_id: string } | undefined;
+    if (!version || version.section_id !== section.id) throw new Error("解析板块配置版本不匹配");
+  }
+  const resolvedPlatform = platform ? enabledPlatformBinding(platform) : undefined;
   db.prepare(`INSERT INTO jobs
-    (id,original_filename,source_path,section_id,section_name,section_config_version_id,status,total_records,completed_records,failed_records,created_at,updated_at)
-    VALUES (?,?,?,?,?,?, 'ready',0,0,0,?,?)`).run(
+    (id,original_filename,source_path,section_id,section_name,section_config_version_id,platform_id,platform_code,platform_name,status,total_records,completed_records,failed_records,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?, 'ready',0,0,0,?,?)`).run(
     id,
     filename,
     sourcePath,
     section?.id ?? null,
     section?.name ?? null,
     versionId,
+    resolvedPlatform?.id ?? null,
+    resolvedPlatform?.code ?? null,
+    resolvedPlatform?.name ?? null,
     timestamp,
     timestamp,
   );
   return getJob(id)!;
 }
-export function createImportJob(input: { filename: string; sourcePath: string; totalImages?: number; totalRecords?: number; jobId?: string; sectionId?: string; sectionName?: string }): ImportJob {
+export function createImportJob(input: {
+  filename: string;
+  sourcePath: string;
+  totalImages?: number;
+  totalRecords?: number;
+  jobId?: string;
+  sectionId?: string;
+  sectionName?: string;
+  sectionConfigVersionId?: string;
+  platform?: PlatformBinding;
+}): ImportJob {
   const id = crypto.randomUUID();
   const timestamp = now();
+  const versionId = input.sectionId ? input.sectionConfigVersionId ?? currentSectionVersionId(input.sectionId) : null;
+  if (input.sectionId && !versionId) throw new Error("解析板块没有当前启用的已发布配置版本");
+  if (input.sectionId && input.sectionConfigVersionId) {
+    const version = db.prepare("SELECT section_id FROM analysis_section_versions WHERE id = ?").get(input.sectionConfigVersionId) as { section_id: string } | undefined;
+    if (!version || version.section_id !== input.sectionId) throw new Error("解析板块配置版本不匹配");
+  }
+  const resolvedPlatform = input.platform ? enabledPlatformBinding(input.platform) : undefined;
   db.prepare(`INSERT INTO import_jobs
-    (id, filename, source_path, job_id, section_id, section_name, status, total_images, total_records, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`).run(
+    (id, filename, source_path, job_id, section_id, section_name, section_config_version_id, platform_id, platform_code, platform_name, status, total_images, total_records, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`).run(
     id, input.filename, input.sourcePath, input.jobId ?? null,
     input.sectionId ?? null, input.sectionName ?? null,
+    versionId,
+    resolvedPlatform?.id ?? null, resolvedPlatform?.code ?? null, resolvedPlatform?.name ?? null,
     input.totalImages ?? 0, input.totalRecords ?? 0, timestamp, timestamp,
   );
   return getImportJob(id)!;
@@ -119,14 +255,19 @@ export function claimImportJob(id: string): boolean {
   const result = db.prepare("UPDATE import_jobs SET status = 'processing', updated_at = ? WHERE id = ? AND status = 'queued'").run(now(), id);
   return result.changes === 1;
 }
-export function updateImportJob(id: string, input: Partial<Pick<ImportJob, "status" | "jobId" | "sectionId" | "sectionName" | "sourcePath" | "totalImages" | "processedImages" | "failedImages" | "totalRecords" | "processedRecords" | "currentSheet" | "currentRow" | "errorMessage">>) {
+export function updateImportJob(id: string, input: Partial<Pick<ImportJob, "status" | "jobId" | "sectionId" | "sectionName" | "sectionConfigVersionId" | "platformId" | "platformCode" | "platformName" | "sourcePath" | "totalImages" | "processedImages" | "failedImages" | "totalRecords" | "processedRecords" | "currentSheet" | "currentRow" | "errorMessage">>) {
   const current = getImportJob(id);
   if (!current) throw new Error("导入任务不存在");
+  for (const key of ["sectionId", "sectionName", "sectionConfigVersionId", "platformId", "platformCode", "platformName"] as const) {
+    if (input[key] !== undefined && current[key] !== null && input[key] !== current[key]) {
+      throw new Error("导入任务绑定信息不可修改");
+    }
+  }
   const next = { ...current, ...input };
-  db.prepare(`UPDATE import_jobs SET source_path = ?, job_id = ?, section_id = ?, section_name = ?, status = ?, total_images = ?, processed_images = ?,
+  db.prepare(`UPDATE import_jobs SET source_path = ?, job_id = ?, section_id = ?, section_name = ?, section_config_version_id = ?, platform_id = ?, platform_code = ?, platform_name = ?, status = ?, total_images = ?, processed_images = ?,
     failed_images = ?, total_records = ?, processed_records = ?, current_sheet = ?, current_row = ?,
     error_message = ?, updated_at = ? WHERE id = ?`).run(
-    next.sourcePath, next.jobId, next.sectionId, next.sectionName, next.status, next.totalImages, next.processedImages, next.failedImages,
+    next.sourcePath, next.jobId, next.sectionId, next.sectionName, next.sectionConfigVersionId, next.platformId, next.platformCode, next.platformName, next.status, next.totalImages, next.processedImages, next.failedImages,
     next.totalRecords, next.processedRecords, next.currentSheet, next.currentRow, next.errorMessage, now(), id,
   );
   return getImportJob(id)!;
@@ -161,6 +302,9 @@ export function getJob(id: string): Job | undefined {
     sectionId: row.section_id ?? null,
     sectionName: row.section_name ?? null,
     sectionConfigVersionId: row.section_config_version_id ?? null,
+    platformId: row.platform_id ?? null,
+    platformCode: row.platform_code ?? null,
+    platformName: row.platform_name ?? null,
     status: row.status,
     createdAt: row.created_at,
     cancelRequested: Boolean(row.cancel_requested),
@@ -178,11 +322,27 @@ export function listJobs() {
     sectionId: row.section_id ?? null,
     sectionName: row.section_name ?? null,
     sectionConfigVersionId: row.section_config_version_id ?? null,
+    platformId: row.platform_id ?? null,
+    platformCode: row.platform_code ?? null,
+    platformName: row.platform_name ?? null,
     status: row.status,
     createdAt: row.created_at,
     cancelRequested: Boolean(row.cancel_requested),
     ...liveJobCounts(row.id, row.section_id),
   }));
+}
+
+export function bindJobPlatform(jobId: string, platformId: string): Job {
+  const job = getJob(jobId);
+  if (!job) throw new Error("任务不存在");
+  if (job.platformId) throw new Error("任务平台已绑定，不能重复补录");
+  const platform = resolvePlatform(platformId);
+  db.prepare(`UPDATE jobs
+    SET platform_id = ?, platform_code = ?, platform_name = ?, updated_at = ?
+    WHERE id = ? AND platform_id IS NULL`).run(platform.id, platform.code, platform.name, now(), jobId);
+  const updated = getJob(jobId);
+  if (!updated?.platformId) throw new Error("任务平台绑定失败");
+  return updated;
 }
 export function countActiveJobRuns(): number {
   return (db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE run_token IS NOT NULL").get() as { count: number }).count;

@@ -112,6 +112,10 @@ export interface ImportJob {
   jobId: string | null;
   sectionId: string | null;
   sectionName: string | null;
+  sectionConfigVersionId: string | null;
+  platformId?: string | null;
+  platformCode?: string | null;
+  platformName?: string | null;
   status: ImportJobStatus;
   totalImages: number;
   processedImages: number;
@@ -158,6 +162,9 @@ export interface Job {
   sectionId: string | null;
   sectionName: string | null;
   sectionConfigVersionId?: string | null;
+  platformId?: string | null;
+  platformCode?: string | null;
+  platformName?: string | null;
   status: JobStatus;
   totalRecords: number;
   completedRecords: number;
@@ -176,6 +183,12 @@ export interface WorkbookPreview {
   imageCount: number;
   sectionId?: string;
   sectionName?: string;
+  sectionConfigVersionId?: string;
+  sectionVersionNumber?: number;
+  platformId?: string;
+  platformCode?: string;
+  platformName?: string;
+  platformConflicts?: Array<{ sheetName: string; rowNumber: number; value: string }>;
   missingHeaders: string[];
   sheets: Array<{
     name: string;
@@ -195,6 +208,17 @@ export interface AnalysisSection {
   isEnabled: boolean;
   imageEnabled?: boolean;
   sourceFields?: string[];
+  currentVersionId?: string | null;
+  currentVersionNumber?: number | null;
+}
+
+export interface Platform {
+  id: string;
+  name: string;
+  code: string;
+  isEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type SectionConfigVersionStatus = "draft" | "published" | "archived";

@@ -15,6 +15,7 @@ import { SectionConfigDialog } from "./components/SectionConfigDialog";
 import { UserManagementDialog } from "./components/admin/UserManagementDialog";
 import { AuditLogDialog } from "./components/admin/AuditLogDialog";
 import { BackupManagementDialog } from "./components/admin/BackupManagementDialog";
+import { PlatformManagementDialog } from "./components/admin/PlatformManagementDialog";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
 import { useRecordSelection } from "./hooks/useRecordSelection";
 import { KnowledgeSyncStatus } from "./components/KnowledgeSyncStatus";
@@ -120,6 +121,7 @@ function Workspace({ session }: { session: CurrentSession }) {
     pageSize,
     selected,
     sections,
+    platforms,
     activeFields,
     activeSection,
     setActiveSection,
@@ -319,6 +321,7 @@ function Workspace({ session }: { session: CurrentSession }) {
               </button>
               {topMenu === "management" && <div className="top-menu-panel" role="menu" aria-label="管理操作">
                 {can("config:manage") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("section"); }}>板块配置</button>}
+                {can("config:manage") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("platforms"); }}>平台字典</button>}
                 {can("config:manage") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("model"); }}>模型配置</button>}
                 {can("user:manage") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("users"); }}>账号管理</button>}
                 {can("audit:view") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("audit"); }}>审计日志</button>}
@@ -428,6 +431,7 @@ function Workspace({ session }: { session: CurrentSession }) {
 
       {dialog === "model" && <ModelConfigDialog models={models} close={() => setDialog(null)} saved={() => { setDialog(null); refresh(); }} />}
       {dialog === "section" && <SectionConfigDialog sections={sections} close={() => setDialog(null)} saved={() => { setDialog(null); refresh(); }} />}
+      {dialog === "platforms" && <PlatformManagementDialog close={() => { setDialog(null); void refresh(); }} />}
       {dialog === "users" && <UserManagementDialog close={() => setDialog(null)} />}
       {dialog === "audit" && <AuditLogDialog close={() => setDialog(null)} />}
       {dialog === "backups" && <BackupManagementDialog close={() => setDialog(null)} />}
@@ -442,8 +446,8 @@ function Workspace({ session }: { session: CurrentSession }) {
         })}
       />}
       {previewImage && <ImagePreviewDialog {...previewImage} onClose={closePreviewImage} />}
-      {selectingImportFile && <ImportSectionDialog file={selectingImportFile} sections={sections} busy={busy} error={notice} onCancel={() => setSelectingImportFile(null)} onConfirm={(sectionId) => void previewImport(selectingImportFile, sectionId)} />}
-      {importPreview && pendingImportFile && <ImportPreviewDialog preview={importPreview} busy={busy} onCancel={() => { const file = pendingImportFile; setImportPreview(null); setPendingImportFile(null); setSelectingImportFile(file); }} onConfirm={async () => { const file = pendingImportFile; const sectionId = importPreview.sectionId; if (!sectionId) return; setImportPreview(null); setPendingImportFile(null); await commitImport(file, sectionId); }} />}
+      {selectingImportFile && <ImportSectionDialog file={selectingImportFile} sections={sections} platforms={platforms} busy={busy} error={notice} onCancel={() => setSelectingImportFile(null)} onConfirm={(sectionId, platformId) => void previewImport(selectingImportFile, sectionId, platformId)} />}
+      {importPreview && pendingImportFile && <ImportPreviewDialog preview={importPreview} busy={busy} onCancel={() => { const file = pendingImportFile; setImportPreview(null); setPendingImportFile(null); setSelectingImportFile(file); }} onConfirm={async () => { const file = pendingImportFile; const sectionId = importPreview.sectionId; const platformId = importPreview.platformId; if (!sectionId || !platformId) return; setImportPreview(null); setPendingImportFile(null); await commitImport(file, sectionId, platformId); }} />}
       {importJobId && <ImportProgressDialog importJobId={importJobId} onCompleted={handleImportCompleted} onClose={() => setImportJobId(null)} />}
     </div>
   );

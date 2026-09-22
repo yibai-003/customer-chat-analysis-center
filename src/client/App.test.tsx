@@ -191,6 +191,8 @@ const section: AnalysisSection = {
   outputSchema: [],
   sortOrder: 1,
   isEnabled: true,
+  currentVersionId: "section-version-reception-v1",
+  currentVersionNumber: 1,
 };
 
 const jobs: Job[] = [
@@ -335,6 +337,7 @@ function defaultResponse(url: string): Response {
     section,
   ]);
   if (url === "/api/model-configs") return jsonResponse([]);
+  if (url === "/api/platforms") return jsonResponse([{ id: "platform-1", name: "测试平台", code: "TEST", isEnabled: true, createdAt: "", updatedAt: "" }]);
   if (url === "/api/system/analysis-capacity") return jsonResponse(capacity);
   if (url.endsWith("/fields")) return jsonResponse([]);
   if (url === "/api/jobs/job-1") return jsonResponse(jobs[0]);
@@ -436,7 +439,7 @@ describe("explicit import section and manual refresh", () => {
     const refund = { ...section, id: "refund", name: "退款分析" };
     responseFor = (url, init) => {
       if (url === "/api/sections") return jsonResponse([section, refund]);
-      if (url === "/api/jobs/import-preview") return jsonResponse({ originalFilename: "new.xlsx", sectionId: "refund", sectionName: "退款分析", sheetCount: 1, imageCount: 1, missingHeaders: [], sheets: [] });
+      if (url === "/api/jobs/import-preview") return jsonResponse({ originalFilename: "new.xlsx", sectionId: "refund", sectionName: "退款分析", sectionConfigVersionId: "refund-v1", sectionVersionNumber: 1, platformId: "platform-1", platformCode: "TEST", platformName: "测试平台", platformConflicts: [], sheetCount: 1, imageCount: 1, missingHeaders: [], sheets: [] });
       if (url === "/api/jobs/import") return jsonResponse({ id: "import-1" });
       if (url === "/api/import-jobs/import-1") return jsonResponse({ id: "import-1", status: "processing", filename: "new.xlsx", totalImages: 1, processedImages: 0 });
       return defaultResponse(url);
@@ -451,12 +454,15 @@ describe("explicit import section and manual refresh", () => {
     expect(select.value).toBe("");
     expect([...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "下一步：预览文件")?.disabled).toBe(true);
     await act(async () => { select.value = "refund"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    const platformSelect = host.querySelector<HTMLSelectElement>('[aria-label="文件所属平台"]')!;
+    await act(async () => { platformSelect.value = "platform-1"; platformSelect.dispatchEvent(new Event("change", { bubbles: true })); });
     await clickText("下一步：预览文件");
     expect(host.textContent).toContain("当前解析板块：退款分析");
     await clickText("确认导入 →");
     for (const url of ["/api/jobs/import-preview", "/api/jobs/import"]) {
       const body = requestOptions.find((r) => r.url === url)?.init?.body as FormData;
       expect(body.get("sectionId")).toBe("refund");
+      expect(body.get("platformId")).toBe("platform-1");
     }
     // A second import must start with a fresh, explicit choice.
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));

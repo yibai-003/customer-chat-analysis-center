@@ -25,6 +25,10 @@ import {
   recoverStaleJobRuns,
   releaseJobRun,
   listBatchRecordIds,
+  createPlatform,
+  listPlatforms,
+  disablePlatform,
+  restorePlatform,
 } from "./repositories";
 import { createDraftVersion, publishSectionVersion } from "../services/section-config-version-service";
 import { upsertSection } from "./repositories";
@@ -37,6 +41,32 @@ describe("job repository", () => {
     expect(job.originalFilename).toBe("sample.xlsx");
     expect(job.status).toBe("ready");
     expect(job.sectionName).toBeNull();
+  });
+
+  it("maintains globally unique platforms and keeps disabled platforms restorable", () => {
+    const platform = createPlatform({ name: "平台测试", code: "TEST" });
+    expect(platform).toMatchObject({ name: "平台测试", code: "TEST", isEnabled: true });
+    expect(() => createPlatform({ name: "重复代码", code: " test " })).toThrow("平台代码已存在");
+    expect(disablePlatform(platform.id)).toMatchObject({ id: platform.id, isEnabled: false });
+    expect(restorePlatform(platform.id)).toMatchObject({ id: platform.id, isEnabled: true });
+    expect(listPlatforms().find((item) => item.id === platform.id)).toMatchObject({ code: "TEST" });
+  });
+
+  it("stores the selected platform snapshot on a bound task", () => {
+    const platform = createPlatform({ name: "绑定平台", code: "BOUND" });
+    const job = createJob("bound-platform.xlsx", "bound-platform.xlsx", { id: "refund", name: "退货分析" }, platform);
+    expect(job).toMatchObject({
+      platformId: platform.id,
+      platformCode: "BOUND",
+      platformName: "绑定平台",
+    });
+  });
+
+  it("rejects a disabled platform for new bound tasks", () => {
+    const platform = createPlatform({ name: "停用平台", code: `DISABLED_${Date.now()}` });
+    disablePlatform(platform.id);
+    expect(() => createJob("disabled-platform.xlsx", "disabled-platform.xlsx", { id: "refund", name: "退货分析" }, platform))
+      .toThrow("平台已停用");
   });
 
   it("deletes a job and its database records", () => {
