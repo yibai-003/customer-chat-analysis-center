@@ -266,6 +266,109 @@ describe("configuration, model pool, account and audit authorization", () => {
     })).status).toBe(403);
   });
 
+  it("limits section configuration version lifecycle to configuration personnel and audits transitions", async () => {
+    const sectionId = `version-route-${crypto.randomUUID()}`;
+    const created = await request("/api/sections", {
+      cookie: cookieFor("config"),
+      method: "POST",
+      body: { id: sectionId, name: "版本配置测试", prompt: "版本提示词" },
+    });
+    expect(created.status).toBe(200);
+
+    for (const role of ["operator", "reviewer", "readonly"]) {
+      expect((await request(`/api/sections/${sectionId}/versions`, { cookie: cookieFor(role) })).status).toBe(200);
+      expect((await request(`/api/sections/${sectionId}/versions`, {
+        cookie: cookieFor(role),
+        method: "POST",
+      })).status).toBe(403);
+    }
+
+    const marker = auditMarker();
+    const draft = await request(`/api/sections/${sectionId}/versions`, {
+      cookie: cookieFor("config"),
+      method: "POST",
+    });
+    expect(draft.status).toBe(200);
+    expect(draft.body.data).toMatchObject({ sectionId, versionNumber: 1, status: "draft" });
+    const versionId = draft.body.data.id;
+
+    const edited = await request(`/api/section-config-versions/${versionId}`, {
+      cookie: cookieFor("config"),
+      method: "PATCH",
+      body: { businessRules: { threshold: 10 } },
+    });
+    expect(edited.status).toBe(200);
+    expect(edited.body.data.businessRules).toEqual({ threshold: 10 });
+    const deletedDraft = await request(`/api/sections/${sectionId}/versions`, {
+      cookie: cookieFor("config"),
+      method: "POST",
+    });
+    const deletedDraftId = deletedDraft.body.data.id;
+    expect((await request(`/api/section-config-versions/${deletedDraftId}`, {
+      cookie: cookieFor("config"),
+      method: "DELETE",
+    })).status).toBe(200);
+
+    const published = await request(`/api/section-config-versions/${versionId}/publish`, {
+      cookie: cookieFor("admin"),
+      method: "POST",
+    });
+    expect(published.status).toBe(200);
+    expect(published.body.data).toMatchObject({ status: "published", isCurrent: true });
+
+    const invalidArchive = await request(`/api/section-config-versions/${versionId}/archive`, {
+      cookie: cookieFor("config"),
+      method: "POST",
+    });
+    expect(invalidArchive.status).toBe(400);
+    expect(invalidArchive.body.error).toContain("当前启用版本");
+    expect((await request(`/api/section-config-versions/${versionId}`, {
+      cookie: cookieFor("config"),
+      method: "PATCH",
+      body: { businessRules: { threshold: 20 } },
+    })).status).toBe(400);
+    expect((await request(`/api/section-config-versions/${versionId}`, {
+      cookie: cookieFor("config"),
+      method: "DELETE",
+    })).status).toBe(400);
+
+    const replacementDraft = await request(`/api/sections/${sectionId}/versions`, {
+      cookie: cookieFor("config"),
+      method: "POST",
+    });
+    expect(replacementDraft.body.data.versionNumber).toBe(2);
+    expect((await request(`/api/section-config-versions/${replacementDraft.body.data.id}/publish`, {
+      cookie: cookieFor("config"),
+      method: "POST",
+    })).status).toBe(200);
+    expect((await request(`/api/section-config-versions/${versionId}/archive`, {
+      cookie: cookieFor("config"),
+      method: "POST",
+    })).status).toBe(200);
+    expect((await request(`/api/section-config-versions/${versionId}/restore`, {
+      cookie: cookieFor("config"),
+      method: "POST",
+    })).status).toBe(200);
+    expect((await request(`/api/section-config-versions/${versionId}/activate`, {
+      cookie: cookieFor("config"),
+      method: "POST",
+    })).status).toBe(200);
+
+    const actions = [
+      "config.version_create_draft",
+      "config.version_update_draft",
+      "config.version_delete_draft",
+      "config.version_publish",
+      "config.version_archive",
+      "config.version_restore",
+      "config.version_activate",
+    ];
+    for (const action of actions) {
+      const targetId = action === "config.version_delete_draft" ? deletedDraftId : versionId;
+      expect(auditEvents({ action, targetId, since: marker }).length, action).toBeGreaterThan(0);
+    }
+  });
+
   it("requires explicit capabilities for high-impact model pool operations", async () => {
     const poolMarker = auditMarker();
     const provider = await request("/api/model-providers", {

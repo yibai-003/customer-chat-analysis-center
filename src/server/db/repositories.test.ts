@@ -26,6 +26,8 @@ import {
   releaseJobRun,
   listBatchRecordIds,
 } from "./repositories";
+import { createDraftVersion, publishSectionVersion } from "../services/section-config-version-service";
+import { upsertSection } from "./repositories";
 
 describe("job repository", () => {
   beforeAll(() => initDb());
@@ -47,6 +49,23 @@ describe("job repository", () => {
     const job = createJob("bound.xlsx", "bound.xlsx", { id: "refund", name: "退货分析" });
     expect(() => assertJobSection(job.id, "reception")).toThrow("任务已绑定解析板块：退货分析");
     expect(() => assertJobSection(job.id, "refund")).not.toThrow();
+  });
+
+  it("binds the current section version at job creation and preserves old bindings", () => {
+    const sectionId = "job-version-binding";
+    upsertSection({ id: sectionId, name: "任务版本绑定", prompt: "V1" });
+    const initialDraft = createDraftVersion(sectionId);
+    const initialPublished = publishSectionVersion(initialDraft.id);
+    const first = createJob("version-1.xlsx", "version-1.xlsx", { id: sectionId, name: "任务版本绑定" });
+    expect(first.sectionConfigVersionId).toBe(initialPublished.id);
+
+    const draft = createDraftVersion(sectionId);
+    const published = publishSectionVersion(draft.id);
+    const second = createJob("version-2.xlsx", "version-2.xlsx", { id: sectionId, name: "任务版本绑定" });
+
+    expect(published.isCurrent).toBe(true);
+    expect(second.sectionConfigVersionId).toBe(published.id);
+    expect(getJob(first.id)?.sectionConfigVersionId).toBe(first.sectionConfigVersionId);
   });
 
   it("can bind a legacy unbound job on first analysis", () => {

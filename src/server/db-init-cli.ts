@@ -1,6 +1,7 @@
 import { db, initDb } from "./db/client";
 import { config } from "./config";
 import { appliedMigrations, currentSchemaVersion } from "./db/migrations";
+import { lastSectionConfigV1MigrationReport } from "./db/migrations/018-section-config-versions";
 
 initDb();
 const version = appliedMigrations(db).at(-1)?.version ?? 0;
@@ -12,5 +13,6 @@ console.log(JSON.stringify({
   initialized: true,
   version,
   supportedVersion: currentSchemaVersion,
+  sectionConfigV1Migration: lastSectionConfigV1MigrationReport,
 }, null, 2));
 db.close();

@@ -1,3 +1,6 @@
+import crypto from "node:crypto";
+import { sectionBusinessRules } from "../../services/section-business-rules";
+
 function json(value: unknown) {
   return JSON.stringify(value ?? {});
 }
@@ -10,6 +13,18 @@ function parseJson(value: unknown, fallback: unknown) {
     return fallback;
   }
 }
+
+export interface SectionConfigV1MigrationReport {
+  succeeded: number;
+  skipped: number;
+  errors: Array<{ sectionId: string; message: string }>;
+}
+
+export let lastSectionConfigV1MigrationReport: SectionConfigV1MigrationReport = {
+  succeeded: 0,
+  skipped: 0,
+  errors: [],
+};
 
 function buildSnapshot(db: any, section: any) {
   const fields = (db.prepare(
@@ -85,34 +100,51 @@ function buildSnapshot(db: any, section: any) {
     },
     dependencies: fields.map((field) => ({ key: field.key, dependsOn: field.dependsOn })),
     knowledge,
-    businessRules: {},
+    businessRules: sectionBusinessRules(section.id),
   };
 }
 
-export function ensureSectionConfigV1(db: any) {
+export function ensureSectionConfigV1(db: any): SectionConfigV1MigrationReport {
   const sections = db.prepare("SELECT * FROM analysis_sections ORDER BY id").all() as any[];
   const insertVersion = db.prepare(`INSERT OR IGNORE INTO analysis_section_versions
     (id, section_id, version_number, status, is_current, section_snapshot_json,
      fields_snapshot_json, export_settings_json, dependencies_snapshot_json,
      knowledge_snapshot_json, business_rules_json, created_at, updated_at, published_at)
     VALUES (?, ?, 1, 'published', 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  const migratedSections: string[] = [];
+  const errors: Array<{ sectionId: string; message: string }> = [];
+  let skipped = 0;
   for (const section of sections) {
-    const versionId = `section-version-${section.id}-v1`;
-    const snapshot = buildSnapshot(db, section);
-    const timestamp = section.updated_at || new Date().toISOString();
-    insertVersion.run(
-      versionId,
-      section.id,
-      json(snapshot.sectionSnapshot),
-      json(snapshot.fields),
-      json(snapshot.exportSettings),
-      json(snapshot.dependencies),
-      json(snapshot.knowledge),
-      json(snapshot.businessRules),
-      timestamp,
-      timestamp,
-      timestamp,
-    );
+    try {
+      const versionId = `section-version-${section.id}-v1`;
+      const snapshot = buildSnapshot(db, section);
+      const timestamp = section.updated_at || new Date().toISOString();
+      const result = insertVersion.run(
+        versionId,
+        section.id,
+        json(snapshot.sectionSnapshot),
+        json(snapshot.fields),
+        json(snapshot.exportSettings),
+        json(snapshot.dependencies),
+        json(snapshot.knowledge),
+        json(snapshot.businessRules),
+        timestamp,
+        timestamp,
+        timestamp,
+      );
+      if (result.changes) migratedSections.push(section.id);
+      else skipped++;
+    } catch (error) {
+      errors.push({ sectionId: section.id, message: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  lastSectionConfigV1MigrationReport = {
+    succeeded: migratedSections.length,
+    skipped,
+    errors,
+  };
+  if (errors.length) {
+    throw new Error(`板块配置 V1 迁移失败：${JSON.stringify(errors)}`);
   }
   db.prepare(`
     UPDATE jobs
@@ -122,13 +154,32 @@ export function ensureSectionConfigV1(db: any) {
     )
     WHERE section_config_version_id IS NULL AND section_id IS NOT NULL
   `).run();
+  if (migratedSections.length && db.prepare(
+    "SELECT name FROM sqlite_master WHERE type='table' AND name='audit_events'",
+  ).get()) {
+    const audit = db.prepare(`INSERT INTO audit_events
+      (id, organization_id, actor_user_id, actor_display, action, target_type, target_id,
+       outcome, metadata_json, correlation_id, occurred_at)
+      VALUES (?, 'org-default', NULL, '系统', 'config.version_migration', 'section',
+        ?, 'success', ?, NULL, ?)`);
+    const timestamp = new Date().toISOString();
+    for (const sectionId of migratedSections) {
+      audit.run(
+        crypto.randomUUID(),
+        sectionId,
+        JSON.stringify({ sectionId, versionNumber: 1, binding: "legacy-v1" }),
+        timestamp,
+      );
+    }
+  }
+  return lastSectionConfigV1MigrationReport;
 }
 
 export function applySectionConfigVersions(db: any) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS analysis_section_versions (
       id TEXT PRIMARY KEY,
-      section_id TEXT NOT NULL REFERENCES analysis_sections(id) ON DELETE RESTRICT,
+      section_id TEXT NOT NULL,
       version_number INTEGER NOT NULL,
       status TEXT NOT NULL CHECK (status IN ('draft', 'published', 'archived')),
       is_current INTEGER NOT NULL DEFAULT 0 CHECK (is_current IN (0, 1)),

@@ -171,6 +171,14 @@ describe("versioned migrations", () => {
       VALUES ('job-a', 'a.xlsx', 'a.xlsx', 'section-a', '板块 A', 'completed', 'before', 'before');
     `);
 
+    const liveConfigurationBefore = db.prepare(`
+      SELECT s.prompt, s.output_schema_json, s.source_fields_json,
+             f.prompt AS field_prompt, f.output_column
+      FROM analysis_sections s
+      JOIN analysis_fields f ON f.section_id = s.id
+      WHERE s.id = 'section-a' AND f.id = 'field-a'
+    `).get();
+
     runMigrations(db);
 
     const version = db.prepare(`
@@ -201,6 +209,22 @@ describe("versioned migrations", () => {
     ]);
     expect(db.prepare("SELECT section_config_version_id FROM jobs WHERE id='job-a'").get())
       .toEqual({ section_config_version_id: expect.any(String) });
+    expect(db.prepare(`
+      SELECT s.prompt, s.output_schema_json, s.source_fields_json,
+             f.prompt AS field_prompt, f.output_column
+      FROM analysis_sections s
+      JOIN analysis_fields f ON f.section_id = s.id
+      WHERE s.id = 'section-a' AND f.id = 'field-a'
+    `).get()).toEqual(liveConfigurationBefore);
+    expect(db.prepare(`
+      SELECT action, target_id, metadata_json
+      FROM audit_events
+      WHERE action = 'config.version_migration' AND target_id = 'section-a'
+    `).get()).toMatchObject({
+      action: "config.version_migration",
+      target_id: "section-a",
+      metadata_json: JSON.stringify({ sectionId: "section-a", versionNumber: 1, binding: "legacy-v1" }),
+    });
   });
   it("does not duplicate V1 snapshots or overwrite existing job bindings when rerun", () => {
     applyLegacyBaseline(db);
@@ -220,6 +244,11 @@ describe("versioned migrations", () => {
       .toEqual({ count: 1 });
     expect(db.prepare("SELECT section_config_version_id FROM jobs WHERE id = 'job-a'").get())
       .toEqual({ section_config_version_id: first });
+    expect(db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM audit_events
+      WHERE action = 'config.version_migration' AND target_id = 'section-a'
+    `).get()).toEqual({ count: 1 });
   });
   it("rejects edits and deletes of published snapshots while allowing lifecycle metadata changes", () => {
     applyLegacyBaseline(db);

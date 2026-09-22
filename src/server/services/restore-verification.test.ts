@@ -51,7 +51,7 @@ describe("restored environment verification", () => {
       "knowledge-catalog",
       "model-credentials",
     ]);
-    expect(result.checks.find((check) => check.name === "database")!.detail).toMatchObject({ version: 17 });
+    expect(result.checks.find((check) => check.name === "database")!.detail).toMatchObject({ version: 18 });
     expect(result.checks.find((check) => check.name === "file-references")!.detail).toMatchObject({ checked: 2 });
     expect(result.checks.find((check) => check.name === "model-credentials")!.detail).toMatchObject({ models: 0, decryptable: true });
   });

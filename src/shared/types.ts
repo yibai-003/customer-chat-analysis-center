@@ -157,6 +157,7 @@ export interface Job {
   originalFilename: string;
   sectionId: string | null;
   sectionName: string | null;
+  sectionConfigVersionId?: string | null;
   status: JobStatus;
   totalRecords: number;
   completedRecords: number;
@@ -194,6 +195,37 @@ export interface AnalysisSection {
   isEnabled: boolean;
   imageEnabled?: boolean;
   sourceFields?: string[];
+}
+
+export type SectionConfigVersionStatus = "draft" | "published" | "archived";
+
+export interface SectionConfigVersion {
+  id: string;
+  sectionId: string;
+  versionNumber: number;
+  status: SectionConfigVersionStatus;
+  isCurrent: boolean;
+  sectionSnapshot: AnalysisSection;
+  fieldsSnapshot: AnalysisField[];
+  exportSettings: {
+    outputColumns: Array<{ key: string; outputColumn: string | null }>;
+  };
+  dependenciesSnapshot: Array<{ key: string; dependsOn: string[] }>;
+  knowledgeSnapshot: Array<Record<string, unknown>>;
+  businessRules: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  archivedAt?: string;
+}
+
+export interface SectionConfigVersionPatch {
+  sectionSnapshot?: Partial<AnalysisSection>;
+  fieldsSnapshot?: AnalysisField[];
+  exportSettings?: SectionConfigVersion["exportSettings"];
+  dependenciesSnapshot?: SectionConfigVersion["dependenciesSnapshot"];
+  knowledgeSnapshot?: SectionConfigVersion["knowledgeSnapshot"];
+  businessRules?: Record<string, unknown>;
 }
 
 export interface OutputField {

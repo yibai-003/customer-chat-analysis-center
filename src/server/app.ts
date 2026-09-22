@@ -32,6 +32,17 @@ import { requireAuth } from "./auth/session-auth";
 import { requireCapability } from "./auth/capabilities";
 import { auditRequest } from "./auth/audit";
 import { correlationId } from "./auth/correlation";
+import {
+  activateSectionVersion,
+  archiveSectionVersion,
+  createDraftVersion,
+  deleteDraftSectionVersion,
+  getSectionVersion,
+  listSectionVersions,
+  publishSectionVersion,
+  restoreSectionVersion,
+  updateDraftSectionVersion,
+} from "./services/section-config-version-service";
 
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
@@ -311,6 +322,97 @@ export function createApp(dependencies: AppDependencies = {}) {
     } catch (error) { return fail(res, error); }
   });
   app.get("/api/sections", canView, (_req, res) => ok(res, listSections()));
+  app.get("/api/sections/:id/versions", canView, (req, res) => ok(res, listSectionVersions(req.params.id)));
+  app.get("/api/section-config-versions/:id", canView, (req, res) => {
+    const version = getSectionVersion(req.params.id);
+    return version ? ok(res, version) : fail(res, "配置版本不存在", 404);
+  });
+  app.post("/api/sections/:id/versions", canManageConfig, (req, res) => {
+    try {
+      const version = createDraftVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_create_draft",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.post("/api/section-config-versions/:id/publish", canManageConfig, (req, res) => {
+    try {
+      const version = publishSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_publish",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.patch("/api/section-config-versions/:id", canManageConfig, (req, res) => {
+    try {
+      const version = updateDraftSectionVersion(req.params.id, req.body ?? {});
+      auditRequest(req, {
+        action: "config.version_update_draft",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.delete("/api/section-config-versions/:id", canManageConfig, (req, res) => {
+    try {
+      const version = getSectionVersion(req.params.id);
+      if (!version) return fail(res, "配置版本不存在", 404);
+      deleteDraftSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_delete_draft",
+        targetType: "section_config_version",
+        targetId: req.params.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, true);
+    } catch (error) { return fail(res, error); }
+  });
+  app.post("/api/section-config-versions/:id/archive", canManageConfig, (req, res) => {
+    try {
+      const version = archiveSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_archive",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.post("/api/section-config-versions/:id/restore", canManageConfig, (req, res) => {
+    try {
+      const version = restoreSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_restore",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.post("/api/section-config-versions/:id/activate", canManageConfig, (req, res) => {
+    try {
+      const version = activateSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_activate",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
   app.get("/api/sections/:id/fields", canView, (req, res) => ok(res, listFields(req.params.id)));
   app.post("/api/sections/:id/fields", canManageConfig, (req, res) => {
     try {

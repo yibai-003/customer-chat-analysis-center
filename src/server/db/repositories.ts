@@ -74,8 +74,24 @@ export function deleteSection(id: string) { db.prepare("DELETE FROM analysis_sec
 
 export function createJob(filename: string, sourcePath: string, section?: { id: string; name: string }): Job {
   const id = crypto.randomUUID(), timestamp = now();
-  db.prepare(`INSERT INTO jobs (id,original_filename,source_path,section_id,section_name,status,total_records,completed_records,failed_records,created_at,updated_at)
-    VALUES (?,?,?,?,?,'ready',0,0,0,?,?)`).run(id, filename, sourcePath, section?.id ?? null, section?.name ?? null, timestamp, timestamp);
+  const versionId = section
+    ? (db.prepare(`
+        SELECT id FROM analysis_section_versions
+        WHERE section_id = ? AND status = 'published' AND is_current = 1
+      `).get(section.id) as { id: string } | undefined)?.id ?? null
+    : null;
+  db.prepare(`INSERT INTO jobs
+    (id,original_filename,source_path,section_id,section_name,section_config_version_id,status,total_records,completed_records,failed_records,created_at,updated_at)
+    VALUES (?,?,?,?,?,?, 'ready',0,0,0,?,?)`).run(
+    id,
+    filename,
+    sourcePath,
+    section?.id ?? null,
+    section?.name ?? null,
+    versionId,
+    timestamp,
+    timestamp,
+  );
   return getJob(id)!;
 }
 export function createImportJob(input: { filename: string; sourcePath: string; totalImages?: number; totalRecords?: number; jobId?: string; sectionId?: string; sectionName?: string }): ImportJob {
@@ -125,13 +141,35 @@ function liveJobCounts(jobId: string, sectionId: string | null) {
 }
 export function getJob(id: string): Job | undefined {
   const row = db.prepare("SELECT * FROM jobs WHERE id = ?").get(id) as any;
-  return row && { id: row.id, originalFilename: row.original_filename, sectionId: row.section_id ?? null, sectionName: row.section_name ?? null, status: row.status, createdAt: row.created_at, cancelRequested: Boolean(row.cancel_requested), ...liveJobCounts(row.id, row.section_id) };
+  return row && {
+    id: row.id,
+    originalFilename: row.original_filename,
+    sectionId: row.section_id ?? null,
+    sectionName: row.section_name ?? null,
+    sectionConfigVersionId: row.section_config_version_id ?? null,
+    status: row.status,
+    createdAt: row.created_at,
+    cancelRequested: Boolean(row.cancel_requested),
+    ...liveJobCounts(row.id, row.section_id),
+  };
 }
 export function deleteJob(id: string) {
   const result = db.prepare("DELETE FROM jobs WHERE id = ?").run(id);
   if (!result.changes) throw new Error("任务不存在");
 }
-export function listJobs() { return (db.prepare("SELECT * FROM jobs ORDER BY created_at DESC").all() as any[]).map((row) => ({ id: row.id, originalFilename: row.original_filename, sectionId: row.section_id ?? null, sectionName: row.section_name ?? null, status: row.status, createdAt: row.created_at, cancelRequested: Boolean(row.cancel_requested), ...liveJobCounts(row.id, row.section_id) })); }
+export function listJobs() {
+  return (db.prepare("SELECT * FROM jobs ORDER BY created_at DESC").all() as any[]).map((row) => ({
+    id: row.id,
+    originalFilename: row.original_filename,
+    sectionId: row.section_id ?? null,
+    sectionName: row.section_name ?? null,
+    sectionConfigVersionId: row.section_config_version_id ?? null,
+    status: row.status,
+    createdAt: row.created_at,
+    cancelRequested: Boolean(row.cancel_requested),
+    ...liveJobCounts(row.id, row.section_id),
+  }));
+}
 export function countActiveJobRuns(): number {
   return (db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE run_token IS NOT NULL").get() as { count: number }).count;
 }
@@ -158,7 +196,12 @@ export function touchJobRun(jobId: string, token: string) {
 }
 export function updateJobSection(jobId: string, section: { id: string; name: string }) {
   assertRunOwnership(jobId);
-  db.prepare("UPDATE jobs SET section_id = ?, section_name = ?, updated_at = ? WHERE id = ?").run(section.id, section.name, now(), jobId);
+  const versionId = (db.prepare(`
+    SELECT id FROM analysis_section_versions
+    WHERE section_id = ? AND status = 'published' AND is_current = 1
+  `).get(section.id) as { id: string } | undefined)?.id ?? null;
+  db.prepare("UPDATE jobs SET section_id = ?, section_name = ?, section_config_version_id = ?, updated_at = ? WHERE id = ?")
+    .run(section.id, section.name, versionId, now(), jobId);
 }
 export function updateJobSourcePath(jobId: string, sourcePath: string) {
   db.prepare("UPDATE jobs SET source_path = ?, updated_at = ? WHERE id = ?").run(sourcePath, now(), jobId);
