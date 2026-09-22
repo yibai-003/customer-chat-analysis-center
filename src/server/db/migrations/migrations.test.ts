@@ -26,7 +26,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -65,8 +65,8 @@ describe("versioned migrations", () => {
 
     runMigrations(db);
 
-    expect(currentSchemaVersion).toBe(21);
-    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+    expect(currentSchemaVersion).toBe(22);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
     const qwenRows = db.prepare(`
       SELECT
         model.provider_id,
@@ -328,9 +328,11 @@ describe("versioned migrations", () => {
     `).get() as { id: string; business_rules_json: string };
     const legacyRules = JSON.parse(receptionV1.business_rules_json) as {
       issues: Array<Record<string, unknown>>;
+      importContract?: unknown;
     };
     legacyRules.issues[0].deduction = 77;
     for (const issue of legacyRules.issues) delete issue.dimension;
+    delete legacyRules.importContract;
     db.exec("DROP TRIGGER section_versions_immutable_content");
     db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
       .run(JSON.stringify(legacyRules), receptionV1.id);
@@ -349,8 +351,8 @@ describe("versioned migrations", () => {
     runMigrations(db);
 
     expect(appliedMigrations(db).at(-1)).toMatchObject({
-      version: 21,
-      name: "global-conversation-id",
+      version: 22,
+      name: "reception-import-contract",
     });
     expect(db.prepare("PRAGMA foreign_key_list(analysis_section_versions)").all())
       .toEqual(expect.arrayContaining([
@@ -373,19 +375,39 @@ describe("versioned migrations", () => {
       is_current: number;
       business_rules_json: string;
     }>;
-    expect(versions).toHaveLength(2);
+    expect(versions).toHaveLength(3);
     expect(versions[0]).toMatchObject({ id: receptionV1.id, version_number: 1, is_current: 0 });
     expect((JSON.parse(versions[0].business_rules_json).issues as Array<{ dimension?: string }>)[0].dimension)
       .toBeUndefined();
-    expect(versions[1]).toMatchObject({ version_number: 2, is_current: 1 });
+    expect(versions[1]).toMatchObject({ version_number: 2, is_current: 0 });
     expect((JSON.parse(versions[1].business_rules_json).issues as Array<{ dimension?: string }>)
       .every((issue) => Boolean(issue.dimension?.trim()))).toBe(true);
     expect((JSON.parse(versions[1].business_rules_json).issues as Array<{ deduction?: number }>)[0].deduction)
       .toBe(77);
+    expect(versions[2]).toMatchObject({ version_number: 3, is_current: 1 });
+    expect(JSON.parse(versions[2].business_rules_json).importContract).toEqual({
+      imageColumn: "聊天截图",
+      resultColumns: [
+        "问题点-售前",
+        "问题点-售后",
+        "有无违规-售后",
+        "客服问题 识别问题并打标签",
+        "接待流程质检结果",
+        "优化建议-售前",
+      ],
+      completeHistoricalResultRequiredColumns: [
+        "问题点-售前",
+        "问题点-售后",
+        "有无违规-售后",
+        "客服问题 识别问题并打标签",
+        "接待流程质检结果",
+        "优化建议-售前",
+      ],
+    });
     expect(() => db.prepare(`
       UPDATE analysis_section_versions SET section_snapshot_json = '{}'
       WHERE id = ?
-    `).run(versions[1].id)).toThrow("已发布配置版本内容不可修改");
+    `).run(versions[2].id)).toThrow("已发布配置版本内容不可修改");
     expect(() => db.prepare(`
       INSERT INTO analysis_section_versions (
         id, section_id, version_number, status, is_current,

@@ -18,5 +18,6 @@
   "018-section-config-versions.ts": "7e05946e3d27e608de2ab2449646fcc2d33baced7cdea53bea69c5d34c60154a",
   "019-section-version-integrity.ts": "ef0527fe3bc173e0c486ef41052a8965b9d3e61f094ed31bd455c7395eb41c35",
   "020-platform-dictionary-task-binding.ts": "474d35a9a47c622fdf083d238fea501071919f9f979abccb216bb47bb20cb3d4",
-  "021-global-conversation-id.ts": "97fe9f05e362c27681ae5eb1f2e3d8bac25eb5ddf18a73e2e5400920f7025f40"
+  "021-global-conversation-id.ts": "97fe9f05e362c27681ae5eb1f2e3d8bac25eb5ddf18a73e2e5400920f7025f40",
+  "022-reception-import-contract.ts": "f6c83f341d03a30779e054e82b7b4c6d1b97e980ea31952cc0867846e1126949"
 }

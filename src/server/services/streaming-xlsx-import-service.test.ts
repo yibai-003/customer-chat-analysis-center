@@ -5,7 +5,12 @@ import path from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { initDb } from "../db/client";
 import { createPlatform, listJobs } from "../db/repositories";
-import { importWorkbookStreaming, previewWorkbookStreaming } from "./streaming-xlsx-import-service";
+import {
+  importWorkbookStreaming,
+  parseDrawingAnchors,
+  parseWorksheetRows,
+  previewWorkbookStreaming,
+} from "./streaming-xlsx-import-service";
 
 const files: string[] = [];
 
@@ -116,5 +121,37 @@ describe("streaming xlsx import", () => {
       .rejects.toThrow("平台字段与所选平台不一致");
 
     expect(listJobs()).toHaveLength(before);
+  });
+
+  it("parses WPS-style inline strings and two-cell image anchors", () => {
+    const rows = parseWorksheetRows(`
+      <worksheet>
+        <sheetData>
+          <row r="1">
+            <c r="A1" t="inlineStr"><is><t>平台</t></is></c>
+            <c r="C1" t="inlineStr"><is><r><t>聊天</t></r><r><t>截图</t></r></is></c>
+          </row>
+          <row r="2">
+            <c r="A2" t="inlineStr"><is><t>测试平台</t></is></c>
+          </row>
+        </sheetData>
+      </worksheet>
+    `, []);
+    expect(rows.get(1)).toEqual({ 1: "平台", 3: "聊天截图" });
+    expect(rows.get(2)).toEqual({ 1: "测试平台" });
+
+    expect(parseDrawingAnchors(`
+      <xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing"
+        xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
+        xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+        <xdr:twoCellAnchor>
+          <xdr:from><xdr:col>2</xdr:col><xdr:row>1</xdr:row></xdr:from>
+          <xdr:to><xdr:col>3</xdr:col><xdr:row>2</xdr:row></xdr:to>
+          <xdr:pic>
+            <xdr:blipFill><a:blip r:embed="rId7"/></xdr:blipFill>
+          </xdr:pic>
+        </xdr:twoCellAnchor>
+      </xdr:wsDr>
+    `)).toEqual([{ row: 2, column: 3, embed: "rId7" }]);
   });
 });

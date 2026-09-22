@@ -1,4 +1,15 @@
-import { RECEPTION_ISSUE_RULES, type ReceptionIssueRule } from "./reception-quality-rules";
+import {
+  RECEPTION_COMPLETE_HISTORY_REQUIRED_COLUMNS,
+  RECEPTION_ISSUE_RULES,
+  RECEPTION_RESULT_COLUMNS,
+  type ReceptionIssueRule,
+} from "./reception-quality-rules";
+
+export interface ReceptionImportContract {
+  imageColumn: string;
+  resultColumns: string[];
+  completeHistoricalResultRequiredColumns: string[];
+}
 
 export interface ReceptionBusinessRules {
   kind: "reception_quality";
@@ -6,6 +17,7 @@ export interface ReceptionBusinessRules {
   gradeThresholds: Array<{ grade: "A" | "B" | "C" | "D"; minScore: number }>;
   forceDGrade: "D";
   issues: ReceptionIssueRule[];
+  importContract: ReceptionImportContract;
 }
 
 export function sectionBusinessRules(sectionId: string): Record<string, unknown> {
@@ -21,6 +33,11 @@ export function sectionBusinessRules(sectionId: string): Record<string, unknown>
     ],
     forceDGrade: "D",
     issues: RECEPTION_ISSUE_RULES,
+    importContract: {
+      imageColumn: "聊天截图",
+      resultColumns: RECEPTION_RESULT_COLUMNS,
+      completeHistoricalResultRequiredColumns: RECEPTION_COMPLETE_HISTORY_REQUIRED_COLUMNS,
+    },
   };
 }
 

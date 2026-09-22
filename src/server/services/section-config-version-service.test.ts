@@ -131,6 +131,25 @@ describe("section configuration version lifecycle", () => {
         { grade: "C", minScore: 80 },
         { grade: "D", minScore: 0 },
       ],
+      importContract: {
+        imageColumn: "聊天截图",
+        resultColumns: [
+          "问题点-售前",
+          "问题点-售后",
+          "有无违规-售后",
+          "客服问题 识别问题并打标签",
+          "接待流程质检结果",
+          "优化建议-售前",
+        ],
+        completeHistoricalResultRequiredColumns: [
+          "问题点-售前",
+          "问题点-售后",
+          "有无违规-售后",
+          "客服问题 识别问题并打标签",
+          "接待流程质检结果",
+          "优化建议-售前",
+        ],
+      },
     });
     const issues = draft.businessRules.issues as Array<{ id: string; dimension: string }>;
     expect(issues)
@@ -146,6 +165,18 @@ describe("section configuration version lifecycle", () => {
     db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
       .run(JSON.stringify(invalidRules), draft.id);
     expect(() => publishSectionVersion(draft.id)).toThrow("配置参数无效");
+
+    const invalidContract = createDraftVersion("reception");
+    const invalidContractRules = structuredClone(invalidContract.businessRules) as {
+      importContract: {
+        resultColumns: string[];
+        completeHistoricalResultRequiredColumns: string[];
+      };
+    };
+    invalidContractRules.importContract.completeHistoricalResultRequiredColumns.push("未声明结果字段");
+    db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
+      .run(JSON.stringify(invalidContractRules), invalidContract.id);
+    expect(() => publishSectionVersion(invalidContract.id)).toThrow("完整历史结果必填字段不属于结果区");
   });
 
   it("rejects malformed snapshots and runtime model state", () => {

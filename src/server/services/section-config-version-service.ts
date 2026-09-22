@@ -212,6 +212,13 @@ function validateVersionSnapshot(version: Pick<
     if (new Set(checked.issues.map((item) => item.id)).size !== checked.issues.length) {
       throw new Error("接待质检问题 ID 重复");
     }
+    const resultColumns = new Set(checked.importContract.resultColumns);
+    for (const field of checked.importContract.completeHistoricalResultRequiredColumns) {
+      if (!resultColumns.has(field)) throw new Error(`完整历史结果必填字段不属于结果区：${field}`);
+    }
+    if (resultColumns.has(checked.importContract.imageColumn)) {
+      throw new Error("聊天截图列不能属于结果区");
+    }
   }
   assertNoRuntimeState(version);
 }

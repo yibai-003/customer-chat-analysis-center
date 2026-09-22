@@ -8,6 +8,17 @@ export const RECEPTION_EXCEL_FIELDS = [
 
 export const RECEPTION_AI_SOURCE_FIELDS = RECEPTION_EXCEL_FIELDS.slice(0, 12);
 
+export const RECEPTION_RESULT_COLUMNS = [
+  "问题点-售前",
+  "问题点-售后",
+  "有无违规-售后",
+  "客服问题 识别问题并打标签",
+  "接待流程质检结果",
+  "优化建议-售前",
+];
+
+export const RECEPTION_COMPLETE_HISTORY_REQUIRED_COLUMNS = [...RECEPTION_RESULT_COLUMNS];
+
 export function receptionAiSourceFields(sourceFields: Record<string, string>) {
   const normalized = Object.fromEntries(Object.entries(sourceFields)
     .map(([key, value]) => [key.trim(), value] as const));

@@ -134,6 +134,13 @@ export const receptionBusinessRulesInput = z.object({
   }).strict()).length(4),
   forceDGrade: z.literal("D"),
   issues: z.array(receptionIssueRuleInput).min(1).max(200),
+  importContract: z.object({
+    imageColumn: safeName,
+    resultColumns: z.array(safeName).min(1).max(200)
+      .refine(fields => new Set(fields).size === fields.length, "结果区字段重复"),
+    completeHistoricalResultRequiredColumns: z.array(safeName).min(1).max(200)
+      .refine(fields => new Set(fields).size === fields.length, "完整历史结果必填字段重复"),
+  }).strict(),
 }).strict();
 export function parseConfiguration<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
