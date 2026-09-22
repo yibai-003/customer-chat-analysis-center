@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import Database from "better-sqlite3";
+import { ensureSectionConfigV1 } from "./018-section-config-versions";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appliedMigrations, currentSchemaVersion, migrations, runMigrations } from "./index";
 import { applyLegacyBaseline } from "./002-legacy-baseline";
@@ -238,8 +239,19 @@ describe("versioned migrations", () => {
     `);
     runMigrations(db);
     const first = db.prepare("SELECT id FROM analysis_section_versions WHERE section_id='section-a'").get().id;
+    const firstSnapshot = db.prepare(
+      "SELECT section_snapshot_json, fields_snapshot_json FROM analysis_section_versions WHERE id = ?",
+    ).get(first);
     db.prepare("UPDATE jobs SET section_config_version_id = ? WHERE id = 'job-a'").run(first);
     runMigrations(db);
+    expect(ensureSectionConfigV1(db)).toEqual({
+      succeeded: 0,
+      skipped: 1,
+      errors: [],
+    });
+    expect(db.prepare(
+      "SELECT section_snapshot_json, fields_snapshot_json FROM analysis_section_versions WHERE id = ?",
+    ).get(first)).toEqual(firstSnapshot);
     expect(db.prepare("SELECT COUNT(*) AS count FROM analysis_section_versions WHERE section_id='section-a'").get())
       .toEqual({ count: 1 });
     expect(db.prepare("SELECT section_config_version_id FROM jobs WHERE id = 'job-a'").get())
@@ -266,6 +278,13 @@ describe("versioned migrations", () => {
     `).run(versionId)).toThrow("已发布配置版本内容不可修改");
     expect(() => db.prepare("DELETE FROM analysis_section_versions WHERE id = ?").run(versionId))
       .toThrow("已发布配置版本不可删除");
+    expect(() => db.prepare("DELETE FROM analysis_sections WHERE id = 'section-a'").run())
+      .toThrow("存在配置版本的板块不能删除");
+    expect(() => db.prepare(`
+      UPDATE analysis_section_versions
+      SET status = 'draft'
+      WHERE id = ?
+    `).run(versionId)).toThrow("已发布配置版本不能降级为草稿");
     expect(() => db.prepare(`
       UPDATE analysis_section_versions
       SET is_current = 0, archived_at = 'archived'

@@ -3,10 +3,30 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../db/client";
-import { updateRecord } from "../db/repositories";
-import { analyzeField, analyzeRecordFields, executeFieldGraph } from "./field-analysis-service";
+import {
+  applySectionConfigVersions,
+  ensureSectionConfigV1,
+} from "../db/migrations/018-section-config-versions";
+import {
+  addRecords,
+  createJob,
+  getJob,
+  listRecords,
+  updateRecord,
+  upsertSection,
+} from "../db/repositories";
+import {
+  analyzeField as analyzeBoundField,
+  analyzeRecordFields as analyzeBoundRecordFields,
+  executeFieldGraph,
+} from "./field-analysis-service";
 import { createFieldRun, getFieldResultContext } from "./field-run-service";
 import { listKnowledgeItems } from "./knowledge/knowledge-repository";
+import { upsertField } from "./field-config-service";
+import {
+  createDraftVersion,
+  publishSectionVersion,
+} from "./section-config-version-service";
 import type { AnalysisField, ModelConfig, ModelPurpose, ModelRouteResult } from "../../shared/types";
 
 vi.mock("./model-pool-service", async (importOriginal) => {
@@ -122,6 +142,16 @@ const fields: AnalysisField[] = [
   },
 ];
 
+function analyzeRecordFields(recordId: string, sectionId: string) {
+  ensureSectionConfigV1(db);
+  return analyzeBoundRecordFields(recordId, sectionId);
+}
+
+function analyzeField(recordId: string, sectionId: string, fieldKey: string) {
+  ensureSectionConfigV1(db);
+  return analyzeBoundField(recordId, sectionId, fieldKey);
+}
+
 describe("field analysis executor", { timeout: 20_000 }, () => {
   const imagePath = path.join(os.tmpdir(), "task-5-dispatch.png");
 
@@ -151,10 +181,14 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
       DELETE FROM analysis_field_runs;
       DELETE FROM records;
       DELETE FROM jobs;
+      DROP TRIGGER IF EXISTS section_versions_immutable_delete;
+      DROP TRIGGER IF EXISTS section_versions_restrict_section_delete;
+      DELETE FROM analysis_section_versions WHERE section_id = 'task-5-dispatch';
       DELETE FROM analysis_fields WHERE section_id = 'task-5-dispatch';
       DELETE FROM knowledge_bases WHERE section_id = 'task-5-dispatch';
       DELETE FROM analysis_sections WHERE id = 'task-5-dispatch';
     `);
+    applySectionConfigVersions(db);
   });
 
   afterAll(() => {
@@ -187,6 +221,50 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
       return { [field.key]: "重试结果" };
     });
     expect(order).toEqual(["screenshotContent"]);
+  });
+
+  it("executes historical jobs with their bound field snapshot after a newer version is published", async () => {
+    const sectionId = "version-snapshot-execution";
+    upsertSection({ id: sectionId, name: "版本执行", prompt: "", sourceFields: [] });
+    const field = upsertField({
+      sectionId,
+      key: "textAi",
+      label: "文本结果",
+      type: "string",
+      prompt: "V1 专用提示词",
+      imageEnabled: false,
+    });
+    const v1 = publishSectionVersion(createDraftVersion(sectionId).id);
+    const job = createJob("version-execution.xlsx", "version-execution.xlsx", {
+      id: sectionId,
+      name: "版本执行",
+    });
+    addRecords(job.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 2,
+      anchor: {},
+      sourceFields: {},
+      imagePath: "unused",
+    }]);
+
+    upsertField({
+      id: field.id,
+      sectionId,
+      key: "textAi",
+      label: "文本结果",
+      type: "string",
+      prompt: "V2 实时提示词",
+      imageEnabled: false,
+    });
+    publishSectionVersion(createDraftVersion(sectionId).id);
+
+    const record = listRecords(job.id)[0]!;
+    await analyzeRecordFields(record.id, sectionId);
+
+    const messages = JSON.stringify(vi.mocked(callModelPool).mock.calls.at(-1)?.[0]);
+    expect(messages).toContain("V1 专用提示词");
+    expect(messages).not.toContain("V2 实时提示词");
+    expect(getJob(job.id)?.sectionConfigVersionId).toBe(v1.id);
   });
 
   it("dispatches each field by execution type and never selects a model for extraction", async () => {

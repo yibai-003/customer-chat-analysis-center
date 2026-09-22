@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../../db/client";
+import { applySectionConfigVersions } from "../../db/migrations/018-section-config-versions";
 import { captureCatalog, KnowledgeSync, restoreCatalog, validateCatalog } from "./knowledge-sync-service";
 import { upsertKnowledgeBase, upsertKnowledgeItem, deleteKnowledgeBase } from "./knowledge-repository";
 import { searchKnowledge } from "./knowledge-search-service";
@@ -173,8 +174,16 @@ describe("portable knowledge catalog", () => {
   it("restores Chinese content, IDs, field bindings and search indexes into an empty environment", () => {
     seedKnowledge(); sync.initialize(false);
     const catalog = captureCatalog();
-    db.exec("DELETE FROM knowledge_item_fts; DELETE FROM analysis_sections;");
+    db.exec(`
+      DELETE FROM jobs;
+      DROP TRIGGER IF EXISTS section_versions_immutable_delete;
+      DROP TRIGGER IF EXISTS section_versions_restrict_section_delete;
+      DELETE FROM analysis_section_versions;
+      DELETE FROM knowledge_item_fts;
+      DELETE FROM analysis_sections;
+    `);
     initDb();
+    applySectionConfigVersions(db);
     const other = new KnowledgeSync(sync.file, path.join(directory, "new-state.json"));
     other.initialize(true);
     expect(captureCatalog()).toEqual(catalog);

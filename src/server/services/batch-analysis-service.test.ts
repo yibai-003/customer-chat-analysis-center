@@ -21,6 +21,7 @@ import {
 import { analyzeRecordFields } from "./field-analysis-service";
 import { listFields, upsertField } from "./field-config-service";
 import { createFieldRun } from "./field-run-service";
+import { createDraftVersion, publishSectionVersion } from "./section-config-version-service";
 import { paidTokensRemaining } from "../ai/model-budget";
 import {
   analyzeJob,
@@ -383,6 +384,7 @@ describe("batch analysis scheduling", () => {
       type: "string",
       isEnabled: false,
     });
+    publishSectionVersion(createDraftVersion(sectionId).id);
     const job = createJob("disabled-baseline.xlsx", "disabled-baseline.xlsx", {
       id: sectionId,
       name: "停用字段基线",

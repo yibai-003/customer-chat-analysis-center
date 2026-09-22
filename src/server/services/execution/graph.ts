@@ -1,5 +1,4 @@
 import { assertAnalysisActive } from "../analysis-cancellation";
-import { topologicalFields } from "../field-config-service";
 import type { AnalysisField } from "../../../shared/types";
 
 export interface FieldExecutionState {
@@ -27,10 +26,43 @@ export async function executeFieldGraph(
   graphFields: AnalysisField[] = fields,
 ) {
   const selectedKeys = new Set(fields.map((field) => field.key));
-  const ordered = (topologicalFields(
-    graphFields,
-    [...new Set([...sourceFields, ...Object.keys(initialContext)])],
-  ) as AnalysisField[]).filter((field) => selectedKeys.has(field.key));
+  const availableSources = new Set([...sourceFields, ...Object.keys(initialContext)]);
+  const byKey = new Map<string, AnalysisField>();
+  for (const field of graphFields) {
+    if (byKey.has(field.key)) throw new Error(`字段 Key 重复：${field.key}`);
+    byKey.set(field.key, field);
+  }
+  for (const field of graphFields) {
+    for (const dependency of field.dependsOn) {
+      if (dependency === field.key) throw new Error(`字段不能依赖自身：${field.key}`);
+      if (!byKey.has(dependency) && !availableSources.has(dependency)) {
+        throw new Error(`依赖字段不存在：${field.key} -> ${dependency}`);
+      }
+    }
+  }
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const orderedGraph: AnalysisField[] = [];
+  const visit = (field: AnalysisField) => {
+    if (visited.has(field.key)) return;
+    if (visiting.has(field.key)) throw new Error(`循环依赖：${field.key}`);
+    visiting.add(field.key);
+    for (const dependency of field.dependsOn) {
+      const dependencyField = byKey.get(dependency);
+      if (dependencyField) visit(dependencyField);
+    }
+    visiting.delete(field.key);
+    visited.add(field.key);
+    orderedGraph.push(field);
+  };
+  const sortedFields: AnalysisField[] = [];
+  for (const field of graphFields) {
+    const index = sortedFields.findIndex((candidate) => candidate.sortOrder > field.sortOrder);
+    if (index < 0) sortedFields.push(field);
+    else sortedFields.splice(index, 0, field);
+  }
+  sortedFields.forEach(visit);
+  const ordered = orderedGraph.filter((field) => selectedKeys.has(field.key));
   const states: Record<string, FieldExecutionState> = {};
   const context: Record<string, unknown> = { ...initialContext };
   for (const field of ordered) {

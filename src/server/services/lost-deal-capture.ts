@@ -2,26 +2,46 @@ import { db } from "../db/client";
 import { assertRecordOwnership } from "./run-ownership";
 import type { LostDealAttribution, LostDealReason } from "./lost-deal-attribution";
 import { LOST_DEAL_CUSTOMER_BASE_NAME, LOST_DEAL_SERVICE_BASE_NAME } from "./lost-deal-attribution";
+import type { SectionConfigVersion } from "../../shared/types";
 
 export function replaceLostDealReasonLinks(
   recordId: string,
   fieldId: string,
   attribution: LostDealAttribution,
   enabled: boolean,
+  configVersion?: SectionConfigVersion,
 ) {
   if (!db.inTransaction) throw new Error("归因关联必须与字段运行在同一事务中写入");
   assertRecordOwnership(recordId);
-  const field = db.prepare("SELECT section_id FROM analysis_fields WHERE id = ?").get(fieldId) as { section_id: string } | undefined;
+  const field = configVersion
+    ? { section_id: configVersion.sectionId }
+    : db.prepare("SELECT section_id FROM analysis_fields WHERE id = ?").get(fieldId) as { section_id: string } | undefined;
   if (!field) throw new Error("归因字段已删除");
   db.prepare("DELETE FROM lost_deal_record_reasons WHERE record_id = ? AND field_id = ?").run(recordId, fieldId);
   if (!enabled || attribution.reviewRequired) return;
 
-  const item = db.prepare(`
+  const liveItem = db.prepare(`
     SELECT i.values_json, i.is_enabled AS item_enabled, b.is_enabled AS base_enabled,
       b.name AS base_name, b.section_id
     FROM knowledge_items i JOIN knowledge_bases b ON b.id = i.knowledge_base_id
     WHERE i.id = ?
   `);
+  const snapshotItem = (itemId: string) => {
+    if (!configVersion) return undefined;
+    for (const base of configVersion.knowledgeSnapshot) {
+      if (!Array.isArray(base.items)) continue;
+      const item = base.items.find((candidate) => candidate && typeof candidate === "object" && candidate.id === itemId);
+      if (!item) continue;
+      return {
+        values_json: JSON.stringify(item.values ?? {}),
+        item_enabled: item.isEnabled === false ? 0 : 1,
+        base_enabled: base.isEnabled === false ? 0 : 1,
+        base_name: String(base.name ?? ""),
+        section_id: String(base.sectionId ?? ""),
+      };
+    }
+    return undefined;
+  };
   const insert = db.prepare(`
     INSERT INTO lost_deal_record_reasons
       (record_id, field_id, knowledge_item_id, reason_type, reason_name, evidence)
@@ -30,7 +50,9 @@ export function replaceLostDealReasonLinks(
   const capture = (reasons: LostDealReason[], type: "customer" | "service", baseName: string, valueColumn: string) => {
     for (const reason of reasons) {
       if (!reason.knowledgeItemId || reason.name === "待复核" || !reason.evidence) continue;
-      const row = item.get(reason.knowledgeItemId) as {
+      const row = (configVersion
+        ? snapshotItem(reason.knowledgeItemId)
+        : liveItem.get(reason.knowledgeItemId)) as {
         values_json: string; item_enabled: number; base_enabled: number; base_name: string; section_id: string;
       } | undefined;
       const values = row ? JSON.parse(row.values_json) as Record<string, string> : {};

@@ -1,4 +1,4 @@
-import type { AnalysisField } from "../../shared/types";
+import type { AnalysisField, SectionConfigVersion } from "../../shared/types";
 import { db } from "../db/client";
 
 export interface LostDealReason {
@@ -229,10 +229,34 @@ function enabledKnowledgeNames(
   }).filter((item) => item.name);
 }
 
-export function loadLostDealKnowledgeCandidates(field: AnalysisField): LostDealKnowledgeCandidates {
+export function loadLostDealKnowledgeCandidates(
+  field: AnalysisField,
+  knowledgeSnapshot?: SectionConfigVersion["knowledgeSnapshot"],
+): LostDealKnowledgeCandidates {
+  const snapshotNames = (baseName: string, valueColumn: string): LostDealKnowledgeCandidate[] | undefined => {
+    if (!knowledgeSnapshot) return undefined;
+    const base = knowledgeSnapshot.find((candidate) => candidate.name === baseName && candidate.isEnabled !== false);
+    if (!base || !Array.isArray(base.items)) return [];
+    return base.items.flatMap((item) => {
+      if (!item || typeof item !== "object" || item.isEnabled === false) return [];
+      const values = item.values && typeof item.values === "object"
+        ? item.values as Record<string, unknown>
+        : {};
+      const name = asString(values[valueColumn]);
+      return name ? [{
+        id: String(item.id ?? ""),
+        name,
+        definition: asString(values["定义"]),
+        applicable: asString(values["适用条件"]),
+        excluded: asString(values["排除条件"]),
+      }] : [];
+    });
+  };
   return {
-    customerReasons: enabledKnowledgeNames(field.sectionId, LOST_DEAL_CUSTOMER_BASE_NAME, "原因名称"),
-    serviceReasons: enabledKnowledgeNames(field.sectionId, LOST_DEAL_SERVICE_BASE_NAME, "问题名称"),
+    customerReasons: snapshotNames(LOST_DEAL_CUSTOMER_BASE_NAME, "原因名称")
+      ?? enabledKnowledgeNames(field.sectionId, LOST_DEAL_CUSTOMER_BASE_NAME, "原因名称"),
+    serviceReasons: snapshotNames(LOST_DEAL_SERVICE_BASE_NAME, "问题名称")
+      ?? enabledKnowledgeNames(field.sectionId, LOST_DEAL_SERVICE_BASE_NAME, "问题名称"),
     demandTypes: field.options?.map((item) => item.trim()).filter(Boolean) ?? [],
   };
 }

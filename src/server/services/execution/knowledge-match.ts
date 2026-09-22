@@ -6,7 +6,7 @@ import { registerFieldExecutionHandler } from "./registry";
 
 registerFieldExecutionHandler({
   type: "knowledge_match",
-  async run({ recordId, sectionName, record, field, context }) {
+  async run({ recordId, sectionName, record, field, configVersion, context }) {
     const dependencies = dependencyValues(field, record.sourceFields, context);
     const started = Date.now();
     let matched: Awaited<ReturnType<typeof matchKnowledgeItem>> | undefined;
@@ -16,6 +16,7 @@ registerFieldExecutionHandler({
         field,
         sectionName,
         dependencies,
+        knowledgeSnapshot: configVersion.knowledgeSnapshot,
       });
       const run = createFieldRun({
         recordId,

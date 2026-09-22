@@ -6,8 +6,10 @@ import { db } from "../../db/client";
 import type {
   AnalysisField,
   KnowledgeCandidate,
+  KnowledgeColumn,
   KnowledgeMatchResult,
   ModelRouteResult,
+  SectionConfigVersion,
 } from "../../../shared/types";
 import { buildKnowledgeMatchMessages } from "../../ai/knowledge-match-prompt-builder";
 import { callModelPool } from "../model-pool-service";
@@ -82,6 +84,7 @@ export async function matchKnowledgeItem(input: {
   field: AnalysisField;
   sectionName: string;
   dependencies: Record<string, unknown>;
+  knowledgeSnapshot?: SectionConfigVersion["knowledgeSnapshot"];
 }): Promise<KnowledgeMatchExecutionResult> {
   return withModelBudget(() => matchKnowledgeWithinBudget(input));
 }
@@ -92,28 +95,61 @@ async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledg
     return reviewResult(input.field.key, "知识匹配字段未配置知识库");
   }
 
-  const knowledgeBase = getKnowledgeBase(input.field.knowledgeBaseId);
+  const snapshotBase = input.knowledgeSnapshot?.find((base) => base.id === input.field.knowledgeBaseId);
+  const knowledgeBase = input.knowledgeSnapshot
+    ? snapshotBase
+    : getKnowledgeBase(input.field.knowledgeBaseId);
   if (!knowledgeBase) {
     return reviewResult(input.field.key, "知识库不存在");
   }
 
   const query = buildSearchQuery(input.dependencies);
-  const candidates = searchKnowledge({
-    knowledgeBaseId: knowledgeBase.id,
-    query,
-    limit: input.field.candidateLimit,
-  });
+  const candidates = snapshotBase
+    ? (Array.isArray(snapshotBase.items) ? snapshotBase.items : [])
+      .filter((item) => item && typeof item === "object" && item.isEnabled !== false)
+      .map((item) => {
+        const values = item.values && typeof item.values === "object"
+          ? Object.fromEntries(Object.entries(item.values).map(([key, value]) => [key, String(value ?? "")]))
+          : {};
+        const searchText = String(item.searchText ?? JSON.stringify(values));
+        const normalizedQuery = query.toLowerCase().replace(/\s+/g, "");
+        const normalizedText = searchText.toLowerCase().replace(/\s+/g, "");
+        return {
+          itemId: String(item.id ?? ""),
+          values,
+          score: normalizedQuery && normalizedText.includes(normalizedQuery) ? 1 : 0,
+          matchedText: searchText,
+        };
+      })
+      .filter((candidate) => candidate.itemId)
+      .reduce<KnowledgeCandidate[]>((ordered, candidate) => {
+        const index = ordered.findIndex((existing) => (
+          existing.score < candidate.score
+          || (existing.score === candidate.score && existing.itemId.localeCompare(candidate.itemId) > 0)
+        ));
+        if (index < 0) ordered.push(candidate);
+        else ordered.splice(index, 0, candidate);
+        return ordered;
+      }, [])
+      .slice(0, input.field.candidateLimit)
+    : searchKnowledge({
+      knowledgeBaseId: knowledgeBase.id as string,
+      query,
+      limit: input.field.candidateLimit,
+    });
   if (!candidates.length) {
     return reviewResult(input.field.key, "本地知识库未召回候选");
   }
-  const cacheKey = buildCacheKey(input.field.id, knowledgeBase.id, query, candidates);
+  const knowledgeBaseId = String(knowledgeBase.id);
+  const cacheKey = buildCacheKey(input.field.id, knowledgeBaseId, query, candidates);
   const cached = matchCache.get(cacheKey);
   const cachedCandidate = cached && cached.expiresAt > Date.now()
     ? candidates.find((candidate) => candidate.itemId === cached.itemId)
     : undefined;
   if (cached && !cachedCandidate) matchCache.delete(cacheKey);
+  const columns = (Array.isArray(knowledgeBase.columns) ? knowledgeBase.columns : []) as KnowledgeColumn[];
   const promptColumns = new Set(
-    knowledgeBase.columns
+    columns
       .filter((column) => (
         column.roles.some((role) => (
           role === "result"
@@ -174,7 +210,7 @@ async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledg
     snapshotId,
     input.recordId,
     input.field.id,
-    knowledgeBase.id,
+    knowledgeBaseId,
     selected.itemId,
     JSON.stringify(selected.values),
     JSON.stringify(candidates),

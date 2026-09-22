@@ -4,6 +4,7 @@ import {
   deriveReceptionQualityFields,
   parseReceptionQuality,
 } from "./reception-quality";
+import { sectionBusinessRules } from "./section-business-rules";
 
 describe("reception quality", () => {
   it("calculates deterministic score, grade, labels and after-sale status", () => {
@@ -95,6 +96,52 @@ describe("reception quality", () => {
       labels: ["答非所问"],
       reviewRequired: false,
     });
+  });
+
+  it("uses a bound business-rule snapshot for scoring and the model catalog", () => {
+    const rules = structuredClone(sectionBusinessRules("reception"));
+    const issues = rules.issues as Array<{ id: string; deduction: number; suggestion: string; triggerWhen: string[] }>;
+    const target = issues.find((rule) => rule.id === "PRE_ANSWER_IRRELEVANT")!;
+    target.deduction = 2;
+    target.suggestion = "版本专属建议";
+    target.triggerWhen = ["版本专属触发条件"];
+    const field = {
+      id: "quality",
+      sectionId: "reception",
+      key: "统一质检分析",
+      label: "统一质检分析",
+      type: "object" as const,
+      prompt: "",
+      options: [],
+      required: true,
+      imageEnabled: false,
+      dependsOn: ["截图内容总结"],
+      sortOrder: 1,
+      executionType: "reception_quality_analysis" as const,
+      exportEnabled: false,
+      candidateLimit: 15,
+      knowledgeSyncEnabled: false,
+      knowledgeCaptureLimit: 2 as const,
+      isEnabled: true,
+    };
+    const messages = buildReceptionQualityMessages({
+      field,
+      screenshotFacts: {},
+      sourceFields: {},
+      businessRules: rules,
+    });
+    expect(JSON.stringify(messages)).toContain("版本专属触发条件");
+    const quality = parseReceptionQuality(JSON.stringify({
+      scene: "售前",
+      preSaleIssues: [{
+        issueId: "PRE_ANSWER_IRRELEVANT",
+        evidence: "答非所问",
+        reason: "没有回答问题",
+      }],
+      afterSaleIssues: [],
+      confidence: 0.9,
+    }), "统一质检分析", { businessRules: rules });
+    expect(quality).toMatchObject({ score: 98, grade: "A", suggestion: "版本专属建议" });
   });
 
   it("only sends the compact protocol and canonical issue ids to the quality model", () => {

@@ -135,4 +135,17 @@ describe("section configuration version lifecycle", () => {
     expect((draft.businessRules.issues as Array<{ id: string }>))
       .toEqual(expect.arrayContaining([expect.objectContaining({ id: "PRE_ANSWER_IRRELEVANT" })]));
   });
+
+  it("rejects malformed snapshots and runtime model state", () => {
+    const sectionId = createConfigFixture();
+    const malformed = createDraftVersion(sectionId);
+    expect(() => updateDraftSectionVersion(malformed.id, {
+      fieldsSnapshot: "invalid" as never,
+    })).toThrow("配置参数无效");
+
+    const sensitive = createDraftVersion(sectionId);
+    expect(() => updateDraftSectionVersion(sensitive.id, {
+      businessRules: { modelConfig: { apiKey: "secret" } },
+    })).toThrow("禁止包含模型运行态字段");
+  });
 });

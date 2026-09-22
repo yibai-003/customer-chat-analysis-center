@@ -43,6 +43,97 @@ export const knowledgeItemInput = z.object({ id: id.optional(), knowledgeBaseId:
   values: z.record(safeName, z.string().max(32767)).refine(values => Object.keys(values).length <= 200, "条目列数过多"),
   isEnabled: z.boolean(), sourceRowNumber: z.number().int().min(1).max(1048576).optional(),
 });
+const sectionVersionSectionInput = sectionInput.extend({
+  id,
+  parentId: id.nullable(),
+  outputSchema: z.array(output).max(200),
+  sourceFields: z.array(safeName).max(100),
+  sortOrder: z.number().int().min(0).max(100000),
+  isEnabled: z.boolean(),
+  imageEnabled: z.boolean(),
+}).strict();
+const sectionVersionFieldInput = fieldInput.extend({
+  id,
+  sectionId: id,
+  prompt: z.string().max(20000),
+  options,
+  required: z.boolean(),
+  imageEnabled: z.boolean(),
+  dependsOn: z.array(safeName).max(50),
+  sortOrder: z.number().int().min(0).max(100000),
+  isEnabled: z.boolean(),
+  executionType: z.enum(ANALYSIS_EXECUTION_TYPES),
+  exportEnabled: z.boolean(),
+  candidateLimit: z.number().int().min(1).max(100),
+  knowledgeSyncEnabled: z.boolean(),
+  knowledgeCaptureLimit: z.union([z.literal(1), z.literal(2)]),
+}).strict();
+const sectionVersionKnowledgeItemInput = z.object({
+  id,
+  knowledgeBaseId: id,
+  pathKey: z.string().max(2000),
+  values: z.record(z.string(), z.unknown()),
+  searchText: z.string().max(100000),
+  isEnabled: z.boolean(),
+  sourceImportId: id.nullable(),
+  sourceRowNumber: z.number().int().min(1).max(1048576).nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+}).strict();
+const sectionVersionKnowledgeBaseInput = z.object({
+  id,
+  sectionId: id,
+  name: safeName,
+  originalFilename: z.string().max(512),
+  columns: knowledgeColumns,
+  itemCount: z.number().int().min(0),
+  isEnabled: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  items: z.array(sectionVersionKnowledgeItemInput).max(100000),
+}).strict();
+export const sectionConfigVersionPatchInput = z.object({
+  sectionSnapshot: sectionVersionSectionInput.partial().optional(),
+  fieldsSnapshot: z.array(sectionVersionFieldInput).max(200).optional(),
+  exportSettings: z.object({
+    outputColumns: z.array(z.object({
+      key: safeName,
+      outputColumn: z.string().max(120).nullable(),
+    }).strict()).max(200),
+  }).strict().optional(),
+  dependenciesSnapshot: z.array(z.object({
+    key: safeName,
+    dependsOn: z.array(safeName).max(50),
+  }).strict()).max(200).optional(),
+  knowledgeSnapshot: z.array(sectionVersionKnowledgeBaseInput).max(200).optional(),
+  businessRules: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+const receptionIssueRuleInput = z.object({
+  id: safeName,
+  name: safeName,
+  scope: z.enum(["preSale", "afterSale"]),
+  criterion: z.string().max(20000),
+  deduction: z.number().min(0).max(100),
+  forceD: z.boolean(),
+  violationCount: z.number().int().min(0).max(100),
+  priority: z.number().int().min(0).max(100000),
+  suggestion: z.string().max(20000),
+  applicableWhen: z.array(z.string().max(20000)).max(100),
+  triggerWhen: z.array(z.string().max(20000)).max(100),
+  exclusions: z.array(z.string().max(20000)).max(100),
+  requiredEvidence: z.array(z.string().max(20000)).max(100),
+  missingDataOutcome: z.enum(["not_applicable", "blocking_review", "informational"]),
+}).strict();
+export const receptionBusinessRulesInput = z.object({
+  kind: z.literal("reception_quality"),
+  scoreBase: z.number().min(0).max(1000),
+  gradeThresholds: z.array(z.object({
+    grade: z.enum(["A", "B", "C", "D"]),
+    minScore: z.number().min(0).max(1000),
+  }).strict()).length(4),
+  forceDGrade: z.literal("D"),
+  issues: z.array(receptionIssueRuleInput).min(1).max(200),
+}).strict();
 export function parseConfiguration<T>(schema: z.ZodType<T>, value: unknown): T {
   const result = schema.safeParse(value);
   if (!result.success) throw new Error(`配置参数无效：${result.error.issues.slice(0, 3).map(issue => `${issue.path.join(".")} ${issue.message}`).join("；")}`);

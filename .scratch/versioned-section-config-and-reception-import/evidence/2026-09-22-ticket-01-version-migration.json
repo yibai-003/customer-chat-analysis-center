@@ -7,7 +7,7 @@
     "tests": {
       "command": "npm test",
       "testFiles": 102,
-      "tests": 836,
+      "tests": 841,
       "failures": 0
     },
     "typecheck": {
@@ -61,6 +61,17 @@
     "auditEvents": {
       "action": "config.version_migration",
       "count": 6
+    },
+    "historicalBinding": {
+      "analysisUsesBoundSnapshot": true,
+      "retryPreservesBinding": true,
+      "exportUsesBoundSnapshot": true,
+      "liveFieldDeletionPreservesHistoricalRuns": true
+    },
+    "immutability": {
+      "publishedDowngradeRejected": true,
+      "publishedDeleteRejected": true,
+      "sectionDeleteWithVersionsRejected": true
     }
   }
 }

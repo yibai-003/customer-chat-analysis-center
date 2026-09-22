@@ -1,11 +1,6 @@
 import type { AnalysisField } from "../../shared/types";
-import {
-  RECEPTION_ISSUE_RULES,
-  RECEPTION_RULE_BY_ID,
-  RECEPTION_RULE_BY_NAME,
-  receptionAiSourceFields,
-  receptionIssueCatalogPrompt,
-} from "./reception-quality-rules";
+import { receptionAiSourceFields } from "./reception-quality-rules";
+import { receptionBusinessRules, type ReceptionBusinessRules } from "./section-business-rules";
 
 export type ReceptionScene = "售前" | "售后" | "混合" | "无法判断";
 
@@ -56,7 +51,12 @@ function stringList(value: unknown, label: string, max = 30): string[] {
   return [...new Set(value.map(asString).filter(Boolean))].slice(0, max);
 }
 
-function parseIssueList(value: unknown, label: string, scope: "preSale" | "afterSale"): ReceptionIssue[] {
+function parseIssueList(
+  value: unknown,
+  label: string,
+  scope: "preSale" | "afterSale",
+  rules: ReceptionBusinessRules["issues"],
+): ReceptionIssue[] {
   if (!Array.isArray(value)) throw new Error(`${label}必须是数组`);
   if (value.length > 20) throw new Error(`${label}最多只能有 20 个问题`);
   const seen = new Set<string>();
@@ -65,8 +65,8 @@ function parseIssueList(value: unknown, label: string, scope: "preSale" | "after
     const source = entry as Record<string, unknown>;
     const issueId = asString(source.issueId);
     const legacyName = asString(source.name);
-    const rule = (issueId ? RECEPTION_RULE_BY_ID.get(issueId) : undefined)
-      ?? (legacyName ? RECEPTION_RULE_BY_NAME.get(legacyName) : undefined);
+    const rule = (issueId ? rules.find((item) => item.id === issueId) : undefined)
+      ?? (legacyName ? rules.find((item) => item.name === legacyName) : undefined);
     if (!rule || rule.scope !== scope) throw new Error(`${label}包含未知或不适用的问题ID：${issueId || legacyName || "空"}`);
     const evidence = asString(source.evidence);
     const evidenceIds = Array.isArray(source.evidenceIds)
@@ -89,11 +89,19 @@ function parseIssueList(value: unknown, label: string, scope: "preSale" | "after
   });
 }
 
-function calculateGrade(score: number, forceD: boolean): "A" | "B" | "C" | "D" {
-  if (forceD || score < 80) return "D";
-  if (score < 90) return "C";
-  if (score < 95) return "B";
-  return "A";
+function calculateGrade(
+  score: number,
+  forceD: boolean,
+  rules: ReceptionBusinessRules,
+): "A" | "B" | "C" | "D" {
+  if (forceD) return rules.forceDGrade;
+  let selected: { grade: "A" | "B" | "C" | "D"; minScore: number } | undefined;
+  for (const threshold of rules.gradeThresholds) {
+    if (score >= threshold.minScore && (!selected || threshold.minScore > selected.minScore)) {
+      selected = threshold;
+    }
+  }
+  return selected?.grade ?? "D";
 }
 
 function dialogueEvidenceIds(screenshotFacts: unknown): Set<string> {
@@ -107,8 +115,8 @@ function dialogueEvidenceIds(screenshotFacts: unknown): Set<string> {
   }));
 }
 
-function expectedRuleIds(scene: ReceptionScene) {
-  return RECEPTION_ISSUE_RULES
+function expectedRuleIds(scene: ReceptionScene, rules: ReceptionBusinessRules["issues"]) {
+  return rules
     .filter((rule) => scene === "混合"
       || scene === "无法判断"
       || (scene === "售前" ? rule.scope === "preSale" : rule.scope === "afterSale"))
@@ -133,16 +141,18 @@ function promptedScopes(screenshotFacts: unknown): Array<"preSale" | "afterSale"
 export function parseReceptionQuality(
   raw: string,
   fieldKey = "统一质检分析",
-  options: { screenshotFacts?: unknown } = {},
+  options: { screenshotFacts?: unknown; businessRules?: Record<string, unknown> } = {},
 ): ReceptionQualityAnalysis {
+  const businessRules = receptionBusinessRules(options.businessRules);
+  const rules = businessRules.issues;
   const parsed = parseJson(raw);
   const source = parsed[fieldKey] && typeof parsed[fieldKey] === "object" && !Array.isArray(parsed[fieldKey])
     ? parsed[fieldKey] as Record<string, unknown>
     : parsed;
   const scene = asString(source.scene) as ReceptionScene;
   if (!["售前", "售后", "混合", "无法判断"].includes(scene)) throw new Error("会话场景无效");
-  let preSaleIssues = parseIssueList(source.preSaleIssues, "售前问题", "preSale");
-  let afterSaleIssues = parseIssueList(source.afterSaleIssues, "售后问题", "afterSale");
+  let preSaleIssues = parseIssueList(source.preSaleIssues, "售前问题", "preSale", rules);
+  let afterSaleIssues = parseIssueList(source.afterSaleIssues, "售后问题", "afterSale", rules);
   const legacyUnverifiableItems = source.unverifiableItems;
   const unverifiableItems = source.blockingUnverifiableItems !== undefined
     ? stringList(source.blockingUnverifiableItems, "阻塞核验项")
@@ -150,11 +160,11 @@ export function parseReceptionQuality(
       ? stringList(legacyUnverifiableItems, "无法核验项")
       : [];
   const checkedRuleIds = source.checkedRuleIds !== undefined
-    ? stringList(source.checkedRuleIds, "已检查规则", RECEPTION_ISSUE_RULES.length)
+    ? stringList(source.checkedRuleIds, "已检查规则", rules.length)
     : [];
   if (source.checkedRuleIds !== undefined) {
-    const checked = new Set(checkedRuleIds.filter((id) => RECEPTION_RULE_BY_ID.has(id)));
-    const missing = expectedRuleIds(scene).filter((id) => !checked.has(id));
+    const checked = new Set(checkedRuleIds.filter((id) => rules.some((rule) => rule.id === id)));
+    const missing = expectedRuleIds(scene, rules).filter((id) => !checked.has(id));
     if (missing.length) unverifiableItems.push(`规则覆盖不完整：缺少 ${missing.length} 项`);
   }
   const validEvidenceIds = dialogueEvidenceIds(options.screenshotFacts);
@@ -174,17 +184,20 @@ export function parseReceptionQuality(
   if (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new Error("质检置信度必须在 0 到 1 之间");
 
   const uniqueDeductions = new Map(preSaleIssues.map((issue) => [issue.name, issue.deduction]));
-  const score = Math.max(0, 100 - [...uniqueDeductions.values()].reduce((sum, value) => sum + value, 0));
-  const grade = calculateGrade(score, preSaleIssues.some((issue) => issue.forceD));
-  const issues = [...preSaleIssues, ...afterSaleIssues]
-    .sort((left, right) => {
-      const leftRule = RECEPTION_RULE_BY_ID.get(left.issueId)!;
-      const rightRule = RECEPTION_RULE_BY_ID.get(right.issueId)!;
-      return leftRule.priority - rightRule.priority;
-    });
+  const score = Math.max(0, businessRules.scoreBase - [...uniqueDeductions.values()].reduce((sum, value) => sum + value, 0));
+  const grade = calculateGrade(score, preSaleIssues.some((issue) => issue.forceD), businessRules);
+  const issues: ReceptionIssue[] = [];
+  for (const issue of [...preSaleIssues, ...afterSaleIssues]) {
+    const priority = rules.find((rule) => rule.id === issue.issueId)!.priority;
+    const index = issues.findIndex((existing) => (
+      rules.find((rule) => rule.id === existing.issueId)!.priority > priority
+    ));
+    if (index < 0) issues.push(issue);
+    else issues.splice(index, 0, issue);
+  }
   const labels = issues.map((issue) => issue.name).slice(0, 3);
   const suggestion = issues.length
-    ? [...new Set(issues.slice(0, 3).map((issue) => RECEPTION_RULE_BY_ID.get(issue.issueId)!.suggestion))].join("；")
+    ? [...new Set(issues.slice(0, 3).map((issue) => rules.find((rule) => rule.id === issue.issueId)!.suggestion))].join("；")
     : "保持当前服务规范";
   const sceneMismatch = (scene === "售前" && afterSaleIssues.length > 0)
     || (scene === "售后" && preSaleIssues.length > 0);
@@ -232,7 +245,9 @@ export function buildReceptionQualityMessages(input: {
   field: AnalysisField;
   screenshotFacts: unknown;
   sourceFields: Record<string, string>;
+  businessRules?: Record<string, unknown>;
 }) {
+  const rules = receptionBusinessRules(input.businessRules).issues;
   const protocol = {
     scene: "售前|售后|混合|无法判断",
     checkedRuleIds: ["本次场景内已经逐项检查的全部问题ID"],
@@ -259,7 +274,17 @@ export function buildReceptionQualityMessages(input: {
       ? [`补充要求：${input.field.prompt.trim()}`]
       : []),
     "可选问题目录（只能使用其中的 issueId）：",
-    receptionIssueCatalogPrompt(promptedScopes(input.screenshotFacts)),
+    rules.filter((rule) => promptedScopes(input.screenshotFacts).includes(rule.scope))
+      .map((rule) => [
+        rule.id,
+        rule.name,
+        rule.scope === "preSale" ? "售前" : "售后",
+        `适用:${rule.applicableWhen.join("；")}`,
+        `违规:${rule.triggerWhen.join("；")}`,
+        `排除:${rule.exclusions.join("；") || "无"}`,
+        `证据:${rule.requiredEvidence.join("；")}`,
+        `缺失:${rule.missingDataOutcome}`,
+      ].join("|")).join("\n"),
     `统一截图事实：${JSON.stringify(input.screenshotFacts)}`,
     `辅助字段：${JSON.stringify(receptionAiSourceFields(input.sourceFields))}`,
     "售前会话的售后问题数组必须为空；售后会话的售前问题数组必须为空；混合会话可分别输出。",

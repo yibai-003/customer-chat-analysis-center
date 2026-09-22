@@ -4,6 +4,7 @@ import { analyzeRecordFields } from "../field-analysis-service";
 import { createStructuredAnalysisHandler, createStructuredDeriveHandler, type StructuredFieldDefinition } from "./structured";
 import { registerFieldExecutionHandler } from "./registry";
 import "./index";
+import { ensureSectionConfigV1 } from "../../db/migrations/018-section-config-versions";
 
 vi.mock("../model-pool-service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../model-pool-service")>();
@@ -121,6 +122,7 @@ describe("structured field abstraction probe", () => {
       "probe-evidence", "探针依据", "探针依据", "string", "",
       '["探针归因"]', 2, "probe_structured_derive", timestamp, timestamp,
     );
+    ensureSectionConfigV1(db);
   });
 
   it("runs a new structured board without touching the scheduler or registry", async () => {

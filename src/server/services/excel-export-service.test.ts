@@ -5,9 +5,20 @@ import ExcelJS from "exceljs";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { db, initDb } from "../db/client";
 import { config } from "../config";
+import {
+  addRecords,
+  createJob,
+  listRecords,
+  upsertSection,
+} from "../db/repositories";
 import { buildOutputPlan } from "./excel-template-service";
 import { exportColumns, exportJob } from "./excel-export-service";
 import { createFieldRun } from "./field-run-service";
+import { upsertField } from "./field-config-service";
+import {
+  createDraftVersion,
+  publishSectionVersion,
+} from "./section-config-version-service";
 
 function worksheetValues(workbook: ExcelJS.Workbook, sheetName: string) {
   const sheet = workbook.getWorksheet(sheetName)!;
@@ -380,5 +391,64 @@ describe("Excel export columns", () => {
     ])).toEqual([
       { key: "publicResult", column: 1, header: "公开结果" },
     ]);
+  });
+
+  it("exports historical jobs with their bound output mapping after live configuration changes", async () => {
+    const sectionId = "version-snapshot-export";
+    const sourcePath = path.join(os.tmpdir(), `version-snapshot-export-${Date.now()}.xlsx`);
+    generatedFiles.add(sourcePath);
+    const source = new ExcelJS.Workbook();
+    source.addWorksheet("Sheet1").addRows([["订单号"], ["V-1"]]);
+    await source.xlsx.writeFile(sourcePath);
+
+    upsertSection({ id: sectionId, name: "版本导出", prompt: "", sourceFields: [] });
+    const field = upsertField({
+      sectionId,
+      key: "result",
+      label: "结果",
+      type: "string",
+      prompt: "",
+      outputColumn: "V1结果列",
+      imageEnabled: false,
+    });
+    publishSectionVersion(createDraftVersion(sectionId).id);
+    const job = createJob("version.xlsx", sourcePath, { id: sectionId, name: "版本导出" });
+    addRecords(job.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 2,
+      anchor: {},
+      sourceFields: { 订单号: "V-1" },
+      imagePath: "",
+    }]);
+    const record = listRecords(job.id)[0]!;
+    createFieldRun({
+      recordId: record.id,
+      fieldId: field.id,
+      status: "completed",
+      result: { result: "历史结果" },
+      fieldSnapshot: field,
+    });
+
+    upsertField({
+      id: field.id,
+      sectionId,
+      key: "result",
+      label: "结果",
+      type: "string",
+      prompt: "",
+      outputColumn: "V2结果列",
+      imageEnabled: false,
+    });
+    publishSectionVersion(createDraftVersion(sectionId).id);
+    db.prepare("DELETE FROM analysis_fields WHERE id = ?").run(field.id);
+
+    const outputPath = await exportJob(job.id, [sectionId]);
+    generatedFiles.add(outputPath);
+    const exported = new ExcelJS.Workbook();
+    await exported.xlsx.readFile(outputPath);
+    const { headers, cells } = worksheetValues(exported, "Sheet1");
+    expect(headers).toContain("V1结果列");
+    expect(headers).not.toContain("V2结果列");
+    expect(cells["V1结果列"]).toBe("历史结果");
   });
 });

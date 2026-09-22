@@ -65,7 +65,17 @@ describe("job repository", () => {
 
     expect(published.isCurrent).toBe(true);
     expect(second.sectionConfigVersionId).toBe(published.id);
+    updateJobSection(first.id, { id: sectionId, name: "任务版本绑定" });
     expect(getJob(first.id)?.sectionConfigVersionId).toBe(first.sectionConfigVersionId);
+  });
+
+  it("rejects section-bound jobs when no published current version exists", () => {
+    const sectionId = "job-version-required";
+    upsertSection({ id: sectionId, name: "缺少版本", prompt: "" });
+    expect(() => createJob("missing-version.xlsx", "missing-version.xlsx", {
+      id: sectionId,
+      name: "缺少版本",
+    })).toThrow("没有当前启用的已发布配置版本");
   });
 
   it("can bind a legacy unbound job on first analysis", () => {

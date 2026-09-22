@@ -5,11 +5,16 @@ import { createFieldRun } from "../field-run-service";
 import { callModelPool } from "../model-pool-service";
 import { dependencyValues, failedRouteSnapshot, routedModelSnapshot } from "./support";
 import { type FieldExecutionHandler } from "./registry";
-import type { AnalysisExecutionType, AnalysisField } from "../../../shared/types";
+import type {
+  AnalysisExecutionType,
+  AnalysisField,
+  SectionConfigVersion,
+} from "../../../shared/types";
 
 export interface StructuredInput {
   recordId: string;
   field: AnalysisField;
+  configVersion: SectionConfigVersion;
   dependencies: Record<string, unknown>;
   sourceFields: Record<string, string>;
 }
@@ -32,6 +37,7 @@ export interface StructuredFieldDefinition<TSource = unknown, TParsed = unknown>
     fieldId: string;
     parsed: TParsed;
     knowledgeSyncEnabled: boolean;
+    configVersion: SectionConfigVersion;
   }): void;
 }
 
@@ -50,10 +56,11 @@ export function createStructuredAnalysisHandler<TSource, TParsed>(
 ): FieldExecutionHandler {
   return {
     type,
-    async run({ recordId, field, record, context }) {
+    async run({ recordId, field, configVersion, record, context }) {
       const input: StructuredInput = {
         recordId,
         field,
+        configVersion,
         dependencies: dependencyValues(field, record.sourceFields, context),
         sourceFields: record.sourceFields,
       };
@@ -105,6 +112,7 @@ export function createStructuredAnalysisHandler<TSource, TParsed>(
             fieldId: field.id,
             parsed,
             knowledgeSyncEnabled: Boolean(field.knowledgeSyncEnabled),
+            configVersion,
           });
           return created;
         })();
@@ -138,10 +146,11 @@ export function createStructuredDeriveHandler<TSource, TParsed>(
 ): FieldExecutionHandler {
   return {
     type,
-    async run({ recordId, field, record, context }) {
+    async run({ recordId, field, configVersion, record, context }) {
       const input: StructuredInput = {
         recordId,
         field,
+        configVersion,
         dependencies: dependencyValues(field, record.sourceFields, context),
         sourceFields: record.sourceFields,
       };

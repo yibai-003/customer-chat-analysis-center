@@ -70,7 +70,11 @@ export function mergeSectionSourceFields(sectionId: string, headers: string[]) {
     .run(id, input.parentId ?? null, input.name, input.prompt, json(input.outputSchema ?? []), json(input.sourceFields ?? []), input.sortOrder ?? 0, enabled ? 1 : 0, input.imageEnabled === false ? 0 : 1, timestamp, timestamp);
   return getSection(id);
 }
-export function deleteSection(id: string) { db.prepare("DELETE FROM analysis_sections WHERE id = ?").run(id); }
+export function deleteSection(id: string) {
+  const version = db.prepare("SELECT 1 FROM analysis_section_versions WHERE section_id = ? LIMIT 1").get(id);
+  if (version) throw new Error("存在配置版本的板块不能删除");
+  db.prepare("DELETE FROM analysis_sections WHERE id = ?").run(id);
+}
 
 export function createJob(filename: string, sourcePath: string, section?: { id: string; name: string }): Job {
   const id = crypto.randomUUID(), timestamp = now();
@@ -78,8 +82,9 @@ export function createJob(filename: string, sourcePath: string, section?: { id: 
     ? (db.prepare(`
         SELECT id FROM analysis_section_versions
         WHERE section_id = ? AND status = 'published' AND is_current = 1
-      `).get(section.id) as { id: string } | undefined)?.id ?? null
+      `).get(section.id) as { id: string } | undefined)?.id
     : null;
+  if (section && !versionId) throw new Error("解析板块没有当前启用的已发布配置版本");
   db.prepare(`INSERT INTO jobs
     (id,original_filename,source_path,section_id,section_name,section_config_version_id,status,total_records,completed_records,failed_records,created_at,updated_at)
     VALUES (?,?,?,?,?,?, 'ready',0,0,0,?,?)`).run(
@@ -132,7 +137,16 @@ export function listImportJobs(status?: ImportJobStatus) {
 }
 function liveJobCounts(jobId: string, sectionId: string | null) {
   const p = getAnalysisProgressBaseline(jobId, sectionId ?? "");
-  const fieldCount = db.prepare("SELECT COUNT(*) n FROM analysis_fields WHERE section_id=? AND is_enabled=1").get(sectionId ?? "").n as number;
+  const version = db.prepare(`
+    SELECT v.fields_snapshot_json
+    FROM jobs j
+    JOIN analysis_section_versions v ON v.id = j.section_config_version_id
+    WHERE j.id = ?
+  `).get(jobId) as { fields_snapshot_json: string } | undefined;
+  const fieldCount = version
+    ? (JSON.parse(version.fields_snapshot_json || "[]") as Array<{ isEnabled?: boolean }>)
+      .filter((field) => field.isEnabled !== false).length
+    : db.prepare("SELECT COUNT(*) n FROM analysis_fields WHERE section_id=? AND is_enabled=1").get(sectionId ?? "").n as number;
   return { totalRecords: p.total, completedRecords: p.completed, failedRecords: p.failed,
     totalFields: p.total * fieldCount,
     pendingRecords: p.pending, processingRecords: p.processing, needsReviewRecords: p.needsReview,
@@ -196,12 +210,26 @@ export function touchJobRun(jobId: string, token: string) {
 }
 export function updateJobSection(jobId: string, section: { id: string; name: string }) {
   assertRunOwnership(jobId);
+  const current = db.prepare(`
+    SELECT section_id, section_config_version_id
+    FROM jobs WHERE id = ?
+  `).get(jobId) as { section_id: string | null; section_config_version_id: string | null } | undefined;
+  if (!current) throw new Error("任务不存在");
+  if (current.section_id && current.section_id !== section.id) {
+    throw new Error("任务已绑定其他解析板块");
+  }
+  if (current.section_config_version_id) return;
   const versionId = (db.prepare(`
     SELECT id FROM analysis_section_versions
     WHERE section_id = ? AND status = 'published' AND is_current = 1
-  `).get(section.id) as { id: string } | undefined)?.id ?? null;
-  db.prepare("UPDATE jobs SET section_id = ?, section_name = ?, section_config_version_id = ?, updated_at = ? WHERE id = ?")
-    .run(section.id, section.name, versionId, now(), jobId);
+  `).get(section.id) as { id: string } | undefined)?.id;
+  if (!versionId) throw new Error("解析板块没有当前启用的已发布配置版本");
+  const result = db.prepare(`UPDATE jobs
+    SET section_id = ?, section_name = ?, section_config_version_id = ?, updated_at = ?
+    WHERE id = ? AND section_config_version_id IS NULL
+      AND (section_id IS NULL OR section_id = ?)`)
+    .run(section.id, section.name, versionId, now(), jobId, section.id);
+  if (result.changes !== 1) throw new Error("任务配置版本绑定失败");
 }
 export function updateJobSourcePath(jobId: string, sourcePath: string) {
   db.prepare("UPDATE jobs SET source_path = ?, updated_at = ? WHERE id = ?").run(sourcePath, now(), jobId);

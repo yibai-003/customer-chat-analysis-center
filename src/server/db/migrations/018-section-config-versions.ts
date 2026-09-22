@@ -104,6 +104,95 @@ function buildSnapshot(db: any, section: any) {
   };
 }
 
+function detachFieldRunsFromLiveFields(db: any) {
+  const foreignKeys = db.prepare("PRAGMA foreign_key_list(analysis_field_runs)").all() as Array<{ table: string }>;
+  if (!foreignKeys.some((foreignKey) => foreignKey.table === "analysis_fields")) return;
+  db.exec(`
+    ALTER TABLE analysis_field_runs RENAME TO analysis_field_runs_before_v18;
+    CREATE TABLE analysis_field_runs (
+      id TEXT PRIMARY KEY, record_id TEXT NOT NULL, field_id TEXT NOT NULL,
+      status TEXT NOT NULL, result_json TEXT NOT NULL, dependencies_json TEXT NOT NULL,
+      evidence_text TEXT,
+      prompt_snapshot TEXT NOT NULL, field_snapshot_json TEXT NOT NULL,
+      model_config_snapshot_json TEXT NOT NULL, raw_response TEXT, error_message TEXT,
+      duration_ms INTEGER, input_tokens INTEGER, output_tokens INTEGER, created_at TEXT NOT NULL,
+      FOREIGN KEY(record_id) REFERENCES records(id) ON DELETE CASCADE
+    );
+    INSERT INTO analysis_field_runs (
+      id, record_id, field_id, status, result_json, dependencies_json, evidence_text,
+      prompt_snapshot, field_snapshot_json, model_config_snapshot_json, raw_response,
+      error_message, duration_ms, input_tokens, output_tokens, created_at
+    )
+    SELECT
+      id, record_id, field_id, status, result_json, dependencies_json, evidence_text,
+      prompt_snapshot, field_snapshot_json, model_config_snapshot_json, raw_response,
+      error_message, duration_ms, input_tokens, output_tokens, created_at
+    FROM analysis_field_runs_before_v18;
+    DROP TABLE analysis_field_runs_before_v18;
+    CREATE INDEX IF NOT EXISTS idx_field_runs_created_at ON analysis_field_runs(created_at);
+    CREATE INDEX IF NOT EXISTS idx_field_runs_record_id ON analysis_field_runs(record_id);
+    CREATE INDEX IF NOT EXISTS idx_field_runs_field_created ON analysis_field_runs(field_id, created_at);
+  `);
+}
+
+function detachOtherExecutionHistoryFromLiveFields(db: any) {
+  const referencesFields = (table: string) => (
+    db.prepare(`PRAGMA foreign_key_list(${table})`).all() as Array<{ table: string }>
+  ).some((foreignKey) => foreignKey.table === "analysis_fields");
+
+  if (referencesFields("knowledge_match_snapshots")) {
+    db.exec(`
+      ALTER TABLE knowledge_match_snapshots RENAME TO knowledge_match_snapshots_before_v18;
+      CREATE TABLE knowledge_match_snapshots (
+        id TEXT PRIMARY KEY, record_id TEXT NOT NULL, field_id TEXT NOT NULL,
+        knowledge_base_id TEXT NOT NULL, knowledge_item_id TEXT NOT NULL,
+        item_values_json TEXT NOT NULL, candidate_snapshot_json TEXT NOT NULL,
+        query_snapshot TEXT NOT NULL, model_response TEXT, created_at TEXT NOT NULL,
+        FOREIGN KEY(record_id) REFERENCES records(id) ON DELETE CASCADE
+      );
+      INSERT INTO knowledge_match_snapshots
+      SELECT * FROM knowledge_match_snapshots_before_v18;
+      DROP TABLE knowledge_match_snapshots_before_v18;
+    `);
+  }
+  if (referencesFields("hot_topic_record_questions")) {
+    db.exec(`
+      ALTER TABLE hot_topic_record_questions RENAME TO hot_topic_record_questions_before_v18;
+      CREATE TABLE hot_topic_record_questions (
+        record_id TEXT NOT NULL, field_id TEXT NOT NULL, knowledge_item_id TEXT NOT NULL,
+        question TEXT NOT NULL, evidence TEXT NOT NULL, origin TEXT NOT NULL,
+        PRIMARY KEY(record_id, field_id, knowledge_item_id),
+        FOREIGN KEY(record_id) REFERENCES records(id) ON DELETE CASCADE
+      );
+      INSERT INTO hot_topic_record_questions
+      SELECT * FROM hot_topic_record_questions_before_v18;
+      DROP TABLE hot_topic_record_questions_before_v18;
+      CREATE INDEX IF NOT EXISTS idx_hot_topic_questions_item
+        ON hot_topic_record_questions(knowledge_item_id);
+    `);
+  }
+  if (referencesFields("lost_deal_record_reasons")) {
+    db.exec(`
+      ALTER TABLE lost_deal_record_reasons RENAME TO lost_deal_record_reasons_before_v18;
+      CREATE TABLE lost_deal_record_reasons (
+        record_id TEXT NOT NULL,
+        field_id TEXT NOT NULL,
+        knowledge_item_id TEXT NOT NULL,
+        reason_type TEXT NOT NULL CHECK(reason_type IN ('customer','service')),
+        reason_name TEXT NOT NULL,
+        evidence TEXT NOT NULL,
+        PRIMARY KEY(record_id, field_id, knowledge_item_id),
+        FOREIGN KEY(record_id) REFERENCES records(id) ON DELETE CASCADE
+      );
+      INSERT INTO lost_deal_record_reasons
+      SELECT * FROM lost_deal_record_reasons_before_v18;
+      DROP TABLE lost_deal_record_reasons_before_v18;
+      CREATE INDEX IF NOT EXISTS idx_lost_deal_reasons_item
+        ON lost_deal_record_reasons(knowledge_item_id);
+    `);
+  }
+}
+
 export function ensureSectionConfigV1(db: any): SectionConfigV1MigrationReport {
   const sections = db.prepare("SELECT * FROM analysis_sections ORDER BY id").all() as any[];
   const insertVersion = db.prepare(`INSERT OR IGNORE INTO analysis_section_versions
@@ -213,12 +302,34 @@ export function applySectionConfigVersions(db: any) {
           OR OLD.created_at IS NOT NEW.created_at
         )
       BEGIN SELECT RAISE(ABORT, '已发布配置版本内容不可修改'); END;
+    CREATE TRIGGER IF NOT EXISTS section_versions_no_draft_downgrade
+      BEFORE UPDATE OF status ON analysis_section_versions
+      WHEN OLD.status IN ('published', 'archived') AND NEW.status = 'draft'
+      BEGIN SELECT RAISE(ABORT, '已发布配置版本不能降级为草稿'); END;
+    CREATE TRIGGER IF NOT EXISTS section_versions_current_must_be_published_insert
+      BEFORE INSERT ON analysis_section_versions
+      WHEN NEW.is_current = 1 AND NEW.status != 'published'
+      BEGIN SELECT RAISE(ABORT, '当前启用版本必须为已发布状态'); END;
+    CREATE TRIGGER IF NOT EXISTS section_versions_current_must_be_published_update
+      BEFORE UPDATE OF status, is_current ON analysis_section_versions
+      WHEN NEW.is_current = 1 AND NEW.status != 'published'
+        AND NOT (OLD.status IN ('published', 'archived') AND NEW.status = 'draft')
+      BEGIN SELECT RAISE(ABORT, '当前启用版本必须为已发布状态'); END;
     CREATE TRIGGER IF NOT EXISTS section_versions_immutable_delete
       BEFORE DELETE ON analysis_section_versions
       WHEN OLD.status IN ('published', 'archived')
       BEGIN SELECT RAISE(ABORT, '已发布配置版本不可删除'); END;
+    CREATE TRIGGER IF NOT EXISTS section_versions_restrict_section_delete
+      BEFORE DELETE ON analysis_sections
+      WHEN EXISTS (
+        SELECT 1 FROM analysis_section_versions versions
+        WHERE versions.section_id = OLD.id
+      )
+      BEGIN SELECT RAISE(ABORT, '存在配置版本的板块不能删除'); END;
   `);
 
+  detachFieldRunsFromLiveFields(db);
+  detachOtherExecutionHistoryFromLiveFields(db);
   const jobColumns = db.prepare("PRAGMA table_info(jobs)").all() as Array<{ name: string }>;
   if (!jobColumns.some((column) => column.name === "section_config_version_id")) {
     db.exec("ALTER TABLE jobs ADD COLUMN section_config_version_id TEXT REFERENCES analysis_section_versions(id)");

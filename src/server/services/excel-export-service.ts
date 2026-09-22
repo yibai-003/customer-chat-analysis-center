@@ -4,8 +4,10 @@ import { getJob, listRecords, getRecord, listSections } from "../db/repositories
 import { db } from "../db/client";
 import { config } from "../config";
 import { listFields } from "./field-config-service";
-import { aggregateFieldResults } from "./field-run-service";
+import { aggregateFieldResultsForFields } from "./field-run-service";
 import { buildOutputPlan, normalizeExcelHeader } from "./excel-template-service";
+import { getJobSectionConfigVersion } from "./section-config-version-service";
+import type { AnalysisField, AnalysisSection } from "../../shared/types";
 
 export function exportColumns(sections: ReturnType<typeof listSections>) {
   return sections.flatMap((section) => listFields(section.id)
@@ -23,17 +25,34 @@ export async function exportJob(jobId: string, sectionIds: string[]) {
   const sourcePath = (db.prepare("SELECT source_path FROM jobs WHERE id = ?").get(jobId) as { source_path: string } | undefined)?.source_path;
   if (!sourcePath) throw new Error("原始工作簿不存在");
   await workbook.xlsx.readFile(sourcePath);
+  const boundVersion = getJobSectionConfigVersion(jobId);
   const sections = listSections().filter((section) => sectionIds.includes(section.id));
+  if (boundVersion && sectionIds.includes(boundVersion.sectionId)
+    && !sections.some((section) => section.id === boundVersion.sectionId)) {
+    sections.push(boundVersion.sectionSnapshot);
+  }
   for (const worksheet of workbook.worksheets) {
     const records = listRecords(jobId).filter((record) => record.sheetName === worksheet.name);
     if (!records.length) continue;
     const headerRow = worksheet.getRow(1);
     const sourceHeaders = Array.from({ length: headerRow.cellCount }, (_, index) =>
       normalizeExcelHeader(headerRow.getCell(index + 1).value));
-    const plans: Array<{ section: typeof sections[number]; fields: ReturnType<typeof listFields>; output: ReturnType<typeof buildOutputPlan> }> = [];
+    const plans: Array<{
+      section: AnalysisSection;
+      fields: AnalysisField[];
+      output: ReturnType<typeof buildOutputPlan>;
+    }> = [];
     let headers = sourceHeaders.slice();
     for (const section of sections) {
-      const fields = listFields(section.id).filter((field) => field.exportEnabled !== false);
+      const fields = boundVersion?.sectionId === section.id
+        ? boundVersion.fieldsSnapshot
+          .filter((field) => boundVersion.exportSettings.outputColumns.some((column) => column.key === field.key))
+          .map((field) => ({
+            ...field,
+            outputColumn: boundVersion.exportSettings.outputColumns
+              .find((column) => column.key === field.key)?.outputColumn ?? field.outputColumn,
+          }))
+        : listFields(section.id).filter((field) => field.exportEnabled !== false);
       const output = buildOutputPlan(headers, fields);
       output.forEach((item) => { headers[item.column - 1] = item.header; });
       plans.push({ section, fields, output });
@@ -50,7 +69,7 @@ export async function exportJob(jobId: string, sectionIds: string[]) {
       for (const plan of plans) {
         const { section, fields, output } = plan;
         const run = detail.analysisRuns.find((item) => item.sectionId === section.id);
-        const fieldResult = aggregateFieldResults(record.id, section.id);
+        const fieldResult = aggregateFieldResultsForFields(record.id, fields);
         const sectionReview = detail.sectionReviews?.[section.id];
         const result = sectionReview?.humanResult ?? detail.humanResult ?? (Object.keys(fieldResult).length ? fieldResult : run?.result ?? {});
         for (const field of fields) {

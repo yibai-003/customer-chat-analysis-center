@@ -8,6 +8,11 @@ import type {
   SectionConfigVersionPatch,
   SectionConfigVersionStatus,
 } from "../../shared/types";
+import {
+  parseConfiguration,
+  receptionBusinessRulesInput,
+  sectionConfigVersionPatchInput,
+} from "../security/configuration-input";
 import { sectionBusinessRules } from "./section-business-rules";
 
 const now = () => new Date().toISOString();
@@ -124,6 +129,93 @@ function mapVersion(row: any): SectionConfigVersion {
   };
 }
 
+function assertNoRuntimeState(value: unknown, path = "version"): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertNoRuntimeState(item, `${path}.${index}`));
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, child] of Object.entries(value)) {
+    const normalized = key.replace(/[-_\s]/g, "").toLowerCase();
+    if (/(?:apikey|credential|secret|quota|cooldown|health|providerconfig|modelconfig|consecutivefailures)/.test(normalized)) {
+      throw new Error(`业务版本快照禁止包含模型运行态字段：${path}.${key}`);
+    }
+    assertNoRuntimeState(child, `${path}.${key}`);
+  }
+}
+
+function validateVersionSnapshot(version: Pick<
+  SectionConfigVersion,
+  "sectionId" | "sectionSnapshot" | "fieldsSnapshot" | "exportSettings" | "dependenciesSnapshot" | "knowledgeSnapshot" | "businessRules"
+>): void {
+  const { sectionSnapshot, fieldsSnapshot, exportSettings, dependenciesSnapshot, knowledgeSnapshot, businessRules } = version;
+  if (sectionSnapshot.id !== version.sectionId) throw new Error("版本板块 ID 与所属板块不一致");
+  const fieldIds = new Set<string>();
+  const fieldKeys = new Set<string>();
+  for (const field of fieldsSnapshot) {
+    if (field.sectionId !== version.sectionId) throw new Error(`字段不属于当前板块：${field.key}`);
+    if (fieldIds.has(field.id)) throw new Error(`字段 ID 重复：${field.id}`);
+    if (fieldKeys.has(field.key)) throw new Error(`字段 Key 重复：${field.key}`);
+    fieldIds.add(field.id);
+    fieldKeys.add(field.key);
+  }
+  const allowedDependencies = new Set([...fieldKeys, ...(sectionSnapshot.sourceFields ?? [])]);
+  for (const field of fieldsSnapshot) {
+    if (field.dependsOn.includes(field.key)) throw new Error(`字段不能依赖自身：${field.key}`);
+    for (const dependency of field.dependsOn) {
+      if (!allowedDependencies.has(dependency)) throw new Error(`依赖字段不存在：${field.key} -> ${dependency}`);
+    }
+  }
+  const byKey = new Map(fieldsSnapshot.map((field) => [field.key, field]));
+  const visiting = new Set<string>();
+  const visited = new Set<string>();
+  const visit = (key: string) => {
+    if (visited.has(key)) return;
+    if (visiting.has(key)) throw new Error(`循环依赖：${key}`);
+    visiting.add(key);
+    for (const dependency of byKey.get(key)?.dependsOn ?? []) if (byKey.has(dependency)) visit(dependency);
+    visiting.delete(key);
+    visited.add(key);
+  };
+  for (const key of fieldKeys) visit(key);
+
+  const dependencyMap = new Map(dependenciesSnapshot.map((item) => [item.key, item.dependsOn]));
+  for (const field of fieldsSnapshot) {
+    if (JSON.stringify(dependencyMap.get(field.key) ?? []) !== JSON.stringify(field.dependsOn)) {
+      throw new Error(`字段依赖快照不一致：${field.key}`);
+    }
+  }
+  if (dependencyMap.size !== fieldsSnapshot.length) throw new Error("字段依赖快照存在重复或多余项目");
+  const exportKeys = new Set(exportSettings.outputColumns.map((item) => item.key));
+  if (exportKeys.size !== exportSettings.outputColumns.length) throw new Error("导出字段 Key 重复");
+  for (const key of exportKeys) if (!fieldKeys.has(key)) throw new Error(`导出字段不存在：${key}`);
+
+  const knowledgeIds = new Set(knowledgeSnapshot.map((item) => String(item.id ?? "")));
+  for (const field of fieldsSnapshot) {
+    if (field.executionType === "knowledge_match" && (!field.knowledgeBaseId || !knowledgeIds.has(field.knowledgeBaseId))) {
+      throw new Error(`知识匹配字段知识库无效：${field.key}`);
+    }
+    if (field.executionType === "knowledge_extract") {
+      const match = field.matchFieldKey ? byKey.get(field.matchFieldKey) : undefined;
+      if (!match || match.executionType !== "knowledge_match" || !field.knowledgeColumn) {
+        throw new Error(`知识提取字段配置不完整：${field.key}`);
+      }
+    }
+  }
+
+  if (version.sectionId === "reception" || businessRules.kind === "reception_quality") {
+    const checked = parseConfiguration(receptionBusinessRulesInput, businessRules);
+    const grades = new Set(checked.gradeThresholds.map((item) => item.grade));
+    for (const grade of ["A", "B", "C", "D"] as const) {
+      if (!grades.has(grade)) throw new Error(`接待质检缺少 ${grade} 级阈值`);
+    }
+    if (new Set(checked.issues.map((item) => item.id)).size !== checked.issues.length) {
+      throw new Error("接待质检问题 ID 重复");
+    }
+  }
+  assertNoRuntimeState(version);
+}
+
 export function listSectionVersions(sectionId: string): SectionConfigVersion[] {
   return (db.prepare(`
     SELECT * FROM analysis_section_versions
@@ -134,6 +226,16 @@ export function listSectionVersions(sectionId: string): SectionConfigVersion[] {
 
 export function getSectionVersion(id: string): SectionConfigVersion | undefined {
   const row = db.prepare("SELECT * FROM analysis_section_versions WHERE id = ?").get(id) as any;
+  return row ? mapVersion(row) : undefined;
+}
+
+export function getJobSectionConfigVersion(jobId: string): SectionConfigVersion | undefined {
+  const row = db.prepare(`
+    SELECT v.*
+    FROM jobs j
+    JOIN analysis_section_versions v ON v.id = j.section_config_version_id
+    WHERE j.id = ?
+  `).get(jobId) as any;
   return row ? mapVersion(row) : undefined;
 }
 
@@ -171,6 +273,7 @@ export function publishSectionVersion(id: string): SectionConfigVersion {
     const version = getSectionVersion(id);
     if (!version) throw new Error("配置版本不存在");
     if (version.status !== "draft") throw new Error("只有草稿版本可以发布");
+    validateVersionSnapshot(version);
     const timestamp = now();
     db.prepare("UPDATE analysis_section_versions SET is_current = 0, updated_at = ? WHERE section_id = ? AND is_current = 1")
       .run(timestamp, version.sectionId);
@@ -186,13 +289,29 @@ export function updateDraftSectionVersion(id: string, patch: SectionConfigVersio
     const version = getSectionVersion(id);
     if (!version) throw new Error("配置版本不存在");
     if (version.status !== "draft") throw new Error("只有草稿版本可以编辑");
+    patch = parseConfiguration(sectionConfigVersionPatchInput, patch) as SectionConfigVersionPatch;
     const timestamp = now();
-    const sectionSnapshot = { ...version.sectionSnapshot, ...patch.sectionSnapshot };
+    const sectionSnapshot = { ...version.sectionSnapshot, ...patch.sectionSnapshot, id: version.sectionId };
     const fieldsSnapshot = patch.fieldsSnapshot ?? version.fieldsSnapshot;
-    const exportSettings = patch.exportSettings ?? version.exportSettings;
-    const dependenciesSnapshot = patch.dependenciesSnapshot ?? version.dependenciesSnapshot;
+    const exportSettings = patch.exportSettings ?? (patch.fieldsSnapshot ? {
+      outputColumns: fieldsSnapshot
+        .filter((field) => field.exportEnabled)
+        .map((field) => ({ key: field.key, outputColumn: field.outputColumn ?? null })),
+    } : version.exportSettings);
+    const dependenciesSnapshot = patch.dependenciesSnapshot ?? (patch.fieldsSnapshot
+      ? fieldsSnapshot.map((field) => ({ key: field.key, dependsOn: field.dependsOn }))
+      : version.dependenciesSnapshot);
     const knowledgeSnapshot = patch.knowledgeSnapshot ?? version.knowledgeSnapshot;
     const businessRules = patch.businessRules ?? version.businessRules;
+    validateVersionSnapshot({
+      sectionId: version.sectionId,
+      sectionSnapshot,
+      fieldsSnapshot,
+      exportSettings,
+      dependenciesSnapshot,
+      knowledgeSnapshot,
+      businessRules,
+    });
     db.prepare(`UPDATE analysis_section_versions
       SET section_snapshot_json = ?, fields_snapshot_json = ?, export_settings_json = ?,
           dependencies_snapshot_json = ?, knowledge_snapshot_json = ?, business_rules_json = ?,
