@@ -1,8 +1,8 @@
 # 01：全板块配置版本生命周期与 V1 迁移
 
-**Status:** in-review  
-**Priority:** high  
-**Risk:** high  
+**Status:** in-review
+**Priority:** high
+**Risk:** high
 
 ## What to build
 
