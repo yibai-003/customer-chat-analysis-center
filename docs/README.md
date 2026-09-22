@@ -1,87 +1,92 @@
-# 文档索引
+# 文档中心
 
-本目录只保留索引、活跃计划与长期流程；长期指南在 `guides/`，一次性实施与验收记录在 `archive/`，历史设计在 `superpowers/`。
+本页是项目文档的唯一总入口。请先按角色选择文档，不需要从目录中逐份查找。
 
-## 主题索引
+## 快速入口
 
-### 启动
-- [本地访问与启动配置](guides/local-access-and-startup.md)
-- [官方源可复现安装](guides/reproducible-installation.md)
+| 使用者 | 建议从这里开始 |
+| --- | --- |
+| 局域网普通用户 | [局域网其他电脑访问使用手册](guides/lan-client-access.md) |
+| 部署与运维管理员 | [局域网部署与单实例运行](guides/lan-deployment.md) |
+| 日常系统管理员 | [局域网运维手册](guides/lan-operations.md) |
+| 项目开发者 | [项目目录结构与后续开发规范](project-structure-and-development-guidelines.md) |
+| 正式验收人员 | [局域网现场验收执行手册](guides/lan-acceptance-runbook.md) |
 
-### 局域网部署与运维
+## 普通用户
+
+- [局域网其他电脑访问使用手册](guides/lan-client-access.md)：安装根证书、配置
+  `hosts`、检查端口并登录。
+- [热点话题：问题提炼与知识积累](guides/hot-topic-knowledge-capture.md)：维护热点问题与知识条目。
+
+普通用户不需要阅读部署脚本、历史计划、验收证据或开发设计。
+
+## 部署与运维管理员
+
+### 部署和访问
+
 - [局域网部署与单实例运行](guides/lan-deployment.md)
-- [局域网其他电脑访问使用手册](guides/lan-client-access.md)
+- [本地访问防护与启动配置](guides/local-access-and-startup.md)
+- [官方依赖源与可复现安装](guides/reproducible-installation.md)
+
+### 日常运行
+
 - [局域网运维手册](guides/lan-operations.md)
-- [局域网现场验收执行手册](guides/lan-acceptance-runbook.md)
-
-### CI
-- [CI 质量闸门与发布工件](guides/ci-quality-gates.md)
-
-### 配置
-- [服务端输入约束](guides/server-input-validation.md)
-- [大文件 Excel 导入处理流程](guides/large-file-processing-flow.md)
-
-### 同步
-- [知识快照同步失败恢复](guides/knowledge-sync-recovery.md)
-- [热点话题：补全问题与知识沉淀](guides/hot-topic-knowledge-capture.md)
-
-### 迁移
+- [完整备份与恢复](guides/backup-and-recovery.md)
+- [独立加密密钥与旧数据迁移](guides/encryption-key-management.md)
 - [数据库迁移与进程恢复](guides/database-migrations-and-recovery.md)
-
-### 备份
-- [备份与恢复指南](guides/backup-and-recovery.md)
-
-### 维护
 - [安全清理与日志轮换](guides/safe-maintenance-and-logs.md)
+- [知识快照同步失败恢复](guides/knowledge-sync-recovery.md)
 
-### 安全
+### 容量和安全
+
 - [Excel 上传安全与资源限制](guides/upload-safety.md)
-- [XLSX 资源关系校验](guides/xlsx-resource-validation.md)
 - [上传与导入共享磁盘预留](guides/shared-disk-reservations.md)
-- [加密密钥管理与迁移](guides/encryption-key-management.md)
+- [XLSX 资源与关系校验](guides/xlsx-resource-validation.md)
+- [大文件 Excel 处理流程](guides/large-file-processing-flow.md)
 
-### 模型池
-- [取消链路与模型请求预算](guides/cancellation-and-model-budget.md)
-- 免费模型池实施计划（`superpowers/plans/2026-09-16-model-pool.md`）
-- 免费模型池设计（`superpowers/specs/2026-09-16-model-pool-design.md`）
-
-## 项目规范
+## 开发者
 
 - [项目目录结构与后续开发规范](project-structure-and-development-guidelines.md)
+- [CI 质量闸门与发布工件](guides/ci-quality-gates.md)
+- [服务端输入约束](guides/server-input-validation.md)
+- [取消链路与模型请求总预算](guides/cancellation-and-model-budget.md)
+- [数据库迁移与进程恢复](guides/database-migrations-and-recovery.md)
+- [大文件 Excel 处理流程](guides/large-file-processing-flow.md)
 
-## 活跃计划与流程
-
-- [架构与结构性重复治理实施计划](architecture-remediation-plan-2026-09-17.md)
-- [架构治理进度账本](architecture-remediation-progress.md)
-- [项目稳定性开发流程](stability-development-workflow.md)
-- [模型池、批量选择与解析效能实施计划](operational-efficiency-implementation-plan-2026-09-17.md)
-- [模型池、批量选择与解析效能验收标准](operational-efficiency-acceptance-criteria-2026-09-17.md)
-
-## 架构决策
+架构决策：
 
 - [ADR-0001：局域网版采用单组织共享数据与角色授权](adr/0001-lan-single-organization-access-model.md)
 - [ADR-0002：模型供应商凭据集中管理](adr/0002-centralized-model-provider-credentials.md)
 
-## 归档
+## 正式验收
 
-一次性实施记录、已完成的修复清单与历史验证文档，保留备查：
+- [局域网现场验收执行手册](guides/lan-acceptance-runbook.md)
+- [CI 质量闸门与发布工件](guides/ci-quality-gates.md)
+- [局域网真实业务验收记录](archive/lan-real-business-acceptance-2026-09-18.md)
+- [局域网发布验收记录](archive/lan-release-acceptance-2026-09-17.md)
 
-- [定向稳定性与安全改进计划（2026-09-13）](archive/targeted-stability-remediation-plan.md)
-- [个人使用阶段方案与实施计划](archive/personal-use-implementation-plan.md)
-- [当前项目修复清单（2026-09-17）](archive/fix-plan-2026-09-17.md)
-- [后续推进计划（2026-09-17）](archive/follow-up-plan-2026-09-17.md)
-- [配置 Schema 与热点错误分类验证](archive/configuration-and-hot-topic-validation.md)
-- [依赖漏洞定向修复](archive/dependency-security-remediation.md)
-- [容器化备份与独立恢复演练（2026-09-17）](archive/lan-backup-restore-drill-2026-09-17.md)
-- [局域网发布验收记录（2026-09-17）](archive/lan-release-acceptance-2026-09-17.md)
-- [局域网真实业务验收记录（2026-09-18）](archive/lan-real-business-acceptance-2026-09-18.md)
-- [前端状态模块拆分记录](archive/frontend-state-modules.md)
-- [Task 8 实施报告](archive/task-8-report.md)
-- [Task 9 实施报告](archive/task-9-report.md)
-- [Task 10 迁移修复报告](archive/task-10-fix-migration-report.md)
-- [Task 10 就绪校验报告](archive/task-10-fix-readiness-report.md)
-- [Task 10 路由修复报告](archive/task-10-fix-routing-report.md)
+验收记录只说明特定日期和版本的结果，不能替代当前运行环境检查。
 
-## 文档约定
+## 历史与内部材料
 
-新增文档使用“目的 / 实施顺序 / 验收 / 回退”模板；一次性验收记录直接放入 `archive/`，不再新增流水账式报告。计划类文档在完成后移入 `archive/`，并从本索引更新链接。
+- [`archive/`](archive/README.md)：已经完成的实施计划、验收记录和修复报告。
+- [`superpowers/`](superpowers/README.md)：功能设计和实施计划，主要用于追溯决策。
+- [`.scratch/`](../.scratch/)：任务工单与现场过程材料，不是用户操作说明。
+- [`.superpowers/`](../.superpowers/)：代理执行过程记录，不是项目权威文档。
+
+遇到历史材料与当前指南冲突时，以以下顺序为准：
+
+1. 当前代码、配置模板和自动化测试；
+2. `docs/guides/` 当前有效指南；
+3. `docs/adr/` 架构决策；
+4. `docs/archive/`、`docs/superpowers/`、`.scratch/` 历史材料。
+
+## 文档维护规则
+
+- 长期有效的操作方法放入 `guides/`。
+- 架构约束和不可轻易改变的决策放入 `adr/`。
+- 已完成的计划、进度账本、一次性验收和修复报告放入 `archive/`。
+- 设计与实施计划放入 `superpowers/`，完成后不再作为日常入口。
+- 新增长期指南使用“目的 / 实施顺序 / 验收 / 回退”结构。
+- 不在 README 或多个指南中复制同一组完整操作步骤；保留一个权威说明，其余位置使用链接。
+- 含密码、Cookie、API Key、私钥、数据库或完整业务数据的内容不得写入文档和证据。

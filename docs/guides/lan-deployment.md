@@ -1,5 +1,9 @@
 # 局域网部署与单实例运行
 
+> **文档状态：** 当前有效
+> **适用对象：** 部署管理员
+> **维护基准：** 2026-09-22 内网 HTTPS 版本
+
 本指南对应 `.scratch/lan-single-organization-upgrade/issues/04-lan-image-and-single-instance-runtime.md`：把应用封装为可在固定局域网主机运行的生产镜像和声明式运行配置。账号、权限与审计属于后续单元；本单元只管运行层。
 
 ## 镜像契约
@@ -88,7 +92,7 @@ nginx 与应用在同一个 Compose 网络中，脚本使用本机生成的根 C
 - 启动应用与 nginx HTTPS 代理；
 - 将本机根 CA 和服务器证书生成到 `deploy/proxy-data/tls/`，并安装根证书到当前 Windows 用户的信任根；
 - 在本机 hosts 写入内网域名；
-- 仅对 `LAN_ALLOWED_CIDR` 放行 80/443 入站。
+- 仅对 `LAN_ALLOWED_CIDR` 放行本次配置的 HTTP/HTTPS 端口；默认是 `8080/8443`。
 - 将代理端口只绑定到指定的 `LanIp`，不监听 VMware、WSL 或其他本机接口。
 
 默认使用 `8080/8443`，避免与本机其他服务占用标准 `80/443`；入口为

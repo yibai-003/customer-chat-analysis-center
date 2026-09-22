@@ -22,7 +22,7 @@
 - CI：运行 [#35318943347](https://github.com/yibai-003/customer-chat-analysis-center/actions/runs/35318943347)，`Quality gates (clean checkout)` 与 `Release artifact` 均 success；artifact id `10536003885`（739,900 字节）。
 - 工件核验：`manifest.json` 的 version `0.1.0`、commit、runId、镜像标签 `customer-chat-analysis-center:0.1.0-ebc4946d0455`、CI 镜像 ID `sha256:63f119b1…` 与运行一致；源码包 218 个条目，无 `node_modules`、`.env`、密钥、数据库或业务 Excel。
 - 部署：同一提交本地重建镜像（本地 ID `sha256:08ec9a76…`，与 CI 构建环境不同、ID 不同）替换局域网容器 `lan-preview`；部署前已备份（`npm run backup` 成功），旧容器保留为 `lan-preview-previous`。部署后健康检查 healthy、管理员登录成功（11 项能力）、`/api/ready` 200、默认模型 `qwen3-vl-plus`/`qwen-plus`、任务 10 条记录与 91 条审计、原图哈希均不变。
-- 记录更新：`docs/archive/lan-release-acceptance-2026-09-17.md` 新增“发布候选同步与部署”，`docs/architecture-remediation-progress.md` 更新恢复入口与时间线，Issue 07/11/12 引用统一到 2026-09-18 事实。
+- 记录更新：`docs/archive/lan-release-acceptance-2026-09-17.md` 新增“发布候选同步与部署”，`docs/archive/architecture-remediation-progress.md` 更新恢复入口与时间线，Issue 07/11/12 引用统一到 2026-09-18 事实。
 
 **2026-09-21 当前提交复跑：**
 

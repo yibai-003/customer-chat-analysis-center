@@ -1,7 +1,7 @@
 # 效能实施进度账本
 
-**计划：** `docs/operational-efficiency-implementation-plan-2026-09-17.md`
-**验收：** `docs/operational-efficiency-acceptance-criteria-2026-09-17.md`
+**计划：** `docs/archive/operational-efficiency-implementation-plan-2026-09-17.md`
+**验收：** `docs/archive/operational-efficiency-acceptance-criteria-2026-09-17.md`
 
 ## 恢复入口
 

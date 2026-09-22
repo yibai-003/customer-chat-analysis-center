@@ -1,5 +1,9 @@
 # 局域网运维手册
 
+> **文档状态：** 当前有效
+> **适用对象：** 系统管理员
+> **维护基准：** 2026-09-22 内网版本
+
 本手册对应 `.scratch/lan-single-organization-upgrade/issues/06-backup-restore-tls-and-operations.md`，是固定局域网主机上的日常运行入口。部署细节见 [局域网部署与单实例运行](lan-deployment.md)，本文只给操作步骤与判断标准。
 
 所有命令默认在宿主机、仓库根目录或 `deploy/` 执行；容器命令使用固定容器名 `customer-chat-analysis`。备份、恢复与账号管理只允许管理员，操作会自动写入审计（见最后一节）。

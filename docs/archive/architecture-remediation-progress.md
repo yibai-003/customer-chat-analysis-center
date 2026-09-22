@@ -1,6 +1,6 @@
 # 架构治理进度账本
 
-**计划：** `docs/architecture-remediation-plan-2026-09-17.md`
+**计划：** `docs/archive/architecture-remediation-plan-2026-09-17.md`
 
 **最后更新：** 2026-09-18（T1–T8 全部完成并推送；局域网发布收口按 `.scratch/lan-release-closure` 工单 01–03 跟踪）
 
@@ -31,7 +31,7 @@
 
 按时间倒序追加，每条格式：日期 / 任务 / 事件 / 证据。
 
-- 2026-09-18 / 发布收口 / 模型池基线、真实业务验收与 CI 工件部署完成 / 桩模型与测试供应商停用并移出路由池，默认改为 `qwen3-vl-plus`/`qwen-plus`，`/api/ready` 200；第二台电脑导入 10 条记录并用千问真实模型解析（含失败→冷却→切换），导出 4 次成功；备份 + 独立恢复 5/5、容器重启持久化通过；CI 运行 [#35318943347](https://github.com/yibai-003/customer-chat-analysis-center/actions/runs/35318943347)（提交 `ebc4946d0455`）双作业 success，工件 manifest 与运行一致且无敏感文件；局域网容器已替换为同提交镜像并验证数据与模型池不变；详见 [局域网真实业务验收记录](archive/lan-real-business-acceptance-2026-09-18.md) 与 [发布验收记录](archive/lan-release-acceptance-2026-09-17.md)
+- 2026-09-18 / 发布收口 / 模型池基线、真实业务验收与 CI 工件部署完成 / 桩模型与测试供应商停用并移出路由池，默认改为 `qwen3-vl-plus`/`qwen-plus`，`/api/ready` 200；第二台电脑导入 10 条记录并用千问真实模型解析（含失败→冷却→切换），导出 4 次成功；备份 + 独立恢复 5/5、容器重启持久化通过；CI 运行 [#35318943347](https://github.com/yibai-003/customer-chat-analysis-center/actions/runs/35318943347)（提交 `ebc4946d0455`）双作业 success，工件 manifest 与运行一致且无敏感文件；局域网容器已替换为同提交镜像并验证数据与模型池不变；详见 [局域网真实业务验收记录](lan-real-business-acceptance-2026-09-18.md) 与 [发布验收记录](lan-release-acceptance-2026-09-17.md)
 - 2026-09-18 / T6+T8 / 工作区收尾推送 / `main` 与 `origin/main` 同步（此前“T6/T8 待提交”状态已过期）；本地质量闸门 `check:installation`、673 项测试、`typecheck`、`lint`、`build`、`db:check`、`smoke` 全部通过
 - 2026-09-17 / T6 / 完成静态 lint 闸门（oxlint）与收尾 / `npm run lint` 0 error、违规注入即报错退出 1；修复 `SectionConfigDialog` 条件 Hook；`npm run smoke` 保持 3 秒可复跑；全量 561 项、`typecheck`、`build`、`db:check` 通过
 - 2026-09-17 / T8 / 完成实例锁占用诊断 / `describePortOwner` 在 Windows 下解析占用进程名与 PID，冲突错误信息含端口与处置提示，锁语义与确定性端口不变；启动指南新增确认与处置步骤；新增 2 项测试；全量 561 项通过；`typecheck`、`build`、`db:check` 通过

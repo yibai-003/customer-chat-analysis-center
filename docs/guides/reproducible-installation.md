@@ -1,5 +1,9 @@
 # 官方依赖源与可复现安装
 
+> **文档状态：** 当前有效
+> **适用对象：** 开发者、构建管理员
+> **维护基准：** 2026-09-22 内网版本
+
 ## 本次修复
 
 旧锁文件的 481 个依赖下载地址指向固定 IP 源，用户级 npm 配置为 `strict-ssl=false`。仅修改 npm registry 不能改变这些已经写进锁文件的地址。
@@ -68,7 +72,7 @@ npm.cmd ping
 
 ## 依赖审计待办
 
-后续更新：下述初次审计的 7 项已在依赖安全单元中定向修复，当前 Vitest 4.1.11 / uuid 11.1.1 的全部与运行依赖审计均为 0；54 个文件、341 项测试通过。原始发现保留作为记录，详见 [依赖漏洞修复与验收](../archive/dependency-security-remediation.md)。当前 `npm ci` 安装 332 个本机适用包，运行测试使用 `npm test`，无需旧 `--minWorkers` 参数。
+历史更新（2026-09-13）：下述初次审计的 7 项已在依赖安全单元中定向修复，当时 Vitest 4.1.11 / uuid 11.1.1 的全部与运行依赖审计均为 0，54 个文件、341 项测试通过。原始发现保留作为记录，详见 [依赖漏洞修复与验收](../archive/dependency-security-remediation.md)。当前依赖数量、测试数量和审计结果以锁文件与 CI 为准；运行测试使用 `npm test`，无需旧 `--minWorkers` 参数。
 
 本次 `npm audit` 返回 7 项：5 moderate、1 high、1 critical。其中 `--omit=dev` 的运行依赖为 ExcelJS/uuid 链路 2 项 moderate；其余属于 Vitest 及其嵌套 Vite/esbuild/mocker/vite-node 工具链。原始报告保留在隔离目录 `audit-all.json`、`audit-production.json`。级别是 npm 审计结果，是否可利用仍需结合调用路径评估。
 
