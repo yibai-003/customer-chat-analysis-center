@@ -350,6 +350,10 @@ function hash(value: unknown) {
   return crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
+async function fileSha256(file: string) {
+  return crypto.createHash("sha256").update(await fs.readFile(file)).digest("hex");
+}
+
 async function assertOoxmlPackage(file: string) {
   const directory = await unzipper.Open.file(file);
   const entries = new Set(directory.files.map((entry) => entry.path));
@@ -371,8 +375,13 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
   let samplePath = "";
   let conflictPath = "";
   let exportedArtifactPath = "";
+  let sampleProvenance: "generated-synthetic" | "external-real" = "generated-synthetic";
+  let sourceSamplePath = "";
   const gateArtifactDir = process.env.RECEPTION_GATE_ARTIFACT_DIR
     ? path.resolve(process.env.RECEPTION_GATE_ARTIFACT_DIR)
+    : "";
+  const externalRealSample = process.env.RECEPTION_XLSX_REAL_SAMPLE
+    ? path.resolve(process.env.RECEPTION_XLSX_REAL_SAMPLE)
     : "";
 
   beforeAll(async () => {
@@ -382,7 +391,16 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
     await fs.mkdir(workspace, { recursive: true });
     samplePath = path.join(workspace, "reception-quality-anonymized.xlsx");
     conflictPath = path.join(workspace, "reception-quality-partial-conflict.xlsx");
-    await writeReleaseGateWorkbook(samplePath);
+    if (externalRealSample) {
+      await fs.access(externalRealSample);
+      sourceSamplePath = externalRealSample;
+      sampleProvenance = "external-real";
+      if (path.resolve(externalRealSample) !== path.resolve(samplePath)) {
+        await fs.copyFile(externalRealSample, samplePath);
+      }
+    } else {
+      await writeReleaseGateWorkbook(samplePath);
+    }
     await writeConflictWorkbook(conflictPath);
   });
 
@@ -621,6 +639,12 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
       ticket: 7,
       generatedAt: new Date().toISOString(),
       samplePath,
+      sample: {
+        provenance: sampleProvenance,
+        sourcePath: sourceSamplePath || samplePath,
+        artifactPath: samplePath,
+        sha256: await fileSha256(samplePath),
+      },
       conflictSamplePath: conflictPath,
       platform: {
         id: platform.id,
@@ -639,6 +663,10 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
       },
       sampleConversationIds: idsBeforeRetry,
       exports: [exportedArtifactPath],
+      exportArtifacts: [{
+        path: exportedArtifactPath,
+        sha256: await fileSha256(exportedArtifactPath),
+      }],
       validations: {
         sourceHasPlatformColumn: false,
         pendingRecords: 4,

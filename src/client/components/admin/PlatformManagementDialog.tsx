@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Platform } from "../../../shared/types";
+import type { Job, Platform } from "../../../shared/types";
 import { api } from "../../api";
 import { Modal } from "../Modal";
 
@@ -9,16 +9,27 @@ function message(error: unknown, fallback: string) {
 
 export function PlatformManagementDialog({ close }: { close: () => void }) {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
+  const [backfillCandidates, setBackfillCandidates] = useState<Job[]>([]);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [editing, setEditing] = useState<Platform | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [backfillJobId, setBackfillJobId] = useState("");
+  const [backfillPlatformId, setBackfillPlatformId] = useState("");
+  const [backfillReason, setBackfillReason] = useState("");
 
   const load = async () => {
     try {
-      setPlatforms(await api<Platform[]>("/api/admin/platforms"));
+      const [nextPlatforms, nextCandidates] = await Promise.all([
+        api<Platform[]>("/api/admin/platforms"),
+        api<Job[]>("/api/admin/platform-backfill-candidates"),
+      ]);
+      setPlatforms(nextPlatforms);
+      setBackfillCandidates(nextCandidates);
+      setBackfillJobId((current) => nextCandidates.some((job) => job.id === current) ? current : nextCandidates[0]?.id ?? "");
+      setBackfillPlatformId((current) => nextPlatforms.some((platform) => platform.id === current) ? current : nextPlatforms[0]?.id ?? "");
     } catch (loadError) {
       setError(message(loadError, "平台字典加载失败"));
     }
@@ -64,6 +75,30 @@ export function PlatformManagementDialog({ close }: { close: () => void }) {
     }
   };
 
+  const backfill = async () => {
+    if (busy || !backfillJobId || !backfillPlatformId || !backfillReason.trim()) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      await api<Job>(`/api/admin/jobs/${backfillJobId}/platform-backfill`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          platformId: backfillPlatformId,
+          reason: backfillReason.trim(),
+        }),
+      });
+      setBackfillReason("");
+      setNotice("历史任务平台已补录并锁定");
+      await load();
+    } catch (backfillError) {
+      setError(message(backfillError, "历史任务平台补录失败"));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return <Modal title="平台字典" subtitle="维护新任务可选的平台名称与全局代码" close={close}>
     {notice && <p className="notice" role="status">{notice}</p>}
     {error && <p className="form-error" role="alert">{error}</p>}
@@ -88,6 +123,31 @@ export function PlatformManagementDialog({ close }: { close: () => void }) {
         </div>
       </div>)}
       {!platforms.length && <p className="admin-users-loading">暂无平台，请先创建。</p>}
+    </div>
+    <div className="admin-create-form platform-backfill-form">
+      <h3>历史任务平台补录</h3>
+      <p className="admin-users-loading">仅列出尚未绑定平台的历史任务；保存后不可修改。</p>
+      <div className="form-grid">
+        <label>历史任务
+          <select aria-label="待补录历史任务" value={backfillJobId} onChange={(event) => setBackfillJobId(event.target.value)}>
+            {backfillCandidates.map((job) => <option value={job.id} key={job.id}>{job.originalFilename} · {job.id}</option>)}
+          </select>
+        </label>
+        <label>补录平台
+          <select aria-label="历史任务补录平台" value={backfillPlatformId} onChange={(event) => setBackfillPlatformId(event.target.value)}>
+            {platforms.map((platform) => <option value={platform.id} key={platform.id}>{platform.name} ({platform.code}){platform.isEnabled ? "" : " · 已停用"}</option>)}
+          </select>
+        </label>
+        <label className="wide">补录原因
+          <input aria-label="历史任务平台补录原因" value={backfillReason} maxLength={500} onChange={(event) => setBackfillReason(event.target.value)} />
+        </label>
+      </div>
+      <div className="modal-actions">
+        <button type="button" className="button primary" disabled={busy || !backfillJobId || !backfillPlatformId || !backfillReason.trim()} onClick={() => void backfill()}>
+          {busy ? "保存中..." : "补录并锁定"}
+        </button>
+      </div>
+      {!backfillCandidates.length && <p className="admin-users-loading">没有需要补录平台的历史任务。</p>}
     </div>
   </Modal>;
 }

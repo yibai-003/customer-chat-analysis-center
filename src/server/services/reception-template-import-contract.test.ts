@@ -123,7 +123,7 @@ describe("reception template import contract", () => {
         "及时回应",
         "历史行",
       ]);
-      first.addRow(["错误平台", "placeholder", "", "", "", "", "", "", "", "无图预留"]);
+      first.addRow(["", "placeholder", "", "", "", "", "", "", "", "无图预留"]);
       addScreenshot(workbook, first, 2, true);
       addScreenshot(workbook, first, 3);
 
@@ -195,6 +195,40 @@ describe("reception template import contract", () => {
       无关备注: "保留",
     });
     expect(await fs.readFile(created.sourcePath)).toEqual(sourceBytes);
+  });
+
+  it("rejects a conflicting non-empty platform value on a row without an image", async () => {
+    const platform = createPlatform({
+      name: "接待全行平台校验",
+      code: `ALLROWS${Date.now()}`,
+    });
+    const file = await writeWorkbook("reception-platform-placeholder-conflict", (workbook) => {
+      const sheet = workbook.addWorksheet("平台冲突");
+      sheet.addRow(headers);
+      sheet.addRow([platform.name, "pending", "", "", "", "", "", "", "", "截图行"]);
+      sheet.addRow(["错误平台", "placeholder", "", "", "", "", "", "", "", "无图预留"]);
+      addScreenshot(workbook, sheet, 2);
+    });
+
+    const preview = await previewWorkbookStreaming(
+      file,
+      "无图片行平台冲突.xlsx",
+      receptionSectionInput(),
+      platform,
+    );
+    expect(preview.platformConflicts).toEqual([
+      { sheetName: "平台冲突", rowNumber: 3, value: "错误平台" },
+    ]);
+
+    const jobsBefore = listJobs().length;
+    await expect(importWorkbookStreaming(
+      file,
+      "无图片行平台冲突.xlsx",
+      receptionSectionInput(),
+      undefined,
+      platform,
+    )).rejects.toThrow(/平台冲突 第 3 行“错误平台”/);
+    expect(listJobs()).toHaveLength(jobsBefore);
   });
 
   it("rejects all partial result rows together before creating a task", async () => {

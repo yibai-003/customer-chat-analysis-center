@@ -677,6 +677,8 @@ describe("workbench topbar menus", () => {
 
     await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="打开管理菜单"]')!.click());
     expect(host.textContent).toContain("板块配置");
+    expect(host.textContent).toContain("配置版本");
+    expect(host.textContent).toContain("平台字典");
     expect(host.textContent).toContain("模型配置");
     expect(host.querySelector('[role="menu"]')).toBeTruthy();
 

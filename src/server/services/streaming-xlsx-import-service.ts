@@ -89,7 +89,6 @@ function normalizedPlatformValue(value: string) {
 function platformConflicts(
   sheetData: Array<{ name: string; rows: Map<number, Record<number, string>> }>,
   platform?: PlatformInput,
-  eligibleRows?: Set<string>,
 ) {
   if (!platform) return [];
   const accepted = new Set([normalizedPlatformValue(platform.name), normalizedPlatformValue(platform.code)]);
@@ -100,7 +99,6 @@ function platformConflicts(
     if (!platformColumn) continue;
     for (const [rowNumber, row] of sheet.rows) {
       if (rowNumber === 1) continue;
-      if (eligibleRows && !eligibleRows.has(`${sheet.name}\u0000${rowNumber}`)) continue;
       const value = String(row[Number(platformColumn)] ?? "").trim();
       if (value && !accepted.has(normalizedPlatformValue(value))) {
         conflicts.push({ sheetName: sheet.name, rowNumber, value });
@@ -263,11 +261,7 @@ export async function previewWorkbookStreaming(
   });
   const imageCount = summaries.reduce((sum, sheet) => sum + sheet.imageCount, 0);
   const headers = new Set(summaries.flatMap((sheet) => sheet.headers));
-  const conflicts = platformConflicts(
-    sheetData,
-    platform,
-    contract ? reception.eligibleRows : undefined,
-  );
+  const conflicts = platformConflicts(sheetData, platform);
   return {
     originalFilename: normalizeUploadedFilename(originalFilename),
     sheetCount: summaries.length,
@@ -337,11 +331,7 @@ export async function importWorkbookStreaming(
   if (!supportedImages.length) throw new Error(contract
     ? `工作簿中没有识别到“${contract.imageColumn}”列的聊天截图`
     : "工作簿中没有识别到嵌入图片");
-  const conflicts = platformConflicts(
-    sheetData,
-    platform,
-    contract ? reception.eligibleRows : undefined,
-  );
+  const conflicts = platformConflicts(sheetData, platform);
   if (conflicts.length) throw new Error(platformConflictMessage(conflicts));
   if (reception.conflicts.length) throw new Error(receptionImportConflictMessage(reception.conflicts));
   const imagesToImport = contract

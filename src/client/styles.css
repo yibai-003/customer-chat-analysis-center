@@ -307,6 +307,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .admin-users-modal .modal{width:min(880px,100%)}
 .admin-users-loading{color:#81908a;font-size:12px;padding:10px 0}
 .admin-users-list{display:grid;gap:6px;margin-bottom:18px}
+.admin-create-form select{display:block;width:100%;margin-top:6px;padding:9px;border:2px solid var(--pixel-line);background:#fff;color:#34433b;font-size:11px}
+.platform-backfill-form{margin-top:22px;padding-top:18px;border-top:2px solid var(--pixel-ink)}
+.platform-backfill-form h3{margin:0 0 4px;font-size:13px}
+.version-row{grid-template-columns:minmax(220px,1fr) 80px auto}
 .admin-user-row{display:grid;grid-template-columns:minmax(180px,1.4fr) 120px 70px auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--pixel-line);background:#f1f6ed}
 .admin-user-identity strong,.admin-user-identity span,.admin-user-identity small{display:block}
 .admin-user-identity strong{color:var(--pixel-ink);font-size:12px}

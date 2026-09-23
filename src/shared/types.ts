@@ -191,6 +191,16 @@ export interface WorkbookPreview {
   platformCode?: string;
   platformName?: string;
   platformConflicts?: Array<{ sheetName: string; rowNumber: number; value: string }>;
+  pendingRecordCount?: number;
+  historicalResultCount?: number;
+  resultConflicts?: Array<{
+    sheetName: string;
+    rowNumber: number;
+    status: "conflict";
+    filledFields: string[];
+    missingFields: string[];
+    extraFields: string[];
+  }>;
   missingHeaders: string[];
   sheets: Array<{
     name: string;
