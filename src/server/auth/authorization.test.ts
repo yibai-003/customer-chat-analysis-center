@@ -37,7 +37,8 @@ let cookies: Record<string, string> = {};
 let jobId: string;
 let recordId: string;
 let sectionId: string;
-const imagePath = path.join(os.tmpdir(), `authorization-matrix-${process.pid}-${Date.now()}.png`);
+const imageDir = path.join(os.tmpdir(), `客服解析-authorization-matrix-${process.pid}-${Date.now()}`);
+const imagePath = path.join(imageDir, "聊天截图.png");
 const workbookPaths: string[] = [];
 let workbookBuffer: Buffer;
 
@@ -103,6 +104,7 @@ function cookieFor(role: string) {
 
 beforeAll(async () => {
   initDb();
+  fs.mkdirSync(imageDir, { recursive: true });
   fs.writeFileSync(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Sheet1");
@@ -123,7 +125,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  fs.rmSync(imagePath, { force: true });
+  fs.rmSync(imageDir, { recursive: true, force: true });
   for (const file of workbookPaths.splice(0)) fs.rmSync(file, { force: true });
   await new Promise<void>((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());

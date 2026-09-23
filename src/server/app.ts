@@ -222,10 +222,23 @@ export function createApp(dependencies: AppDependencies = {}) {
     } catch (error) { return fail(res, error); }
     finally { if (req.file) fs.rmSync(req.file.path, { force: true }); }
   });
-  app.get("/api/records/:id/image", canView, (req, res) => {
+  app.get("/api/records/:id/image", canView, (req, res, next) => {
     const record = getRecord(req.params.id);
     if (!record || !fs.existsSync(record.imagePath)) return res.status(404).end();
-    return res.sendFile(path.resolve(record.imagePath));
+    res.type(path.extname(record.imagePath) || "application/octet-stream");
+    const stream = fs.createReadStream(record.imagePath);
+    stream.on("error", (error: NodeJS.ErrnoException) => {
+      if (res.headersSent) {
+        res.destroy(error);
+        return;
+      }
+      if (error.code === "ENOENT") {
+        res.status(404).end();
+        return;
+      }
+      next(error);
+    });
+    stream.pipe(res);
   });
   app.post("/api/records/:id/analyze", canAnalyzeRecord, async (req, res) => {
     try {
