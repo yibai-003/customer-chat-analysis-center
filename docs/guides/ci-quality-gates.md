@@ -20,12 +20,13 @@
 2. `npm ci` —— 严格按锁文件安装，校验包完整性
 3. `npm run check:installation` —— 锁文件官方源与 `gypfile=false` 标记、SQLite/FTS5 实际可用
 4. `npm test`
-5. `npm run typecheck`
-6. `npm run lint`
-7. `npm run build`
-8. `npm run db:init` —— 干净检出没有数据库，先用默认 `./data` 目录创建并迁移新库
-9. `npm run db:check`
-10. `npm run smoke`
+5. `npm run test:reception-xlsx` —— 生成脱敏真实风格 XLSX，执行接待质检导入、分析、版本回退隔离、重试、导出与程序回读，并上传自动化验收记录
+6. `npm run typecheck`
+7. `npm run lint`
+8. `npm run build`
+9. `npm run db:init` —— 干净检出没有数据库，先用默认 `./data` 目录创建并迁移新库
+10. `npm run db:check`
+11. `npm run smoke`
 
 `release-artifact` 作业 `needs: quality`，只在闸门通过后运行，且跳过 PR（`if: github.event_name != 'pull_request'`）：
 
@@ -58,9 +59,11 @@
 - 不把局域网 TLS 证书、`ENCRYPTION_KEY`、密钥文件放入仓库或 CI secrets。TLS 证书是主机侧反向代理的部署责任（见局域网部署文档），CI 永远不接触证书与密钥。
 - 证书类错误先查系统时钟、代理配置与可信 CA（如 `NODE_EXTRA_CA_CERTS` 仅指向可信来源）；禁止通过禁用 TLS 校验绕过。
 
+接待质检的自动化验收工件不等同于正式发布许可。Linux runner 无 Excel/WPS 桌面程序，正式发布前还必须按 [接待质检真实 XLSX 发布门禁](reception-xlsx-release-gate.md) 补齐两者的人工打开证据，并运行 `npm run release:reception-xlsx -- --manual-evidence=<文件>`。
+
 ## 验收
 
-- 9 个命令按序执行（`npm ci`、安装检查、测试、类型检查、lint、构建、`db:init`、`db:check`、冒烟），任一失败整条工作流失败，`release-artifact` 因 `needs` 依赖不会运行。
+- 10 个命令按序执行（`npm ci`、安装检查、测试、接待 XLSX 专项验收、类型检查、lint、构建、`db:init`、`db:check`、冒烟），任一失败整条工作流失败，`release-artifact` 因 `needs` 依赖不会运行。
 - `main` 成功运行后产生带版本与提交来源的发布工件、可导入镜像归档和 `manifest.json`。
 - 工作流无自动推送、无自动部署步骤。
 
