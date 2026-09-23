@@ -7,6 +7,17 @@ export const RECEPTION_EXCEL_FIELDS = [
 ];
 
 export const RECEPTION_AI_SOURCE_FIELDS = RECEPTION_EXCEL_FIELDS.slice(0, 12);
+export const RECEPTION_MODERN_AI_SOURCE_FIELDS = [
+  "平台 (platform_name)",
+  "店铺 (store_name)",
+  "业务日期 (business_date)",
+  "会话开始时间 (conversation_started_at)",
+  "客服 (agent_name)",
+  "分组 (agent_group)",
+  "客户ID (customer_id)",
+  "会话ID (conversation_id)",
+  "对话轮数 (turn_count)",
+];
 
 export const RECEPTION_RESULT_COLUMNS = [
   "问题点-售前",
@@ -25,7 +36,8 @@ export function receptionAiSourceFields(sourceFields: Record<string, string>) {
   if (!normalized["平台店铺商品编码"] && normalized["商品编码"]) {
     normalized["平台店铺商品编码"] = normalized["商品编码"];
   }
-  return Object.fromEntries(RECEPTION_AI_SOURCE_FIELDS
+  return Object.fromEntries([...RECEPTION_AI_SOURCE_FIELDS, ...RECEPTION_MODERN_AI_SOURCE_FIELDS]
+    .filter((key, index, keys) => keys.indexOf(key) === index)
     .filter((key) => normalized[key] !== undefined)
     .map((key) => [key, normalized[key]]));
 }

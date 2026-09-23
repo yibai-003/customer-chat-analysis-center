@@ -57,7 +57,7 @@ function buildCurrentSnapshot(sectionId: string) {
   const section = db.prepare("SELECT * FROM analysis_sections WHERE id = ?").get(sectionId) as any;
   if (!section) throw new Error("板块不存在");
   const fields = (db.prepare(
-    "SELECT * FROM analysis_fields WHERE section_id = ? ORDER BY sort_order, key",
+    "SELECT * FROM analysis_fields WHERE section_id = ? AND is_enabled = 1 ORDER BY sort_order, key",
   ).all(sectionId) as any[]).map(mapField);
   const knowledge = (db.prepare(
     "SELECT * FROM knowledge_bases WHERE section_id = ? ORDER BY id",
@@ -86,8 +86,7 @@ function buildCurrentSnapshot(sectionId: string) {
       updatedAt: item.updated_at,
     })),
   }));
-  return {
-    sectionSnapshot: {
+  const sectionSnapshot = {
       id: section.id,
       parentId: section.parent_id ?? null,
       name: section.name,
@@ -97,12 +96,14 @@ function buildCurrentSnapshot(sectionId: string) {
       imageEnabled: section.image_enabled !== 0,
       sortOrder: section.sort_order,
       isEnabled: section.is_enabled !== 0,
-    },
+    };
+  return {
+    sectionSnapshot,
     fieldsSnapshot: fields,
-    exportSettings: sectionExportSettings(sectionId, fields),
+    exportSettings: sectionExportSettings(sectionId, fields, sectionSnapshot.sourceFields),
     dependenciesSnapshot: fields.map((field) => ({ key: field.key, dependsOn: field.dependsOn })),
     knowledgeSnapshot: knowledge,
-    businessRules: sectionBusinessRules(sectionId),
+    businessRules: sectionBusinessRules(sectionId, sectionSnapshot.sourceFields),
   };
 }
 
