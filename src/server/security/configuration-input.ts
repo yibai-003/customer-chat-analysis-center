@@ -96,9 +96,32 @@ export const sectionConfigVersionPatchInput = z.object({
   sectionSnapshot: sectionVersionSectionInput.partial().optional(),
   fieldsSnapshot: z.array(sectionVersionFieldInput).max(200).optional(),
   exportSettings: z.object({
+    rowMode: z.enum(["records", "screenshot_records"]).optional(),
     outputColumns: z.array(z.object({
       key: safeName,
       outputColumn: z.string().max(120).nullable(),
+      source: z.enum([
+        "field_result",
+        "platform_name",
+        "conversation_id",
+        "reception_quality",
+      ]).optional(),
+      format: z.enum([
+        "value",
+        "reception_issue_names_csv",
+        "reception_issue_dimensions_csv",
+        "reception_issue_deductions_csv",
+        "reception_total_deduction",
+        "reception_has_d_level",
+        "reception_chat_quotes",
+        "reception_evidence_explanations",
+        "reception_reasons",
+        "reception_suggestions",
+        "reception_grade",
+        "reception_review_required",
+        "reception_start_time",
+        "reception_round_count",
+      ]).optional(),
     }).strict()).max(200),
   }).strict().optional(),
   dependenciesSnapshot: z.array(z.object({

@@ -306,7 +306,7 @@ function Workspace({ session }: { session: CurrentSession }) {
         <div className="top-actions">
           <button type="button" className="button light task-action-tertiary" aria-label="刷新进度" disabled={!job || refreshing || busy || taskActionBusy || Boolean(importJobId)} onClick={() => void refreshProgress()}>{refreshing ? "刷新中..." : "刷新进度"}</button>
           {can("task:import") && <label className="button primary task-action-primary">＋ 导入 Excel<input hidden type="file" accept=".xlsx" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) importFile(file); }} /></label>}
-          {can("task:export") && <button type="button" className="button export task-action-secondary" aria-label="导出结果" disabled={!job || !currentSection} onClick={() => job && currentSection && (window.location.href = `/api/jobs/${job.id}/export?sections=${currentSection.id}`)}>导出结果 ↗</button>}
+          {can("task:export") && <button type="button" className="button export task-action-secondary" aria-label="导出结果" disabled={!job || !currentSection} onClick={() => job && currentSection && (window.location.href = `/api/jobs/${job.id}/export`)}>导出结果 ↗</button>}
           <div className="top-menu-cluster" ref={topMenuRef}>
             {hasManagementAccess && <div className="top-menu">
               <button

@@ -225,6 +225,34 @@ export interface Platform {
 
 export type SectionConfigVersionStatus = "draft" | "published" | "archived";
 
+export type SectionExportRowMode = "records" | "screenshot_records";
+export type SectionExportColumnSource =
+  | "field_result"
+  | "platform_name"
+  | "conversation_id"
+  | "reception_quality";
+export type SectionExportValueFormat =
+  | "value"
+  | "reception_issue_names_csv"
+  | "reception_issue_dimensions_csv"
+  | "reception_issue_deductions_csv"
+  | "reception_total_deduction"
+  | "reception_has_d_level"
+  | "reception_chat_quotes"
+  | "reception_evidence_explanations"
+  | "reception_reasons"
+  | "reception_suggestions"
+  | "reception_grade"
+  | "reception_review_required"
+  | "reception_start_time"
+  | "reception_round_count";
+export interface SectionExportColumn {
+  key: string;
+  outputColumn: string | null;
+  source?: SectionExportColumnSource;
+  format?: SectionExportValueFormat;
+}
+
 export interface SectionConfigVersion {
   id: string;
   sectionId: string;
@@ -234,7 +262,8 @@ export interface SectionConfigVersion {
   sectionSnapshot: AnalysisSection;
   fieldsSnapshot: AnalysisField[];
   exportSettings: {
-    outputColumns: Array<{ key: string; outputColumn: string | null }>;
+    rowMode?: SectionExportRowMode;
+    outputColumns: SectionExportColumn[];
   };
   dependenciesSnapshot: Array<{ key: string; dependsOn: string[] }>;
   knowledgeSnapshot: Array<Record<string, unknown>>;

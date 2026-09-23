@@ -59,6 +59,7 @@ export interface ReceptionQualityAnalysis {
   hasAfterSaleViolation: boolean;
   labels: string[];
   dimensions: string[];
+  deductions: number[];
   conversationStartTime: string;
   conversationRoundCount: number;
   reviewRequired: boolean;
@@ -411,6 +412,7 @@ export function parseReceptionQuality(
     hasAfterSaleViolation: afterSaleIssues.length > 0,
     labels: issues.map((issue) => issue.name),
     dimensions: issues.map((issue) => issue.dimension),
+    deductions: issues.map((issue) => issue.deduction),
     conversationStartTime: typeof facts.conversationStartTime === "string"
       ? facts.conversationStartTime
       : "",

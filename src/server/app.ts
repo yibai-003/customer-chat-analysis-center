@@ -327,13 +327,17 @@ export function createApp(dependencies: AppDependencies = {}) {
   });
   app.get("/api/jobs/:id/export", canExport, async (req, res) => {
     try {
-      const ids = String(req.query.sections ?? "").split(",").filter(Boolean);
-      const output = await exportJob(req.params.id, ids);
+      if (req.query.sections !== undefined) throw new Error("导出不接受板块参数，板块由任务绑定版本唯一确定");
+      const output = await exportJob(req.params.id);
+      const job = getJob(req.params.id);
       auditRequest(req, {
         action: "task.export",
         targetType: "job",
         targetId: req.params.id,
-        metadata: { sections: ids.length ? ids : [getJob(req.params.id)?.sectionId].filter(Boolean) },
+        metadata: {
+          sectionId: job?.sectionId ?? null,
+          sectionConfigVersionId: job?.sectionConfigVersionId ?? null,
+        },
       });
       return res.download(output);
     } catch (error) { return fail(res, error); }

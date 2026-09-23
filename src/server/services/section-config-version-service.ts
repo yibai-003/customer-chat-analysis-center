@@ -14,6 +14,7 @@ import {
   sectionConfigVersionPatchInput,
 } from "../security/configuration-input";
 import { sectionBusinessRules } from "./section-business-rules";
+import { sectionExportSettings } from "./section-export-settings";
 
 const now = () => new Date().toISOString();
 
@@ -98,11 +99,7 @@ function buildCurrentSnapshot(sectionId: string) {
       isEnabled: section.is_enabled !== 0,
     },
     fieldsSnapshot: fields,
-    exportSettings: {
-      outputColumns: fields
-        .filter((field) => field.exportEnabled)
-        .map((field) => ({ key: field.key, outputColumn: field.outputColumn ?? null })),
-    },
+    exportSettings: sectionExportSettings(sectionId, fields),
     dependenciesSnapshot: fields.map((field) => ({ key: field.key, dependsOn: field.dependsOn })),
     knowledgeSnapshot: knowledge,
     businessRules: sectionBusinessRules(sectionId),
@@ -188,7 +185,30 @@ function validateVersionSnapshot(version: Pick<
   if (dependencyMap.size !== fieldsSnapshot.length) throw new Error("字段依赖快照存在重复或多余项目");
   const exportKeys = new Set(exportSettings.outputColumns.map((item) => item.key));
   if (exportKeys.size !== exportSettings.outputColumns.length) throw new Error("导出字段 Key 重复");
-  for (const key of exportKeys) if (!fieldKeys.has(key)) throw new Error(`导出字段不存在：${key}`);
+  const exportHeaders = new Set<string>();
+  for (const column of exportSettings.outputColumns) {
+    const source = column.source ?? "field_result";
+    const format = column.format ?? "value";
+    const header = column.outputColumn?.trim() ?? "";
+    if (!header) throw new Error(`导出字段缺少目标表头：${column.key}`);
+    if (exportHeaders.has(header)) throw new Error(`导出目标表头重复：${header}`);
+    exportHeaders.add(header);
+    if (source === "field_result" && !fieldKeys.has(column.key)) {
+      throw new Error(`导出字段不存在：${column.key}`);
+    }
+    if (source !== "reception_quality" && format !== "value") {
+      throw new Error(`导出字段格式与来源不匹配：${column.key}`);
+    }
+    if (source === "reception_quality" && format === "value") {
+      throw new Error(`接待质检导出字段缺少结构化格式：${column.key}`);
+    }
+    if (source === "platform_name" && column.key !== "platform_name") {
+      throw new Error("平台导出字段 Key 必须为 platform_name");
+    }
+    if (source === "conversation_id" && column.key !== "conversation_id") {
+      throw new Error("会话 ID 导出字段 Key 必须为 conversation_id");
+    }
+  }
 
   const knowledgeIds = new Set(knowledgeSnapshot.map((item) => String(item.id ?? "")));
   for (const field of fieldsSnapshot) {
@@ -212,6 +232,10 @@ function validateVersionSnapshot(version: Pick<
     if (new Set(checked.issues.map((item) => item.id)).size !== checked.issues.length) {
       throw new Error("接待质检问题 ID 重复");
     }
+    for (const issue of checked.issues) {
+      if (issue.name.includes(",")) throw new Error(`接待质检问题名称不能包含英文逗号：${issue.name}`);
+      if (issue.dimension.includes(",")) throw new Error(`接待质检问题维度不能包含英文逗号：${issue.dimension}`);
+    }
     const resultColumns = new Set(checked.importContract.resultColumns);
     for (const field of checked.importContract.completeHistoricalResultRequiredColumns) {
       if (!resultColumns.has(field)) throw new Error(`完整历史结果必填字段不属于结果区：${field}`);
@@ -234,6 +258,32 @@ function validateVersionSnapshot(version: Pick<
       || !unifiedQuality.dependsOn.includes("截图内容总结")
       || !unifiedQuality.prompt.trim()) {
       throw new Error("接待质检统一质检字段必须依赖截图事实并使用版本提示词");
+    }
+    if (exportSettings.rowMode !== "screenshot_records") {
+      throw new Error("接待质检导出必须使用截图记录行模式");
+    }
+    const sourceColumns = new Map(exportSettings.outputColumns.map((column) => [
+      `${column.source ?? "field_result"}:${column.format ?? "value"}`,
+      column,
+    ]));
+    for (const required of [
+      "platform_name:value",
+      "conversation_id:value",
+      "reception_quality:reception_issue_names_csv",
+      "reception_quality:reception_issue_dimensions_csv",
+      "reception_quality:reception_issue_deductions_csv",
+      "reception_quality:reception_total_deduction",
+      "reception_quality:reception_has_d_level",
+      "reception_quality:reception_chat_quotes",
+      "reception_quality:reception_evidence_explanations",
+      "reception_quality:reception_reasons",
+      "reception_quality:reception_suggestions",
+      "reception_quality:reception_grade",
+      "reception_quality:reception_review_required",
+      "reception_quality:reception_start_time",
+      "reception_quality:reception_round_count",
+    ]) {
+      if (!sourceColumns.has(required)) throw new Error(`接待质检导出契约缺少字段：${required}`);
     }
   }
   assertNoRuntimeState(version);
@@ -316,11 +366,10 @@ export function updateDraftSectionVersion(id: string, patch: SectionConfigVersio
     const timestamp = now();
     const sectionSnapshot = { ...version.sectionSnapshot, ...patch.sectionSnapshot, id: version.sectionId };
     const fieldsSnapshot = patch.fieldsSnapshot ?? version.fieldsSnapshot;
-    const exportSettings = patch.exportSettings ?? (patch.fieldsSnapshot ? {
-      outputColumns: fieldsSnapshot
-        .filter((field) => field.exportEnabled)
-        .map((field) => ({ key: field.key, outputColumn: field.outputColumn ?? null })),
-    } : version.exportSettings);
+    const exportSettings = patch.exportSettings
+      ?? (patch.fieldsSnapshot
+        ? sectionExportSettings(version.sectionId, fieldsSnapshot)
+        : version.exportSettings);
     const dependenciesSnapshot = patch.dependenciesSnapshot ?? (patch.fieldsSnapshot
       ? fieldsSnapshot.map((field) => ({ key: field.key, dependsOn: field.dependsOn }))
       : version.dependenciesSnapshot);

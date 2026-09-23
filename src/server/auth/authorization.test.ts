@@ -219,6 +219,9 @@ describe("task and review authorization", () => {
     for (const role of ["readonly", "config"]) {
       expect((await request(`/api/jobs/${jobId}/export`, { cookie: cookieFor(role) })).status, role).toBe(403);
     }
+    expect((await request(`/api/jobs/${jobId}/export?sections=${sectionId},refund`, {
+      cookie: cookieFor("operator"),
+    })).status).toBe(400);
     expect((await request(`/api/jobs/${jobId}/export`)).status).toBe(401);
   });
 

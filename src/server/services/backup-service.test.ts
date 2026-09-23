@@ -61,7 +61,7 @@ describe("verified full backups", () => {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.readFile(restored.prepare("SELECT source_path FROM jobs WHERE id=?").get(jobId).source_path);
       expect(workbook.worksheets[0].getImages()).toHaveLength(1);
-      const script = 'import { exportJob } from "./src/server/services/excel-export-service.ts"; console.log(await exportJob(process.argv[1], ["refund"]));';
+      const script = 'import { exportJob } from "./src/server/services/excel-export-service.ts"; console.log(await exportJob(process.argv[1]));';
       const execution = await promisify(execFile)(process.execPath, ["--import", "tsx", "--input-type=module", "-e", script, jobId], {
         cwd: process.cwd(), env: { ...process.env, DATABASE_PATH: path.join(target, "data/app.db"), DATA_DIR: path.join(target, "data") }, windowsHide: true, timeout: 10_000,
       });

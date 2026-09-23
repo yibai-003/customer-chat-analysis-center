@@ -19,6 +19,7 @@ import {
   createDraftVersion,
   publishSectionVersion,
 } from "./section-config-version-service";
+import { applySectionVersionIntegrity } from "../db/migrations/019-section-version-integrity";
 
 function worksheetValues(workbook: ExcelJS.Workbook, sheetName: string) {
   const sheet = workbook.getWorksheet(sheetName)!;
@@ -35,12 +36,23 @@ describe("Excel export columns", () => {
   const generatedFiles = new Set<string>();
   beforeAll(() => initDb());
   afterEach(() => {
-    db.prepare("DELETE FROM analysis_field_runs WHERE record_id IN (SELECT id FROM records WHERE job_id = 'task-5-export-job')").run();
-    db.prepare("DELETE FROM record_section_reviews WHERE record_id IN (SELECT id FROM records WHERE job_id = 'task-5-export-job')").run();
-    db.prepare("DELETE FROM records WHERE job_id = 'task-5-export-job'").run();
-    db.prepare("DELETE FROM jobs WHERE id = 'task-5-export-job'").run();
-    db.prepare("DELETE FROM analysis_fields WHERE section_id LIKE 'task-5-export%'").run();
-    db.prepare("DELETE FROM analysis_sections WHERE id LIKE 'task-5-export%'").run();
+    const testJobs = `SELECT id FROM jobs
+      WHERE section_id LIKE 'task-5-export%' OR section_id = 'version-snapshot-export'`;
+    db.prepare(`DELETE FROM analysis_field_runs
+      WHERE record_id IN (SELECT id FROM records WHERE job_id IN (${testJobs}))`).run();
+    db.prepare(`DELETE FROM record_section_reviews
+      WHERE record_id IN (SELECT id FROM records WHERE job_id IN (${testJobs}))`).run();
+    db.prepare(`DELETE FROM records WHERE job_id IN (${testJobs})`).run();
+    db.prepare(`DELETE FROM jobs
+      WHERE section_id LIKE 'task-5-export%' OR section_id = 'version-snapshot-export'`).run();
+    db.exec(`
+      DROP TRIGGER IF EXISTS section_versions_immutable_delete;
+      DROP TRIGGER IF EXISTS section_versions_restrict_section_delete;
+    `);
+    db.prepare("DELETE FROM analysis_section_versions WHERE section_id LIKE 'task-5-export%' OR section_id = 'version-snapshot-export'").run();
+    db.prepare("DELETE FROM analysis_fields WHERE section_id LIKE 'task-5-export%' OR section_id = 'version-snapshot-export'").run();
+    db.prepare("DELETE FROM analysis_sections WHERE id LIKE 'task-5-export%' OR id = 'version-snapshot-export'").run();
+    applySectionVersionIntegrity(db);
     for (const file of generatedFiles) fs.rmSync(file, { force: true });
     generatedFiles.clear();
   });
@@ -100,13 +112,14 @@ describe("Excel export columns", () => {
       "task-5-export-internal", "未成交归因", "未成交归因", "object", null, 4,
       "lost_deal_attribution", 0, timestamp, timestamp,
     );
+    const version = publishSectionVersion(createDraftVersion("task-5-export").id);
     db.prepare(`
       INSERT INTO jobs (
-        id, original_filename, source_path, section_id, section_name, status,
+        id, original_filename, source_path, section_id, section_name, section_config_version_id, status,
         total_records, completed_records, failed_records, created_at, updated_at
-      ) VALUES ('task-5-export-job', 'source.xlsx', ?, 'task-5-export', '未成交分析',
+      ) VALUES ('task-5-export-job', 'source.xlsx', ?, 'task-5-export', '未成交分析', ?,
         'ready', 1, 0, 0, ?, ?)
-    `).run(sourcePath, timestamp, timestamp);
+    `).run(sourcePath, version.id, timestamp, timestamp);
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -158,7 +171,7 @@ describe("Excel export columns", () => {
       )
     `).run(timestamp);
 
-    const outputPath = await exportJob("task-5-export-job", ["task-5-export"]);
+    const outputPath = await exportJob("task-5-export-job");
     generatedFiles.add(outputPath);
     expect(outputPath).toBe(path.join(config.dataDir, "exports", "task-5-export-job-客服解析结果.xlsx"));
     const exported = new ExcelJS.Workbook();
@@ -217,13 +230,14 @@ describe("Excel export columns", () => {
     for (const [index, [key, column]] of publicFields.entries()) {
       insertField.run(`task-5-export-${index}`, key, key, "string", column, index + 2, "reception_quality_derive", 1, timestamp, timestamp);
     }
+    const version = publishSectionVersion(createDraftVersion("task-5-export").id);
     db.prepare(`
       INSERT INTO jobs (
-        id, original_filename, source_path, section_id, section_name, status,
+        id, original_filename, source_path, section_id, section_name, section_config_version_id, status,
         total_records, completed_records, failed_records, created_at, updated_at
-      ) VALUES ('task-5-export-job', 'source.xlsx', ?, 'task-5-export', '接待流程质检',
+      ) VALUES ('task-5-export-job', 'source.xlsx', ?, 'task-5-export', '接待流程质检', ?,
         'ready', 1, 0, 0, ?, ?)
-    `).run(sourcePath, timestamp, timestamp);
+    `).run(sourcePath, version.id, timestamp, timestamp);
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -280,7 +294,7 @@ describe("Excel export columns", () => {
       result: { "优化建议-售前": "先准确回答尺寸" },
     });
 
-    const outputPath = await exportJob("task-5-export-job", ["task-5-export"]);
+    const outputPath = await exportJob("task-5-export-job");
     generatedFiles.add(outputPath);
     const exported = new ExcelJS.Workbook();
     await exported.xlsx.readFile(outputPath);
@@ -307,7 +321,7 @@ describe("Excel export columns", () => {
     expect(JSON.stringify(cells)).not.toContain("统一质检分析");
   });
 
-  it("does not export review state or notes for multi-section exports", async () => {
+  it("rejects export when a legacy task has no bound section version", async () => {
     const sourcePath = path.join(os.tmpdir(), `multi-section-export-${Date.now()}.xlsx`);
     generatedFiles.add(sourcePath);
     const source = new ExcelJS.Workbook();
@@ -346,18 +360,8 @@ describe("Excel export columns", () => {
     insertReview.run("task-5-export-a", "confirmed", "售前已确认", timestamp);
     insertReview.run("task-5-export-b", "needs_review", "售后需复核", timestamp);
 
-    const outputPath = await exportJob("task-5-export-job", [
-      "task-5-export-a",
-      "task-5-export-b",
-    ]);
-    generatedFiles.add(outputPath);
-    const exported = new ExcelJS.Workbook();
-    await exported.xlsx.readFile(outputPath);
-    const { cells } = worksheetValues(exported, "Sheet1");
-
-    expect(cells).not.toHaveProperty("解析状态");
-    expect(cells).not.toHaveProperty("复核状态");
-    expect(cells).not.toHaveProperty("复核备注");
+    await expect(exportJob("task-5-export-job"))
+      .rejects.toThrow("任务缺少有效的绑定板块配置版本");
   });
 
   it("omits fields disabled for export from column and output plans", () => {
@@ -442,10 +446,7 @@ describe("Excel export columns", () => {
     publishSectionVersion(createDraftVersion(sectionId).id);
     db.prepare("DELETE FROM analysis_fields WHERE id = ?").run(field.id);
 
-    await expect(exportJob(job.id, [sectionId, "refund"]))
-      .rejects.toThrow("导出只能包含任务绑定的解析板块");
-
-    const outputPath = await exportJob(job.id, []);
+    const outputPath = await exportJob(job.id);
     generatedFiles.add(outputPath);
     const exported = new ExcelJS.Workbook();
     await exported.xlsx.readFile(outputPath);

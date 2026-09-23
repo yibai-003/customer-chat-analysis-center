@@ -162,6 +162,7 @@ export function parseLegacyReceptionQuality(
     hasAfterSaleViolation: afterSaleIssues.length > 0,
     labels: issues.map((issue) => issue.name).slice(0, 3),
     dimensions: issues.map((issue) => issue.dimension).slice(0, 3),
+    deductions: issues.map((issue) => issue.deduction).slice(0, 3),
     conversationStartTime: "",
     conversationRoundCount: 0,
     reviewRequired: scene === "无法判断"

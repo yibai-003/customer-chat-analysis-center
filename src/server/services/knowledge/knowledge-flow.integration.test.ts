@@ -396,7 +396,7 @@ describe("dynamic reason knowledge flow", () => {
       `${job.id}-客服解析结果.xlsx`,
     );
     generatedFiles.add(expectedOutputPath);
-    const outputPath = await exportJob(job.id, [sectionId]);
+    const outputPath = await exportJob(job.id);
     expect(outputPath).toBe(expectedOutputPath);
     const exported = new ExcelJS.Workbook();
     await exported.xlsx.readFile(outputPath);

@@ -166,6 +166,18 @@ describe("section configuration version lifecycle", () => {
       .run(JSON.stringify(invalidRules), draft.id);
     expect(() => publishSectionVersion(draft.id)).toThrow("配置参数无效");
 
+    for (const field of ["name", "dimension"] as const) {
+      const commaDraft = createDraftVersion("reception");
+      const commaRules = structuredClone(commaDraft.businessRules) as {
+        issues: Array<{ name: string; dimension: string }>;
+      };
+      commaRules.issues[0][field] += ",歧义";
+      db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
+        .run(JSON.stringify(commaRules), commaDraft.id);
+      expect(() => publishSectionVersion(commaDraft.id))
+        .toThrow(field === "name" ? "问题名称不能包含英文逗号" : "问题维度不能包含英文逗号");
+    }
+
     const invalidContract = createDraftVersion("reception");
     const invalidContractRules = structuredClone(invalidContract.businessRules) as {
       importContract: {
