@@ -623,13 +623,13 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
     expect(sheet.getRow(3).getCell(column(sheet, "问题")).value).toBe("答非所问");
     expect(sheet.getRow(3).getCell(column(sheet, "维度")).value).toBe("问题解决");
     expect(sheet.getRow(3).getCell(column(sheet, "扣分")).value).toBe("17");
-    expect(sheet.getRow(4).getCell(column(sheet, "问题")).value).toBe("服务消极D级,答非所问");
-    expect(sheet.getRow(4).getCell(column(sheet, "维度")).value).toBe("服务态度,问题解决");
-    expect(sheet.getRow(4).getCell(column(sheet, "扣分")).value).toBe("0,17");
+    expect(sheet.getRow(4).getCell(column(sheet, "问题")).value).toBe("服务消极D级/答非所问");
+    expect(sheet.getRow(4).getCell(column(sheet, "维度")).value).toBe("服务态度/问题解决");
+    expect(sheet.getRow(4).getCell(column(sheet, "扣分")).value).toBe("0/17");
     expect(sheet.getRow(4).getCell(column(sheet, "是否D级")).value).toBe("是");
     expect(sheet.getRow(4).getCell(column(sheet, "接待流程质检结果")).value).toBe("D");
     expect(sheet.getRow(4).getCell(column(sheet, "证据说明")).value)
-      .toBe("1. 客服明确拒绝继续接待\n2. 客服没有回应尺码选择");
+      .toBe("客服明确拒绝继续接待/客服没有回应尺码选择");
     expect(sheet.getRow(5).getCell(column(sheet, "是否待人工复核")).value).toBe("是");
     expect(sheet.getRow(5).getCell(column(sheet, "会话开始时间")).value).toBe("");
     expect(sheet.getRow(5).getCell(column(sheet, "会话ID")).value).toBe(idsBeforeRetry["RG-REVIEW"]);

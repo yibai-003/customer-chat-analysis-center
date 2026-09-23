@@ -12,6 +12,7 @@ import type {
   SectionExportColumn,
   SectionExportValueFormat,
 } from "../../shared/types";
+import { alignReceptionIssueValues } from "../../shared/reception-quality-results";
 import type {
   ReceptionIssue,
   ReceptionQualityAnalysis,
@@ -25,6 +26,7 @@ type ReceptionExportIssue = ReceptionIssue & { priority: number };
 type ReceptionExportData = {
   quality: ReceptionQualityAnalysis;
   issues: ReceptionExportIssue[];
+  aligned: ReturnType<typeof alignReceptionIssueValues>;
   totalDeduction: number;
   hasDLevelIssue: boolean;
   grade: "A" | "B" | "C" | "D";
@@ -123,24 +125,13 @@ function receptionExportData(
     else issues.splice(index, 0, exportedIssue);
   }
 
-  const labels = stringArray(quality.labels);
-  const dimensions = stringArray(quality.dimensions);
-  const deductions = Array.isArray(quality.deductions)
-    && quality.deductions.every((item) => typeof item === "number")
-    ? quality.deductions
-    : undefined;
-  const aligned = labels
-    && dimensions
-    && deductions
-    && labels.length === issues.length
-    && dimensions.length === issues.length
-    && deductions.length === issues.length
-    && labels.every((label, index) => label === issues[index].name)
-    && dimensions.every((dimension, index) => dimension === issues[index].dimension)
-    && deductions.every((deduction, index) => deduction === issues[index].deduction);
-  if (!aligned) {
-    throw exportDataError(record, "问题/维度/扣分", "数组数量或索引内容不一致");
-  }
+  const aligned = alignReceptionIssueValues({
+    ...quality,
+    preSaleIssues: issues.filter((issue) =>
+      ruleById.get(issue.issueId)?.scope === "preSale"),
+    afterSaleIssues: issues.filter((issue) =>
+      ruleById.get(issue.issueId)?.scope === "afterSale"),
+  });
   if (typeof quality.reviewRequired !== "boolean") {
     throw exportDataError(record, "统一质检分析.reviewRequired", "必须为布尔值");
   }
@@ -153,6 +144,7 @@ function receptionExportData(
   return {
     quality: quality as unknown as ReceptionQualityAnalysis,
     issues,
+    aligned,
     totalDeduction,
     hasDLevelIssue,
     grade,
@@ -172,30 +164,30 @@ function formatReceptionValue(
   data: ReceptionExportData | undefined,
 ): ExportCellValue {
   if (!data) return "";
-  const { quality, issues } = data;
+  const { quality, issues, aligned } = data;
   switch (format) {
     case "reception_issue_names_csv":
-      return issues.map((issue) => issue.name).join(",");
+      return aligned.labels.join("/");
     case "reception_issue_dimensions_csv":
-      return issues.map((issue) => issue.dimension).join(",");
+      return aligned.dimensions.join("/");
     case "reception_issue_deductions_csv":
-      return issues.map((issue) => String(issue.deduction)).join(",");
+      return aligned.deductions.join("/");
     case "reception_total_deduction":
       return data.totalDeduction;
     case "reception_has_d_level":
-      return issues.length ? data.hasDLevelIssue ? "是" : "否" : "";
+      return aligned.labels.length ? data.hasDLevelIssue ? "是" : "否" : "";
     case "reception_chat_quotes":
-      return unique(issues.flatMap((issue) => issue.chatQuotes.map((quote) => quote.trim()).filter(Boolean))).join("\n");
+      return aligned.chatQuotes.join("/");
     case "reception_evidence_explanations":
-      return numbered(issues.map((issue) => issue.evidenceExplanation));
+      return aligned.evidenceExplanations.join("/");
     case "reception_reasons":
-      return numbered(issues.map((issue) => issue.reason));
+      return aligned.reasons.join("/");
     case "reception_suggestions":
       return numbered(unique(issues.map((issue) => issue.suggestion).filter(Boolean)));
     case "reception_grade":
       return data.grade;
     case "reception_review_required":
-      return quality.reviewRequired ? "是" : "否";
+      return quality.reviewRequired || aligned.hasMismatch ? "是" : "否";
     case "reception_start_time":
       return typeof quality.conversationStartTime === "string" ? quality.conversationStartTime : "";
     case "reception_round_count":

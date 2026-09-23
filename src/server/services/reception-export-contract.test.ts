@@ -245,17 +245,17 @@ describe("reception screenshot-row export contract", () => {
     expect(problemColumn).toBe(4);
     expect(sheet.getRow(2).getCell(columnFor(sheet, "平台")).value).toBe("抖音");
     expect(sheet.getRow(2).getCell(columnFor(sheet, "会话ID")).value).toContain("DY20260923A");
-    expect(sheet.getRow(2).getCell(problemColumn).value).toBe("服务消极D级,答非所问");
-    expect(sheet.getRow(2).getCell(columnFor(sheet, "维度")).value).toBe("服务态度,问题解决");
-    expect(sheet.getRow(2).getCell(columnFor(sheet, "扣分")).value).toBe("0,10");
+    expect(sheet.getRow(2).getCell(problemColumn).value).toBe("服务消极D级/答非所问");
+    expect(sheet.getRow(2).getCell(columnFor(sheet, "维度")).value).toBe("服务态度/问题解决");
+    expect(sheet.getRow(2).getCell(columnFor(sheet, "扣分")).value).toBe("0/10");
     expect(sheet.getRow(2).getCell(columnFor(sheet, "合计扣分")).value).toBe(10);
     expect(sheet.getRow(2).getCell(columnFor(sheet, "是否D级")).value).toBe("是");
     expect(sheet.getRow(2).getCell(columnFor(sheet, "聊天原文")).value)
-      .toBe("客服说天气不错\n客服拒绝处理\n客户问尺码");
+      .toBe("客服说天气不错；客服拒绝处理/客户问尺码；客服说天气不错");
     expect(sheet.getRow(2).getCell(columnFor(sheet, "证据说明")).value)
-      .toBe("1. 客服明确拒绝继续接待\n2. 客服回复没有回应尺码问题");
+      .toBe("客服明确拒绝继续接待/客服回复没有回应尺码问题");
     expect(sheet.getRow(2).getCell(columnFor(sheet, "判定理由")).value)
-      .toBe("1. 命中服务消极规则\n2. 命中答非所问规则");
+      .toBe("命中服务消极规则/命中答非所问规则");
     expect(sheet.getRow(2).getCell(columnFor(sheet, "优化建议")).value)
       .toBe("1. 承接客户诉求并明确下一步处理动作，避免推诿。\n2. 先直接回答客户核心问题，再补充相关说明。");
     expect(sheet.getRow(2).getCell(columnFor(sheet, "接待流程质检结果")).value).toBe("D");
@@ -280,13 +280,18 @@ describe("reception screenshot-row export contract", () => {
     expect(sheet.getRow(4).getCell(columnFor(sheet, "是否待人工复核")).value).toBe("否");
   });
 
-  it("blocks mismatched issue, dimension and deduction arrays with record context", async () => {
+  it("preserves missing issue values as blank slots and marks the export for review", async () => {
     const invalid = multiIssueQuality();
     invalid.dimensions = ["服务态度"];
     const fixture = await createFixture(invalid);
-    await expect(exportJob(fixture.jobId)).rejects.toThrow(
-      new RegExp(`${fixture.firstRecordId}.*问题/维度/扣分.*数组数量或索引内容不一致`),
-    );
+    const outputPath = await exportJob(fixture.jobId);
+    files.add(outputPath);
+    const exported = new ExcelJS.Workbook();
+    await exported.xlsx.readFile(outputPath);
+    const sheet = exported.getWorksheet("接待明细")!;
+
+    expect(sheet.getRow(2).getCell(columnFor(sheet, "维度")).value).toBe("服务态度/");
+    expect(sheet.getRow(2).getCell(columnFor(sheet, "是否待人工复核")).value).toBe("是");
   });
 
   it("blocks cells over the Excel limit without truncating", async () => {

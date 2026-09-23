@@ -3,6 +3,7 @@ import type {
   AnalysisField,
   SectionConfigVersion,
 } from "../../shared/types";
+import { alignReceptionIssueValues } from "../../shared/reception-quality-results";
 import { receptionAiSourceFields } from "./reception-quality-rules";
 import { receptionBusinessRules, type ReceptionBusinessRules } from "./section-business-rules";
 
@@ -122,15 +123,11 @@ function unique(values: string[]) {
   return [...new Set(values)];
 }
 
-function twoDigit(part: number) {
-  return String(part).padStart(2, "0");
-}
-
-function normalizeFullDateTime(value: string) {
-  const match = value.trim().match(
-    /(\d{4})\s*(?:年|[-/])\s*(\d{1,2})\s*(?:月|[-/])\s*(\d{1,2})\s*(?:日)?\s+(\d{1,2})\s*(?::|时)\s*(\d{1,2})(?:\s*(?::|分)\s*(\d{1,2}))?/,
+function parseExplicitDateTime(value: string): { timestamp: number; value: string } | undefined {
+  const match = value.match(
+    /(\d{4})\s*(?:年|[-/])\s*(\d{1,2})\s*(?:月|[-/])\s*(\d{1,2})\s*(?:日)?[T\s]+(\d{1,2})\s*(?::|时)\s*(\d{1,2})(?:\s*(?::|分)\s*(\d{1,2}))?/,
   );
-  if (!match) return "";
+  if (!match) return;
   const [, yearText, monthText, dayText, hourText, minuteText, secondText = "0"] = match;
   const year = Number(yearText);
   const month = Number(monthText);
@@ -144,8 +141,11 @@ function normalizeFullDateTime(value: string) {
     || date.getUTCDate() !== day
     || date.getUTCHours() !== hour
     || date.getUTCMinutes() !== minute
-    || date.getUTCSeconds() !== second) return "";
-  return `${year}-${twoDigit(month)}-${twoDigit(day)} ${twoDigit(hour)}:${twoDigit(minute)}:${twoDigit(second)}`;
+    || date.getUTCSeconds() !== second) return;
+  return {
+    timestamp: date.getTime(),
+    value: match[0].trim(),
+  };
 }
 
 export function countReceptionConversationRounds(turns: ReceptionDialogueTurn[]) {
@@ -164,13 +164,23 @@ export function countReceptionConversationRounds(turns: ReceptionDialogueTurn[])
 
 export function deriveReceptionConversationFacts(
   facts: Omit<ReceptionScreenshotFacts, "conversationStartTime" | "conversationRoundCount" | "reviewReasons">,
+  excelStartTime = "",
 ): ReceptionScreenshotFacts {
-  const conversationStartTime = facts.dialogueTurns.length
-    ? normalizeFullDateTime(facts.dialogueTurns[0].time)
-    : "";
+  const excelDateTime = parseExplicitDateTime(excelStartTime);
+  const chatDateTime = facts.dialogueTurns.reduce<
+    { timestamp: number; value: string } | undefined
+  >((earliest, turn) => {
+    const current = parseExplicitDateTime(turn.time);
+    return current && (!earliest || current.timestamp < earliest.timestamp)
+      ? current
+      : earliest;
+  }, undefined);
+  const conversationStartTime = excelDateTime
+    ? excelStartTime.trim()
+    : chatDateTime?.value ?? "";
   const reviewReasons = conversationStartTime
     ? []
-    : ["会话开始时间：截图无法可靠识别完整日期和时间"];
+    : ["会话开始时间：Excel 和聊天记录均无法可靠识别完整日期和时间"];
   return {
     ...facts,
     conversationStartTime,
@@ -179,7 +189,11 @@ export function deriveReceptionConversationFacts(
   };
 }
 
-export function parseReceptionScreenshotFacts(raw: string, fieldKey = "截图内容总结") {
+export function parseReceptionScreenshotFacts(
+  raw: string,
+  fieldKey = "截图内容总结",
+  sourceFields: Record<string, string> = {},
+) {
   const parsed = parseJsonObject(raw, "截图事实抽取");
   const keys = Object.keys(parsed);
   if (keys.length !== 1 || keys[0] !== fieldKey) {
@@ -191,6 +205,11 @@ export function parseReceptionScreenshotFacts(raw: string, fieldKey = "截图内
   if (new Set(dialogueIds).size !== dialogueIds.length) {
     throw new Error("截图事实抽取结构不符合 Schema：对话编号重复");
   }
+  const excelStartTime = Object.entries(sourceFields).find(([key]) =>
+    key.trim() === "会话开始时间"
+    || key.trim() === "会话开始时间 (conversation_started_at)"
+    || key.trim() === "会话开始时间（conversation_started_at)"
+    || /^\s*会话开始时间\s*[（(]\s*conversation_started_at\s*[)）]\s*$/.test(key))?.[1] ?? "";
   return deriveReceptionConversationFacts({
     ...checked.data,
     sceneHints: unique(checked.data.sceneHints) as ReceptionScreenshotFacts["sceneHints"],
@@ -198,7 +217,7 @@ export function parseReceptionScreenshotFacts(raw: string, fieldKey = "截图内
     serviceActions: unique(checked.data.serviceActions),
     businessFacts: unique(checked.data.businessFacts),
     missingSignals: unique(checked.data.missingSignals),
-  });
+  }, excelStartTime);
 }
 
 export function buildReceptionScreenshotFactsMessages(input: {
@@ -307,7 +326,7 @@ function parseIssueList(
       issueId: rule.id,
       name: rule.name,
       dimension: rule.dimension,
-      chatQuotes: unique(entry.chatQuotes),
+      chatQuotes: entry.chatQuotes,
       evidenceIds: unique(entry.evidenceIds),
       evidenceExplanation: entry.evidenceExplanation,
       reason: entry.reason,
@@ -436,20 +455,33 @@ function issueReport(issues: ReceptionIssue[]) {
   ].join("\n")).join("\n\n");
 }
 
-export function deriveReceptionQualityFields(quality: ReceptionQualityAnalysis): Record<string, string> {
-  const labels = quality.labels.length
-    ? quality.labels.join("、")
-    : quality.reviewRequired ? "待人工核验" : "";
+export function deriveReceptionQualityFields(quality: ReceptionQualityAnalysis): Record<string, unknown> {
+  const aligned = alignReceptionIssueValues(quality);
+  const needsReview = quality.reviewRequired || aligned.hasMismatch;
   return {
     "问题点-售前": issueReport(quality.preSaleIssues)
       || (quality.analysisProtocol === "legacy" ? "未发现有明确原文证据支持的售前违规项。" : ""),
     "问题点-售后": issueReport(quality.afterSaleIssues)
       || (quality.analysisProtocol === "legacy" ? "未发现有明确原文或辅助数据支持的售后违规项。" : ""),
     "有无违规-售后": quality.hasAfterSaleViolation ? "有违规" : "无违规",
-    "客服问题识别问题并打标签": labels,
+    "客服问题识别问题并打标签": aligned.labels.join("/"),
     "接待流程质检结果": quality.grade,
     "优化建议-售前": quality.suggestion
       || (quality.analysisProtocol === "legacy" ? "保持当前服务规范" : ""),
+    "会话开始时间": quality.conversationStartTime,
+    "会话ID": "",
+    "对话轮数": quality.conversationRoundCount,
+    "等级": quality.grade,
+    "合计扣分": quality.totalDeduction,
+    "优化建议": quality.suggestion,
+    "是否待人工复核": needsReview ? "是" : "否",
+    "维度": aligned.dimensions.join("/"),
+    "问题": aligned.labels.join("/"),
+    "扣分": aligned.deductions.join("/"),
+    "是否D级": aligned.labels.length ? quality.hasDLevelIssue ? "是" : "否" : "",
+    "聊天原文": aligned.chatQuotes.join("/"),
+    "证据说明": aligned.evidenceExplanations.join("/"),
+    "判定理由": aligned.reasons.join("/"),
   };
 }
 

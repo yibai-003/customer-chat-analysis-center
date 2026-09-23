@@ -16,6 +16,7 @@ import {
   createStructuredDeriveHandler,
   type StructuredFieldDefinition,
 } from "./structured";
+import { alignReceptionIssueValues } from "../../../shared/reception-quality-results";
 import { registerFieldExecutionHandler } from "./registry";
 
 interface ReceptionSource {
@@ -27,13 +28,14 @@ interface ReceptionSource {
 
 interface ReceptionScreenshotSource {
   fieldKey: string;
+  sourceFields: Record<string, string>;
 }
 
 const receptionScreenshotDefinition: StructuredFieldDefinition<ReceptionScreenshotSource, ReceptionScreenshotFacts> = {
   key: "截图内容总结",
-  prepare({ field, imageDataUrl }) {
+  prepare({ field, imageDataUrl, sourceFields }) {
     if (!imageDataUrl) throw new Error("截图事实抽取缺少图片");
-    return { fieldKey: field.key };
+    return { fieldKey: field.key, sourceFields };
   },
   buildMessages(input) {
     return buildReceptionScreenshotFactsMessages({
@@ -43,7 +45,7 @@ const receptionScreenshotDefinition: StructuredFieldDefinition<ReceptionScreensh
     });
   },
   parse(raw, source) {
-    return parseReceptionScreenshotFacts(raw, source.fieldKey);
+    return parseReceptionScreenshotFacts(raw, source.fieldKey, source.sourceFields);
   },
   derive: () => ({}),
   status: () => ({ status: "completed" }),
@@ -84,7 +86,7 @@ const receptionQualityDefinition: StructuredFieldDefinition<ReceptionSource, Rec
       : parseLegacyReceptionQuality(raw, source.fieldKey, options);
   },
   derive: (quality) => deriveReceptionQualityFields(quality),
-  status: (quality) => quality.reviewRequired
+  status: (quality) => quality.reviewRequired || alignReceptionIssueValues(quality).hasMismatch
     ? { status: "needs_review", errorMessage: "质检场景或部分项目证据不足，请人工复核" }
     : { status: "completed" },
   evidence: (quality) => [...quality.preSaleIssues, ...quality.afterSaleIssues]

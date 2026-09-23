@@ -124,7 +124,7 @@ describe("reception screenshot facts", () => {
     }));
 
     expect(facts).toMatchObject({
-      conversationStartTime: "2026-09-22 09:30:00",
+      conversationStartTime: "2026年9月22日 09:30",
       conversationRoundCount: 1,
       reviewReasons: [],
     });
@@ -145,7 +145,7 @@ describe("reception screenshot facts", () => {
     }));
     expect(facts.conversationStartTime).toBe("");
     expect(facts.reviewReasons).toEqual([
-      "会话开始时间：截图无法可靠识别完整日期和时间",
+      "会话开始时间：Excel 和聊天记录均无法可靠识别完整日期和时间",
     ]);
 
     expect(() => parseReceptionScreenshotFacts(JSON.stringify({
@@ -159,6 +159,47 @@ describe("reception screenshot facts", () => {
         grade: "A",
       },
     }))).toThrow("结构不符合 Schema");
+  });
+
+  it("prefers a valid Excel start time and preserves its original format", () => {
+    const facts = parseReceptionScreenshotFacts(JSON.stringify({
+      截图内容总结: {
+        sceneHints: ["售前"],
+        dialogueTurns: [
+          { id: "T1", speaker: "客户", time: "2026-09-22 09:30", text: "第一条" },
+        ],
+        customerIntents: [],
+        serviceActions: [],
+        businessFacts: [],
+        missingSignals: [],
+      },
+    }), "截图内容总结", {
+      "会话开始时间 (conversation_started_at)": "2026年9月22日 09:20",
+    });
+
+    expect(facts.conversationStartTime).toBe("2026年9月22日 09:20");
+    expect(facts.reviewReasons).toEqual([]);
+  });
+
+  it("falls back to the earliest explicit chat timestamp when Excel time is invalid", () => {
+    const facts = parseReceptionScreenshotFacts(JSON.stringify({
+      截图内容总结: {
+        sceneHints: ["售前"],
+        dialogueTurns: [
+          { id: "T1", speaker: "客户", time: "2026-09-22 09:30", text: "第二条" },
+          { id: "T2", speaker: "客服", time: "2026/9/22 09:20", text: "第一条" },
+        ],
+        customerIntents: [],
+        serviceActions: [],
+        businessFacts: [],
+        missingSignals: [],
+      },
+    }), "截图内容总结", {
+      "会话开始时间 (conversation_started_at)": "无法识别",
+    });
+
+    expect(facts.conversationStartTime).toBe("2026/9/22 09:20");
+    expect(facts.reviewReasons).toEqual([]);
   });
 });
 
@@ -197,7 +238,64 @@ describe("reception quality", () => {
     expect(deriveReceptionQualityFields(quality)).toMatchObject({
       "有无违规-售后": "有违规",
       "接待流程质检结果": "D",
-      "客服问题识别问题并打标签": "态度差D级、重复发送、答非所问、漏回复",
+      "客服问题识别问题并打标签": "态度差D级/重复发送/答非所问/漏回复",
+      "问题": "态度差D级/重复发送/答非所问/漏回复",
+      "维度": "服务态度/服务规范/问题解决/响应时效",
+      "扣分": "0/2/10/0",
+      "聊天原文": "您开心就好/请看详情页/请看详情页/我要退款",
+      "证据说明": "相关原文满足规则要求/相关原文满足规则要求/相关原文满足规则要求/相关原文满足规则要求",
+      "判定理由": "适用且命中触发条件，未命中排除条件/适用且命中触发条件，未命中排除条件/适用且命中触发条件，未命中排除条件/适用且命中触发条件，未命中排除条件",
+      "合计扣分": 12,
+      "等级": "D",
+      "是否D级": "是",
+      "是否待人工复核": "否",
+    });
+  });
+
+  it("keeps derived issue fields aligned, escapes delimiter slashes, and flags mismatched values", () => {
+    const quality = parseReceptionQuality(JSON.stringify(qualityResponse("混合", {
+      preSaleIssues: [
+        issue("PRE_ANSWER_IRRELEVANT", "T2", "请看详情页"),
+        issue("PRE_BAD_ATTITUDE", "T3", "您开心就好"),
+      ],
+    })), { screenshotFacts: completeFacts() });
+    const answerIssue = quality.preSaleIssues.find((item) => item.name === "答非所问")!;
+    const answerIndex = quality.labels.indexOf("答非所问");
+    quality.labels[answerIndex] = "答非所问/特别";
+    answerIssue.name = "答非所问/特别";
+    answerIssue.dimension = "问题/解决";
+    answerIssue.chatQuotes = ["客服：请看/链接", "客服：请看/链接", "客服：补充链接"];
+    answerIssue.evidenceExplanation = "证据/一";
+    answerIssue.reason = "理由/一";
+    quality.dimensions[answerIndex] = "问题/解决";
+    quality.deductions.pop();
+
+    expect(deriveReceptionQualityFields(quality)).toMatchObject({
+      "客服问题识别问题并打标签": "态度差D级/答非所问／特别",
+      "问题": "态度差D级/答非所问／特别",
+      "维度": "服务态度/问题／解决",
+      "扣分": "0/",
+      "聊天原文": "您开心就好/客服：请看／链接；客服：请看／链接；客服：补充链接",
+      "证据说明": "相关原文满足规则要求/证据／一",
+      "判定理由": "适用且命中触发条件，未命中排除条件/理由／一",
+      "是否待人工复核": "是",
+    });
+  });
+
+  it("leaves derived issue fields blank and requests review when issue details have no labels", () => {
+    const quality = parseReceptionQuality(JSON.stringify(qualityResponse("售前", {
+      preSaleIssues: [issue("PRE_ANSWER_IRRELEVANT", "T2", "请看详情页")],
+    })), { screenshotFacts: completeFacts() });
+    quality.labels = [];
+
+    expect(deriveReceptionQualityFields(quality)).toMatchObject({
+      "问题": "",
+      "维度": "",
+      "扣分": "",
+      "聊天原文": "",
+      "证据说明": "",
+      "判定理由": "",
+      "是否待人工复核": "是",
     });
   });
 
@@ -265,6 +363,11 @@ describe("reception quality", () => {
       "客服问题识别问题并打标签": "",
       "优化建议-售前": "",
       "接待流程质检结果": "A",
+      "问题": "",
+      "合计扣分": 0,
+      "等级": "A",
+      "是否D级": "",
+      "是否待人工复核": "否",
     });
   });
 
