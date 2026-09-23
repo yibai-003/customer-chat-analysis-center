@@ -231,6 +231,62 @@ describe("reception template import contract", () => {
     expect(listJobs()).toHaveLength(jobsBefore);
   });
 
+  it("supports encoded headers and WPS images whose serialized anchor column drifted", async () => {
+    const platform = createPlatform({
+      name: "京东",
+      code: `JD${Date.now()}`,
+    });
+    const encodedHeaders = [
+      "平台 (platform_name)",
+      "店铺 (store_name)",
+      "业务日期 (business_date)",
+      "会话开始时间 (conversation_started_at)",
+      "客服 (agent_name)",
+      "分组 (agent_group)",
+      "客户ID (customer_id)",
+      "会话ID (conversation_id)",
+      "对话轮数 (turn_count)",
+      "等级 (rating)",
+      "合计扣分 (total_deduction)",
+      "优化建议 (improvement_advice)",
+      "是否待人工复核 (needs_manual_review)",
+      "聊天截图 (chat_screenshot)",
+      "维度 (dimension)",
+      "问题 (issue)",
+      "扣分 (deduction)",
+      "是否D级 (d_level)",
+      "聊天原文 (chat_excerpt)",
+      "证据说明 (evidence)",
+      "判定理由 (judgement_reason)",
+    ];
+    const file = await writeWorkbook("reception-encoded-wps", (workbook) => {
+      const sheet = workbook.addWorksheet("接待质检");
+      sheet.addRow(encodedHeaders);
+      sheet.addRow(["京东", "测试店铺", "2026-09-23", "", "客服甲", "一组", "C-1"]);
+      const imageId = workbook.addImage({ base64: pixel, extension: "png" });
+      sheet.addImage(imageId, {
+        tl: { col: 8, row: 1 },
+        ext: { width: 20, height: 20 },
+      });
+    });
+
+    const preview = await previewWorkbookStreaming(
+      file,
+      "接待质检-编码表头.xlsx",
+      receptionSectionInput(),
+      platform,
+    );
+    expect(preview).toMatchObject({
+      imageCount: 1,
+      pendingRecordCount: 1,
+      historicalResultCount: 0,
+      resultConflicts: [],
+      platformConflicts: [],
+      missingHeaders: [],
+    });
+    expect(preview.sheets[0].imageRows).toEqual([2]);
+  });
+
   it("rejects all partial result rows together before creating a task", async () => {
     const platform = createPlatform({
       name: "接待冲突平台",

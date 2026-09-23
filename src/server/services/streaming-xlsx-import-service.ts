@@ -10,7 +10,11 @@ import { config } from "../config";
 import { normalizeUploadedFilename } from "../utils/encoding";
 import { normalizeImageAnchor } from "./excel-import-service";
 import { diskReservations, reservedFileWriter } from "../security/disk-reservations";
-import { normalizeExcelHeader } from "./excel-template-service";
+import {
+  excelHeaderMatches,
+  excelHeaderParts,
+  normalizeExcelHeader,
+} from "./excel-template-service";
 import { getSectionVersion } from "./section-config-version-service";
 import type { ReceptionImportContract } from "./section-business-rules";
 import {
@@ -23,6 +27,39 @@ const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_
 type StreamingAnchor = { row: number; column: number; embed: string; mediaPath?: string };
 type PlatformInput = { id: string; name: string; code: string };
 type SectionInput = { id: string; name: string; sourceFields?: string[]; sectionConfigVersionId?: string; sectionVersionNumber?: number };
+
+const receptionHeaderKeys: Record<string, string[]> = {
+  平台: ["platform_name"],
+  店铺: ["store_name"],
+  日期: ["business_date"],
+  客服: ["agent_name"],
+  分组: ["agent_group"],
+  客户ID: ["customer_id"],
+  聊天截图: ["chat_screenshot"],
+};
+const modernReceptionResultKeys = new Set([
+  "conversation_started_at",
+  "conversation_id",
+  "turn_count",
+  "rating",
+  "total_deduction",
+  "improvement_advice",
+  "needs_manual_review",
+  "dimension",
+  "issue",
+  "deduction",
+  "d_level",
+  "chat_excerpt",
+  "evidence",
+  "judgement_reason",
+]);
+const modernReceptionRequiredResultKeys = new Set([
+  "conversation_id",
+  "turn_count",
+  "rating",
+  "total_deduction",
+  "needs_manual_review",
+]);
 
 function asArray<T>(value: T | T[] | undefined): T[] {
   return value === undefined ? [] : Array.isArray(value) ? value : [value];
@@ -86,6 +123,12 @@ function normalizedPlatformValue(value: string) {
   return value.trim().toLocaleLowerCase();
 }
 
+function receptionHeaderMatches(actual: unknown, expected: string) {
+  if (excelHeaderMatches(actual, expected)) return true;
+  const key = excelHeaderParts(actual).key;
+  return Boolean(key && receptionHeaderKeys[expected]?.includes(key));
+}
+
 function platformConflicts(
   sheetData: Array<{ name: string; rows: Map<number, Record<number, string>> }>,
   platform?: PlatformInput,
@@ -95,7 +138,7 @@ function platformConflicts(
   const conflicts: Array<{ sheetName: string; rowNumber: number; value: string }> = [];
   for (const sheet of sheetData) {
     const headers = sheet.rows.get(1) ?? {};
-    const platformColumn = Object.entries(headers).find(([, value]) => normalizeExcelHeader(value) === "平台")?.[0];
+    const platformColumn = Object.entries(headers).find(([, value]) => receptionHeaderMatches(value, "平台"))?.[0];
     if (!platformColumn) continue;
     for (const [rowNumber, row] of sheet.rows) {
       if (rowNumber === 1) continue;
@@ -141,6 +184,23 @@ function rowSourceFields(
   return sourceFields;
 }
 
+function receptionContractForHeaders(
+  headers: Record<number, string>,
+  contract: ReceptionImportContract,
+) {
+  const modernColumns = Object.values(headers)
+    .map((header) => ({ header: normalizeExcelHeader(header), key: excelHeaderParts(header).key }))
+    .filter((item) => modernReceptionResultKeys.has(item.key));
+  if (!modernColumns.length) return contract;
+  return {
+    imageColumn: contract.imageColumn,
+    resultColumns: modernColumns.map((item) => item.header),
+    completeHistoricalResultRequiredColumns: modernColumns
+      .filter((item) => modernReceptionRequiredResultKeys.has(item.key))
+      .map((item) => item.header),
+  };
+}
+
 function resolveReceptionContract(section?: SectionInput): ReceptionImportContract | undefined {
   if (section?.id !== "reception") return;
   if (!section.sectionConfigVersionId) throw new Error("接待质检导入缺少配置版本");
@@ -156,12 +216,26 @@ function anchorsForContract(
   contract?: ReceptionImportContract,
 ) {
   if (!contract) return sheet.anchors;
-  const imageColumn = Object.entries(sheet.rows.get(1) ?? {})
-    .find(([, value]) => normalizeExcelHeader(value) === contract.imageColumn)?.[0];
+  const imageHeader = Object.entries(sheet.rows.get(1) ?? {})
+    .find(([, value]) => receptionHeaderMatches(value, contract.imageColumn));
+  const imageColumn = imageHeader?.[0];
   if (!imageColumn) return [];
   const seenRows = new Set<number>();
-  return sheet.anchors.filter((anchor) => {
+  const anchoredInImageColumn = sheet.anchors.filter((anchor) => {
     if (anchor.column !== Number(imageColumn) || seenRows.has(anchor.row)) return false;
+    seenRows.add(anchor.row);
+    return true;
+  });
+  if (anchoredInImageColumn.length || excelHeaderParts(imageHeader?.[1]).key !== "chat_screenshot") {
+    return anchoredInImageColumn;
+  }
+
+  // WPS can retain the screenshot header while serializing floating images against
+  // an earlier column after columns were rearranged. When every image is uniquely
+  // associated with a data row, preserve the reliable row anchor instead.
+  seenRows.clear();
+  return sheet.anchors.filter((anchor) => {
+    if (anchor.row <= 1 || seenRows.has(anchor.row)) return false;
     seenRows.add(anchor.row);
     return true;
   });
@@ -185,9 +259,10 @@ function inspectReceptionSheets(
     for (const anchor of anchorsForContract(sheet, contract)) {
       eligibleRows.add(`${sheet.name}\u0000${anchor.row}`);
       const sourceFields = rowSourceFields(sheet.rows, anchor.row);
-      const inspection = inspectReceptionResultRow(sourceFields, contract);
+      const resolvedContract = receptionContractForHeaders(sheet.rows.get(1) ?? {}, contract);
+      const inspection = inspectReceptionResultRow(sourceFields, resolvedContract);
       if (inspection.status === "empty") {
-        for (const field of contract.resultColumns) delete sourceFields[field];
+        for (const field of resolvedContract.resultColumns) delete sourceFields[field];
         pending.push({ sheetName: sheet.name, anchor, sourceFields });
       } else if (inspection.status === "complete") {
         historical.push({ sheetName: sheet.name, rowNumber: anchor.row });
@@ -277,7 +352,10 @@ export async function previewWorkbookStreaming(
     pendingRecordCount: contract ? reception.pending.length : imageCount,
     historicalResultCount: reception.historical.length,
     resultConflicts: reception.conflicts,
-    missingHeaders: (section?.sourceFields ?? []).filter((field) => !headers.has(field)),
+    missingHeaders: contract
+      ? [contract.imageColumn].filter((field) =>
+        !summaries.some((sheet) => sheet.headers.some((header) => receptionHeaderMatches(header, field))))
+      : (section?.sourceFields ?? []).filter((field) => !headers.has(field)),
     sheets: summaries,
   };
 }

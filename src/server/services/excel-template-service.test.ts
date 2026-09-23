@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildOutputPlan, mergeTemplateHeaders } from "./excel-template-service";
+import {
+  buildOutputPlan,
+  excelHeaderMatches,
+  excelHeaderParts,
+  mergeTemplateHeaders,
+} from "./excel-template-service";
 
 describe("Excel template field mapping", () => {
   it("writes mapped fields to existing headers and appends missing headers", () => {
@@ -42,6 +47,31 @@ describe("Excel template field mapping", () => {
     )).toEqual([
       { key: "quality", column: 2, header: "接待流程质检结果" },
       { key: "suggestion", column: 3, header: "优化建议-售前" },
+    ]);
+  });
+
+  it("parses display labels and stable field keys", () => {
+    expect(excelHeaderParts("聊天截图 (chat_screenshot)")).toEqual({
+      raw: "聊天截图 (chat_screenshot)",
+      label: "聊天截图",
+      key: "chat_screenshot",
+    });
+    expect(excelHeaderMatches("平台 (platform_name)", "平台")).toBe(true);
+  });
+
+  it("fills existing encoded reception result columns without replacing their headers", () => {
+    const plan = buildOutputPlan(
+      ["平台 (platform_name)", "等级 (rating)", "问题 (issue)"],
+      [
+        { key: "platform_name", label: "平台", outputColumn: "平台" },
+        { key: "quality_grade", label: "接待流程质检结果", outputColumn: "接待流程质检结果" },
+        { key: "quality_issue_names", label: "问题", outputColumn: "问题" },
+      ],
+    );
+    expect(plan).toEqual([
+      { key: "platform_name", column: 1, header: "平台 (platform_name)" },
+      { key: "quality_grade", column: 2, header: "等级 (rating)" },
+      { key: "quality_issue_names", column: 3, header: "问题 (issue)" },
     ]);
   });
 });
