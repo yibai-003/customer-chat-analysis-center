@@ -26,6 +26,10 @@ import { applyReceptionImportContract } from "./022-reception-import-contract";
 import { applyReceptionTwoStageAnalysis } from "./023-reception-two-stage-analysis";
 import { applyReceptionScreenshotRowExport } from "./024-reception-screenshot-row-export";
 import { applyReceptionV4ModernTemplate } from "./025-reception-v4-modern-template";
+import { applyReceptionV5DerivedResults } from "./026-reception-v5-derived-results";
+import { applyReceptionV5LiveCoreSync } from "./027-reception-v5-live-core-sync";
+import { applyReceptionIssueRowExport } from "./028-reception-issue-row-export";
+import { revertReceptionIssueRowExport } from "./029-revert-reception-issue-row-export";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
@@ -53,8 +57,12 @@ export const migrations: Migration[] = [
   { version: 23, name: "reception-two-stage-analysis", up: applyReceptionTwoStageAnalysis },
   { version: 24, name: "reception-screenshot-row-export", up: applyReceptionScreenshotRowExport },
   { version: 25, name: "reception-v4-modern-template", up: applyReceptionV4ModernTemplate },
+  { version: 26, name: "reception-v5-derived-results", up: applyReceptionV5DerivedResults },
+  { version: 27, name: "reception-v5-live-core-sync", up: applyReceptionV5LiveCoreSync },
+  { version: 28, name: "reception-issue-row-export", up: applyReceptionIssueRowExport },
+  { version: 29, name: "revert-reception-issue-row-export", up: revertReceptionIssueRowExport },
 ];
-export const currentSchemaVersion = 25;
+export const currentSchemaVersion = 29;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();

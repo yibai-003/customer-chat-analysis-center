@@ -601,6 +601,16 @@ export function listRecordsPage(jobId: string, query: RecordPageQuery = {}): Rec
 export function getRecord(id: string): RecordDetail | undefined {
   const row = db.prepare("SELECT * FROM records WHERE id = ?").get(id) as any;
   if (!row) return;
+  const version = db.prepare(`
+    SELECT analysis_section_versions.fields_snapshot_json
+    FROM jobs
+    LEFT JOIN analysis_section_versions
+      ON analysis_section_versions.id = jobs.section_config_version_id
+    WHERE jobs.id = ?
+  `).get(row.job_id) as { fields_snapshot_json: string | null } | undefined;
+  const configFields = version?.fields_snapshot_json
+    ? JSON.parse(version.fields_snapshot_json)
+    : undefined;
   const runs = (db.prepare("SELECT * FROM analysis_runs WHERE record_id = ? ORDER BY created_at DESC").all(id) as any[]).map((run) => ({
     id: run.id, recordId: run.record_id, sectionId: run.section_id, status: run.status,
     result: JSON.parse(run.model_result_json), rawResponse: run.raw_response ?? undefined,
@@ -614,7 +624,7 @@ export function getRecord(id: string): RecordDetail | undefined {
       reviewNote: review.review_note ?? "",
     },
   ]));
-  return { ...mapRecord(row), jobId: row.job_id, imagePath: row.image_path, humanResult: row.human_result_json ? JSON.parse(row.human_result_json) : null, reviewNote: row.review_note, sectionReviews, analysisRuns: runs, fieldRuns: listFieldRuns(id) };
+  return { ...mapRecord(row), jobId: row.job_id, imagePath: row.image_path, configFields, humanResult: row.human_result_json ? JSON.parse(row.human_result_json) : null, reviewNote: row.review_note, sectionReviews, analysisRuns: runs, fieldRuns: listFieldRuns(id) };
 }
 export function updateRecord(
   id: string,

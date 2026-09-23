@@ -8,6 +8,7 @@ import { addRecords, createJob, listRecords } from "../db/repositories";
 import { captureCatalog } from "./knowledge/knowledge-sync-service";
 import { createFullBackup, restoreFullBackup } from "./backup-service";
 import { verifyRestoredEnvironment } from "./restore-verification";
+import { currentSchemaVersion } from "../db/migrations";
 
 let root: string;
 let imagePath: string;
@@ -51,7 +52,8 @@ describe("restored environment verification", () => {
       "knowledge-catalog",
       "model-credentials",
     ]);
-    expect(result.checks.find((check) => check.name === "database")!.detail).toMatchObject({ version: 24 });
+    expect(result.checks.find((check) => check.name === "database")!.detail)
+      .toMatchObject({ version: currentSchemaVersion });
     expect(result.checks.find((check) => check.name === "file-references")!.detail).toMatchObject({ checked: 2 });
     expect(result.checks.find((check) => check.name === "model-credentials")!.detail).toMatchObject({ models: 0, decryptable: true });
   });

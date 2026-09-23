@@ -22,5 +22,9 @@
   "022-reception-import-contract.ts": "f6c83f341d03a30779e054e82b7b4c6d1b97e980ea31952cc0867846e1126949",
   "023-reception-two-stage-analysis.ts": "5079bbd44480bde63a3012750065baef2c7df47aaae7ee689aa0f2ba12507ef7",
   "024-reception-screenshot-row-export.ts": "b2a0ccfdea2b45a0ab9114b7fda0b89ad415806928d861d41115f5a54a8f7817",
-  "025-reception-v4-modern-template.ts": "b3d3d9465038ec4ad12a26e838c91635b74d9a1daf66c1338f7297b3e873ec83"
+  "025-reception-v4-modern-template.ts": "b3d3d9465038ec4ad12a26e838c91635b74d9a1daf66c1338f7297b3e873ec83",
+  "026-reception-v5-derived-results.ts": "36ae4c62555e96457698ec920e58840e8d910dc3bd005fbb6ec924a788a5cb18",
+  "027-reception-v5-live-core-sync.ts": "afae0929f5f2320f0873408b61a3b22c9c3cb9acb764934ab0844cbbb0421ea3",
+  "028-reception-issue-row-export.ts": "5877a4a270ce8ae52e17a125cde6244887fdcbdd561ebbb9d931767a34224bce",
+  "029-revert-reception-issue-row-export.ts": "e62fc6aace170e855287e2c2215281cc04b6c9a0f7412fd94eca01be5cefdf8b"
 }

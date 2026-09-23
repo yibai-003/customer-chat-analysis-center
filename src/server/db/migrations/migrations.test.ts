@@ -26,7 +26,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -65,8 +65,8 @@ describe("versioned migrations", () => {
 
     runMigrations(db);
 
-    expect(currentSchemaVersion).toBe(24);
-    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
+    expect(currentSchemaVersion).toBe(29);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
     const qwenRows = db.prepare(`
       SELECT
         model.provider_id,
@@ -351,8 +351,8 @@ describe("versioned migrations", () => {
     runMigrations(db);
 
     expect(appliedMigrations(db).at(-1)).toMatchObject({
-      version: 24,
-      name: "reception-screenshot-row-export",
+      version: 29,
+      name: "revert-reception-issue-row-export",
     });
     expect(db.prepare("PRAGMA foreign_key_list(analysis_section_versions)").all())
       .toEqual(expect.arrayContaining([
@@ -376,7 +376,7 @@ describe("versioned migrations", () => {
       business_rules_json: string;
       export_settings_json: string;
     }>;
-    expect(versions).toHaveLength(5);
+    expect(versions).toHaveLength(9);
     expect(versions[0]).toMatchObject({ id: receptionV1.id, version_number: 1, is_current: 0 });
     expect((JSON.parse(versions[0].business_rules_json).issues as Array<{ dimension?: string }>)[0].dimension)
       .toBeUndefined();
@@ -408,23 +408,32 @@ describe("versioned migrations", () => {
     expect(versions[3]).toMatchObject({ version_number: 4, is_current: 0 });
     expect((JSON.parse(versions[3].business_rules_json).issues as Array<{ deduction?: number }>)[0].deduction)
       .toBe(77);
-    expect(versions[4]).toMatchObject({ version_number: 5, is_current: 1 });
-    expect(JSON.parse(versions[4].export_settings_json)).toMatchObject({
-      rowMode: "screenshot_records",
+    expect(versions[4]).toMatchObject({ version_number: 5, is_current: 0 });
+    expect(versions[5]).toMatchObject({ version_number: 6, is_current: 0 });
+    expect(versions[6]).toMatchObject({ version_number: 7, is_current: 0 });
+    expect(versions[7]).toMatchObject({ version_number: 8, is_current: 0 });
+    expect(JSON.parse(versions[7].export_settings_json)).toMatchObject({
+      rowMode: "reception_issue_records",
       outputColumns: expect.arrayContaining([
-        expect.objectContaining({ key: "platform_name", outputColumn: "平台" }),
-        expect.objectContaining({ key: "conversation_id", outputColumn: "会话ID" }),
-        expect.objectContaining({ format: "reception_issue_names_csv", outputColumn: "问题" }),
+        expect.objectContaining({ key: "platform_name", outputColumn: "平台 (platform_name)" }),
+        expect.objectContaining({ key: "conversation_id", outputColumn: "会话ID (conversation_id)" }),
+        expect.objectContaining({ format: "reception_issue_names_csv", outputColumn: "问题 (issue)" }),
       ]),
+    });
+    expect(versions[8]).toMatchObject({ version_number: 9, is_current: 1 });
+    expect(JSON.parse(versions[8].export_settings_json)).toMatchObject({
+      rowMode: "screenshot_records",
     });
     const strictFields = JSON.parse((db.prepare(
       "SELECT fields_snapshot_json FROM analysis_section_versions WHERE id = ?",
-    ).get(versions[4].id) as { fields_snapshot_json: string }).fields_snapshot_json) as Array<{
+    ).get(versions[8].id) as { fields_snapshot_json: string }).fields_snapshot_json) as Array<{
       key: string;
       executionType: string;
       imageEnabled: boolean;
       dependsOn: string[];
     }>;
+    expect(strictFields).toHaveLength(16);
+    expect(strictFields.filter((field) => field.executionType === "reception_quality_derive")).toHaveLength(14);
     expect(strictFields).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: "截图内容总结",
@@ -442,7 +451,7 @@ describe("versioned migrations", () => {
     expect(() => db.prepare(`
       UPDATE analysis_section_versions SET section_snapshot_json = '{}'
       WHERE id = ?
-    `).run(versions[4].id)).toThrow("已发布配置版本内容不可修改");
+    `).run(versions[8].id)).toThrow("已发布配置版本内容不可修改");
     expect(() => db.prepare(`
       INSERT INTO analysis_section_versions (
         id, section_id, version_number, status, is_current,

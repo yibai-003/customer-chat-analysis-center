@@ -572,6 +572,7 @@ export interface AnalysisRun {
 export interface RecordDetail extends RecordSummary {
   jobId: string;
   imagePath: string;
+  configFields?: AnalysisField[];
   humanResult: Record<string, unknown> | null;
   reviewNote: string;
   sectionReviews?: Record<string, {

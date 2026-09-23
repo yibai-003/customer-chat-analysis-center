@@ -584,7 +584,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
     expect(results["接待流程质检结果"]).toEqual({ 接待流程质检结果: "B" });
     expect(results["有无违规-售后"]).toEqual({ "有无违规-售后": "有违规" });
     expect(results["客服问题识别问题并打标签"]).toEqual({
-      客服问题识别问题并打标签: "答非所问、漏回复",
+      客服问题识别问题并打标签: "答非所问/漏回复",
     });
     expect(runs.filter((run) => JSON.parse(run.model_config_snapshot_json).strategy === "local_rules")).toHaveLength(6);
 
