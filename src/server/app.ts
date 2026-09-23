@@ -17,7 +17,7 @@ import { analyzeJob, prepareTargetedRecordIds, retryFailedJob } from "./services
 import { exportJob } from "./services/excel-export-service";
 import { clearDefaultModel, createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
-import { listFields, upsertField, deleteField } from "./services/field-config-service";
+import { listEnabledFields, upsertField, deleteField } from "./services/field-config-service";
 import { analyzeField, retryField } from "./services/field-analysis-service";
 import { normalizeUploadedFilename } from "./utils/encoding";
 import { createKnowledgeRouter } from "./routes/knowledge-routes";
@@ -338,7 +338,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       return ok(res, getJob(req.params.id));
     } catch (error) { return fail(res, error); }
   });
-  app.get("/api/jobs/:id/export", canExport, async (req, res) => {
+  app.get("/api/jobs/:id/export", canExport, async (req, res, next) => {
     try {
       if (req.query.sections !== undefined) throw new Error("导出不接受板块参数，板块由任务绑定版本唯一确定");
       const output = await exportJob(req.params.id);
@@ -352,7 +352,17 @@ export function createApp(dependencies: AppDependencies = {}) {
           sectionConfigVersionId: job?.sectionConfigVersionId ?? null,
         },
       });
-      return res.download(output);
+      res.attachment(path.basename(output));
+      const stream = fs.createReadStream(output);
+      stream.on("error", (error) => {
+        if (res.headersSent) {
+          res.destroy(error);
+          return;
+        }
+        next(error);
+      });
+      stream.pipe(res);
+      return;
     } catch (error) { return fail(res, error); }
   });
   app.get("/api/sections", canView, (_req, res) => ok(res, listSections()));
@@ -447,7 +457,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       return ok(res, version);
     } catch (error) { return fail(res, error); }
   });
-  app.get("/api/sections/:id/fields", canView, (req, res) => ok(res, listFields(req.params.id)));
+  app.get("/api/sections/:id/fields", canView, (req, res) => ok(res, listEnabledFields(req.params.id)));
   app.post("/api/sections/:id/fields", canManageConfig, (req, res) => {
     try {
       const field = upsertField({ ...req.body, sectionId: req.params.id });

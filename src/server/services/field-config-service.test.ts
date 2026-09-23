@@ -6,6 +6,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../db/client";
 import { upsertKnowledgeBase } from "./knowledge/knowledge-repository";
 import {
+  listEnabledFields,
   listFields,
   topologicalFields,
   upsertField,
@@ -38,6 +39,13 @@ describe("field config service", () => {
     const fields = listFields("reception");
     expect(fields.find((item) => item.key === "conclusion")?.prompt).toContain("问候");
     expect(fields.find((item) => item.key === "conclusion")?.imageEnabled).toBe(true);
+  });
+
+  it("lists only active fields for current configuration screens", () => {
+    const enabled = listEnabledFields("refund");
+    expect(enabled.every((item) => item.isEnabled)).toBe(true);
+    expect(enabled.map((item) => item.key)).not.toContain("responsibility");
+    expect(enabled.map((item) => item.key)).not.toContain("suggestion");
   });
 
   it("allows capture only on the internal lost-deal attribution field", () => {
