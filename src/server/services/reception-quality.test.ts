@@ -201,6 +201,49 @@ describe("reception screenshot facts", () => {
     expect(facts.conversationStartTime).toBe("2026/9/22 09:20");
     expect(facts.reviewReasons).toEqual([]);
   });
+
+  it("combines a matching Excel business date with a month-day chat timestamp", () => {
+    const facts = parseReceptionScreenshotFacts(JSON.stringify({
+      截图内容总结: {
+        sceneHints: ["售前"],
+        dialogueTurns: [
+          { id: "T1", speaker: "客户", time: "07-16 23:38:33", text: "咨询尺码" },
+          { id: "T2", speaker: "客服", time: "07-16 23:38:38", text: "推荐70圈" },
+        ],
+        customerIntents: [],
+        serviceActions: [],
+        businessFacts: [],
+        missingSignals: [],
+      },
+    }), "截图内容总结", {
+      "业务日期 (business_date)": "2026-07-16",
+    });
+
+    expect(facts.conversationStartTime).toBe("2026-07-16 23:38:33");
+    expect(facts.reviewReasons).toEqual([]);
+  });
+
+  it("keeps a month-day chat timestamp blank when it conflicts with the Excel business date", () => {
+    const facts = parseReceptionScreenshotFacts(JSON.stringify({
+      截图内容总结: {
+        sceneHints: ["售前"],
+        dialogueTurns: [
+          { id: "T1", speaker: "客户", time: "07-16 23:38:33", text: "咨询尺码" },
+        ],
+        customerIntents: [],
+        serviceActions: [],
+        businessFacts: [],
+        missingSignals: [],
+      },
+    }), "截图内容总结", {
+      "业务日期 (business_date)": "2026-07-17",
+    });
+
+    expect(facts.conversationStartTime).toBe("");
+    expect(facts.reviewReasons).toEqual([
+      "会话开始时间：Excel 和聊天记录均无法可靠识别完整日期和时间",
+    ]);
+  });
 });
 
 describe("reception quality", () => {

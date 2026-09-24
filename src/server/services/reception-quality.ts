@@ -148,6 +148,52 @@ function parseExplicitDateTime(value: string): { timestamp: number; value: strin
   };
 }
 
+function parseBusinessDate(value: string): { year: number; month: number; day: number } | undefined {
+  const match = value.match(
+    /^\s*(\d{4})\s*(?:年|[-/])\s*(\d{1,2})\s*(?:月|[-/])\s*(\d{1,2})\s*(?:日)?\s*$/,
+  );
+  if (!match) return;
+  const [, yearText, monthText, dayText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year
+    || date.getUTCMonth() + 1 !== month
+    || date.getUTCDate() !== day) return;
+  return { year, month, day };
+}
+
+function parseMonthDayTime(value: string): {
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+} | undefined {
+  const match = value.match(
+    /^\s*(\d{1,2})\s*(?:月|[-/])\s*(\d{1,2})\s*(?:日)?[T\s]+(\d{1,2})\s*(?::|时)\s*(\d{1,2})(?:\s*(?::|分)\s*(\d{1,2}))?\s*(?:秒)?\s*$/,
+  );
+  if (!match) return;
+  const [, monthText, dayText, hourText, minuteText, secondText = "0"] = match;
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+  if (month < 1 || month > 12 || day < 1 || day > 31
+    || hour > 23 || minute > 59 || second > 59) return;
+  return { month, day, hour, minute, second };
+}
+
+function businessDateFromSourceFields(sourceFields: Record<string, string>) {
+  return Object.entries(sourceFields).find(([key]) =>
+    key.trim() === "业务日期"
+    || key.trim() === "业务日期 (business_date)"
+    || key.trim() === "业务日期（business_date)"
+    || /^\s*业务日期\s*[（(]\s*business_date\s*[)）]\s*$/.test(key))?.[1] ?? "";
+}
+
 export function countReceptionConversationRounds(turns: ReceptionDialogueTurn[]) {
   let waitingForAgent = false;
   let rounds = 0;
@@ -165,6 +211,7 @@ export function countReceptionConversationRounds(turns: ReceptionDialogueTurn[])
 export function deriveReceptionConversationFacts(
   facts: Omit<ReceptionScreenshotFacts, "conversationStartTime" | "conversationRoundCount" | "reviewReasons">,
   excelStartTime = "",
+  businessDate = "",
 ): ReceptionScreenshotFacts {
   const excelDateTime = parseExplicitDateTime(excelStartTime);
   const chatDateTime = facts.dialogueTurns.reduce<
@@ -175,9 +222,41 @@ export function deriveReceptionConversationFacts(
       ? current
       : earliest;
   }, undefined);
+  const businessDateParts = parseBusinessDate(businessDate);
+  const partialChatTimes = facts.dialogueTurns
+    .map((turn) => parseMonthDayTime(turn.time))
+    .filter((value): value is NonNullable<typeof value> => Boolean(value));
+  const matchingPartialChatTimes = businessDateParts
+    ? partialChatTimes.filter((value) =>
+      value.month === businessDateParts.month && value.day === businessDateParts.day)
+    : [];
+  const conflictingPartialChatTime = businessDateParts
+    ? partialChatTimes.some((value) =>
+      value.month !== businessDateParts.month || value.day !== businessDateParts.day)
+    : false;
+  const combinedChatDateTime = !chatDateTime
+    && businessDateParts
+    && matchingPartialChatTimes.length > 0
+    && !conflictingPartialChatTime
+    ? matchingPartialChatTimes.reduce<{ timestamp: number; value: string } | undefined>((earliest, value) => {
+      const candidate = {
+        timestamp: Date.UTC(
+          businessDateParts.year,
+          businessDateParts.month - 1,
+          businessDateParts.day,
+          value.hour,
+          value.minute,
+          value.second,
+        ),
+        value: `${businessDateParts.year}-${String(businessDateParts.month).padStart(2, "0")}-${String(businessDateParts.day).padStart(2, "0")} `
+          + `${String(value.hour).padStart(2, "0")}:${String(value.minute).padStart(2, "0")}:${String(value.second).padStart(2, "0")}`,
+      };
+      return !earliest || candidate.timestamp < earliest.timestamp ? candidate : earliest;
+    }, undefined)
+    : undefined;
   const conversationStartTime = excelDateTime
     ? excelStartTime.trim()
-    : chatDateTime?.value ?? "";
+    : chatDateTime?.value ?? combinedChatDateTime?.value ?? "";
   const reviewReasons = conversationStartTime
     ? []
     : ["会话开始时间：Excel 和聊天记录均无法可靠识别完整日期和时间"];
@@ -210,6 +289,7 @@ export function parseReceptionScreenshotFacts(
     || key.trim() === "会话开始时间 (conversation_started_at)"
     || key.trim() === "会话开始时间（conversation_started_at)"
     || /^\s*会话开始时间\s*[（(]\s*conversation_started_at\s*[)）]\s*$/.test(key))?.[1] ?? "";
+  const businessDate = businessDateFromSourceFields(sourceFields);
   return deriveReceptionConversationFacts({
     ...checked.data,
     sceneHints: unique(checked.data.sceneHints) as ReceptionScreenshotFacts["sceneHints"],
@@ -217,7 +297,7 @@ export function parseReceptionScreenshotFacts(
     serviceActions: unique(checked.data.serviceActions),
     businessFacts: unique(checked.data.businessFacts),
     missingSignals: unique(checked.data.missingSignals),
-  }, excelStartTime);
+  }, excelStartTime, businessDate);
 }
 
 export function buildReceptionScreenshotFactsMessages(input: {
@@ -246,7 +326,7 @@ export function buildReceptionScreenshotFactsMessages(input: {
     `版本字段提示词：${input.field.prompt}`,
     `辅助字段：${JSON.stringify(receptionAiSourceFields(input.sourceFields))}`,
     "必须区分客户、人工客服、机器人和系统消息；机器人和系统消息不得标记为客服。",
-    "time 只能抄录截图中可见的时间原文，不得用业务日期、导入时间或上下文推算。",
+    "time 只能抄录截图中可见的时间原文；如果截图只显示月-日和时分秒，仍原样保留，不要自行补全年份。系统会在业务日期与截图月日一致时由本地规则补全。",
     "禁止输出问题 ID、维度、扣分、等级、建议或其他质检结论。",
     `只返回严格 JSON，不得增加字段：${JSON.stringify(protocol)}`,
   ].join("\n");
