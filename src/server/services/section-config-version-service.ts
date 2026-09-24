@@ -53,7 +53,7 @@ function mapField(row: any): AnalysisField {
   };
 }
 
-function buildCurrentSnapshot(sectionId: string) {
+function buildCurrentSnapshot(sectionId: string, businessRulesOverride?: Record<string, unknown>) {
   const section = db.prepare("SELECT * FROM analysis_sections WHERE id = ?").get(sectionId) as any;
   if (!section) throw new Error("板块不存在");
   const fields = (db.prepare(
@@ -103,7 +103,7 @@ function buildCurrentSnapshot(sectionId: string) {
     exportSettings: sectionExportSettings(sectionId, fields, sectionSnapshot.sourceFields),
     dependenciesSnapshot: fields.map((field) => ({ key: field.key, dependsOn: field.dependsOn })),
     knowledgeSnapshot: knowledge,
-    businessRules: sectionBusinessRules(sectionId, sectionSnapshot.sourceFields),
+    businessRules: businessRulesOverride ?? sectionBusinessRules(sectionId, sectionSnapshot.sourceFields),
   };
 }
 
@@ -233,7 +233,17 @@ function validateVersionSnapshot(version: Pick<
     if (new Set(checked.issues.map((item) => item.id)).size !== checked.issues.length) {
       throw new Error("接待质检问题 ID 重复");
     }
+    const issueNames = new Set<string>();
     for (const issue of checked.issues) {
+      if (issueNames.has(issue.name)) throw new Error(`接待质检问题名称重复：${issue.name}`);
+      issueNames.add(issue.name);
+      if (!issue.criterion.trim()) throw new Error(`接待质检规则缺少判定标准：${issue.id}`);
+      if (!issue.triggerWhen.some((item) => item.trim())) {
+        throw new Error(`接待质检规则缺少触发条件：${issue.id}`);
+      }
+      if (!issue.requiredEvidence.some((item) => item.trim())) {
+        throw new Error(`接待质检规则缺少证据要求：${issue.id}`);
+      }
       if (issue.name.includes(",")) throw new Error(`接待质检问题名称不能包含英文逗号：${issue.name}`);
       if (issue.dimension.includes(",")) throw new Error(`接待质检问题维度不能包含英文逗号：${issue.dimension}`);
     }
@@ -315,7 +325,15 @@ export function getJobSectionConfigVersion(jobId: string): SectionConfigVersion 
 
 export function createDraftVersion(sectionId: string): SectionConfigVersion {
   return db.transaction(() => {
-    const snapshot = buildCurrentSnapshot(sectionId);
+    const current = db.prepare(`
+      SELECT business_rules_json
+      FROM analysis_section_versions
+      WHERE section_id = ? AND is_current = 1
+    `).get(sectionId) as { business_rules_json: string } | undefined;
+    const inheritedBusinessRules = current
+      ? parseJson<Record<string, unknown>>(current.business_rules_json, {})
+      : undefined;
+    const snapshot = buildCurrentSnapshot(sectionId, inheritedBusinessRules);
     const next = db.prepare(
       "SELECT COALESCE(MAX(version_number), 0) + 1 AS version_number FROM analysis_section_versions WHERE section_id = ?",
     ).get(sectionId) as { version_number: number };

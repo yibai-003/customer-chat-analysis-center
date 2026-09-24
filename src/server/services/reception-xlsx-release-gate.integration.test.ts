@@ -499,8 +499,8 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
     expect(qualityResult(byOrder.get("RG-MULTI-D")!.id)).toMatchObject({
       labels: ["服务消极D级", "答非所问"],
       dimensions: ["服务态度", "问题解决"],
-      deductions: [0, 17],
-      totalDeduction: 17,
+      deductions: [5, 17],
+      totalDeduction: 22,
       grade: "D",
       reviewRequired: false,
     });
@@ -574,8 +574,8 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
     expect(qualityResult(retryRecord.id)).toMatchObject({
       labels: ["服务消极D级", "答非所问"],
       dimensions: ["服务态度", "问题解决"],
-      deductions: [0, 17],
-      totalDeduction: 17,
+      deductions: [5, 17],
+      totalDeduction: 22,
       grade: "D",
     });
     expect(getRecord(retryRecord.id)?.conversationId).toBe(idsBeforeRetry["RG-MULTI-D"]);
@@ -625,7 +625,7 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
     expect(sheet.getRow(3).getCell(column(sheet, "扣分")).value).toBe("17");
     expect(sheet.getRow(4).getCell(column(sheet, "问题")).value).toBe("服务消极D级/答非所问");
     expect(sheet.getRow(4).getCell(column(sheet, "维度")).value).toBe("服务态度/问题解决");
-    expect(sheet.getRow(4).getCell(column(sheet, "扣分")).value).toBe("0/17");
+    expect(sheet.getRow(4).getCell(column(sheet, "扣分")).value).toBe("5/17");
     expect(sheet.getRow(4).getCell(column(sheet, "是否D级")).value).toBe("是");
     expect(sheet.getRow(4).getCell(column(sheet, "接待流程质检结果")).value).toBe("D");
     expect(sheet.getRow(4).getCell(column(sheet, "证据说明")).value)

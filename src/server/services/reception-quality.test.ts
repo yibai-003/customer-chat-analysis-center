@@ -247,6 +247,11 @@ describe("reception screenshot facts", () => {
 });
 
 describe("reception quality", () => {
+  it("requires every confirmed issue rule to carry a positive deduction", () => {
+    expect(canonicalRules.issues.every((rule) => rule.deduction > 0)).toBe(true);
+    expect(canonicalRules.issues.filter((rule) => rule.forceD).every((rule) => rule.deduction >= 5)).toBe(true);
+  });
+
   it("derives dimensions, multi-issue deductions, D override, and suggestions from local version rules", () => {
     const quality = parseReceptionQuality(JSON.stringify(qualityResponse("混合", {
       preSaleIssues: [
@@ -263,8 +268,8 @@ describe("reception quality", () => {
     });
 
     expect(quality).toMatchObject({
-      totalDeduction: 12,
-      score: 88,
+      totalDeduction: 23,
+      score: 77,
       grade: "D",
       hasDLevelIssue: true,
       hasAfterSaleViolation: true,
@@ -284,11 +289,11 @@ describe("reception quality", () => {
       "客服问题识别问题并打标签": "态度差D级/重复发送/答非所问/漏回复",
       "问题": "态度差D级/重复发送/答非所问/漏回复",
       "维度": "服务态度/服务规范/问题解决/响应时效",
-      "扣分": "0/2/10/0",
+      "扣分": "10/2/10/1",
       "聊天原文": "您开心就好/请看详情页/请看详情页/我要退款",
       "证据说明": "相关原文满足规则要求/相关原文满足规则要求/相关原文满足规则要求/相关原文满足规则要求",
       "判定理由": "适用且命中触发条件，未命中排除条件/适用且命中触发条件，未命中排除条件/适用且命中触发条件，未命中排除条件/适用且命中触发条件，未命中排除条件",
-      "合计扣分": 12,
+      "合计扣分": 23,
       "等级": "D",
       "是否D级": "是",
       "是否待人工复核": "否",
@@ -317,7 +322,7 @@ describe("reception quality", () => {
       "客服问题识别问题并打标签": "态度差D级/答非所问／特别",
       "问题": "态度差D级/答非所问／特别",
       "维度": "服务态度/问题／解决",
-      "扣分": "0/",
+      "扣分": "10/",
       "聊天原文": "您开心就好/客服：请看／链接；客服：请看／链接；客服：补充链接",
       "证据说明": "相关原文满足规则要求/证据／一",
       "判定理由": "适用且命中触发条件，未命中排除条件/理由／一",

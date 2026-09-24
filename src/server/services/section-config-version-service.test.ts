@@ -199,6 +199,55 @@ describe("section configuration version lifecycle", () => {
       .toThrow("接待质检截图事实字段必须启用严格视觉事实抽取");
   });
 
+  it("inherits the published reception rule catalog when creating a new draft", () => {
+    const firstDraft = createDraftVersion("reception");
+    const rules = structuredClone(firstDraft.businessRules) as {
+      issues: Array<{ id: string; dimension: string }>;
+    };
+    const target = rules.issues.find((issue) => issue.id === "PRE_ANSWER_IRRELEVANT")!;
+    target.dimension = "数据库沉淀维度";
+    updateDraftSectionVersion(firstDraft.id, { businessRules: rules });
+    publishSectionVersion(firstDraft.id);
+
+    const nextDraft = createDraftVersion("reception");
+    const inherited = nextDraft.businessRules as {
+      issues: Array<{ id: string; dimension: string }>;
+    };
+    expect(inherited.issues.find((issue) => issue.id === target.id)?.dimension)
+      .toBe("数据库沉淀维度");
+  });
+
+  it("rejects duplicate reception rule names used for result alignment", () => {
+    const draft = createDraftVersion("reception");
+    const rules = structuredClone(draft.businessRules) as {
+      issues: Array<{ id: string; name: string }>;
+    };
+    rules.issues[1].name = rules.issues[0].name;
+    db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
+      .run(JSON.stringify({ ...draft.businessRules, issues: rules.issues }), draft.id);
+
+    expect(() => publishSectionVersion(draft.id)).toThrow("接待质检问题名称重复");
+  });
+
+  it("rejects reception rules without executable criteria or evidence", () => {
+    const draft = createDraftVersion("reception");
+    const rules = structuredClone(draft.businessRules) as {
+      issues: Array<{
+        id: string;
+        criterion: string;
+        triggerWhen: string[];
+        requiredEvidence: string[];
+      }>;
+    };
+    rules.issues[0].criterion = " ";
+    rules.issues[0].triggerWhen = [];
+    rules.issues[0].requiredEvidence = [];
+    db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
+      .run(JSON.stringify({ ...draft.businessRules, issues: rules.issues }), draft.id);
+
+    expect(() => publishSectionVersion(draft.id)).toThrow("接待质检规则缺少判定标准");
+  });
+
   it("rejects malformed snapshots and runtime model state", () => {
     const sectionId = createConfigFixture();
     const malformed = createDraftVersion(sectionId);

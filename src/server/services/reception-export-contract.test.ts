@@ -60,14 +60,14 @@ function multiIssueQuality(): ReceptionQualityAnalysis {
     informationalUnverifiableItems: [],
     suggestion: "",
     confidence: 0.95,
-    score: 90,
-    totalDeduction: 10,
+    score: 85,
+    totalDeduction: 15,
     grade: "D",
     hasDLevelIssue: true,
     hasAfterSaleViolation: false,
     labels: ["服务消极D级", "答非所问"],
     dimensions: ["服务态度", "问题解决"],
-    deductions: [0, 10],
+    deductions: [5, 10],
     conversationStartTime: "2026-09-23 09:30:00",
     conversationRoundCount: 2,
     reviewRequired: false,
@@ -247,8 +247,8 @@ describe("reception screenshot-row export contract", () => {
     expect(sheet.getRow(2).getCell(columnFor(sheet, "会话ID")).value).toContain("DY20260923A");
     expect(sheet.getRow(2).getCell(problemColumn).value).toBe("服务消极D级/答非所问");
     expect(sheet.getRow(2).getCell(columnFor(sheet, "维度")).value).toBe("服务态度/问题解决");
-    expect(sheet.getRow(2).getCell(columnFor(sheet, "扣分")).value).toBe("0/10");
-    expect(sheet.getRow(2).getCell(columnFor(sheet, "合计扣分")).value).toBe(10);
+    expect(sheet.getRow(2).getCell(columnFor(sheet, "扣分")).value).toBe("5/10");
+    expect(sheet.getRow(2).getCell(columnFor(sheet, "合计扣分")).value).toBe(15);
     expect(sheet.getRow(2).getCell(columnFor(sheet, "是否D级")).value).toBe("是");
     expect(sheet.getRow(2).getCell(columnFor(sheet, "聊天原文")).value)
       .toBe("客服说天气不错；客服拒绝处理/客户问尺码；客服说天气不错");

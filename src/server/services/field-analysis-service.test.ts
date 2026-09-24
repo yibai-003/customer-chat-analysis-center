@@ -581,7 +581,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
       model_config_snapshot_json: string;
     }>;
     const results = Object.fromEntries(runs.map((run) => [run.key, JSON.parse(run.result_json)]));
-    expect(results["接待流程质检结果"]).toEqual({ 接待流程质检结果: "B" });
+    expect(results["接待流程质检结果"]).toEqual({ 接待流程质检结果: "C" });
     expect(results["有无违规-售后"]).toEqual({ "有无违规-售后": "有违规" });
     expect(results["客服问题识别问题并打标签"]).toEqual({
       客服问题识别问题并打标签: "答非所问/漏回复",

@@ -73,6 +73,37 @@ beforeEach(() => {
     const url = String(input);
     requests.push({ url, init });
     if (url === "/api/sections/reception/versions" && (init?.method ?? "GET") === "GET") return jsonResponse(versions);
+    if (url === "/api/section-config-versions/draft-3" && (init?.method ?? "GET") === "GET") {
+      return jsonResponse({
+        ...versions[0],
+        businessRules: {
+          kind: "reception_quality",
+          issues: [{
+            id: "PRE_ANSWER_IRRELEVANT",
+            name: "答非所问",
+            dimension: "需求理解",
+            scope: "preSale",
+            criterion: "未围绕客户问题作答",
+            deduction: 5,
+            forceD: false,
+            violationCount: 1,
+            priority: 10,
+            suggestion: "建议围绕客户问题作答",
+            applicableWhen: ["存在客户明确问题"],
+            triggerWhen: ["回答与问题无关"],
+            exclusions: [],
+            requiredEvidence: ["客户问题", "客服回答"],
+            missingDataOutcome: "待复核",
+          }],
+        },
+      });
+    }
+    if (url === "/api/section-config-versions/draft-3" && init?.method === "PATCH") {
+      return jsonResponse({
+        ...versions[0],
+        businessRules: JSON.parse(String(init.body)).businessRules,
+      });
+    }
     if (url === "/api/section-config-versions/archived-1/restore" && init?.method === "POST") {
       versions = versions.map((item) => item.id === "archived-1" ? { ...item, status: "published" as const } : item);
       return jsonResponse(versions[2]);
@@ -113,5 +144,40 @@ describe("SectionVersionManagementDialog", () => {
     await waitFor(() => expect(host.textContent).toContain("V3 已发布并启用"));
     expect(requests.some((request) => request.url.endsWith("/draft-3/publish"))).toBe(true);
     expect(saved).toHaveBeenCalledTimes(2);
+  });
+
+  it("loads the versioned reception rule catalog for frontend viewing", async () => {
+    await act(async () => root.render(<SectionVersionManagementDialog sections={[section]} close={vi.fn()} saved={vi.fn()} />));
+    await waitFor(() => expect(host.textContent).toContain("V3"));
+
+    await act(async () => button("查看规则")!.click());
+    await waitFor(() => expect(host.textContent).toContain("PRE_ANSWER_IRRELEVANT"));
+    expect(host.textContent).toContain("需求理解");
+    expect(host.textContent).toContain("5");
+    expect(requests.some((request) => request.url.endsWith("/draft-3"))).toBe(true);
+  });
+
+  it("saves edited rules only for a draft version", async () => {
+    await act(async () => root.render(<SectionVersionManagementDialog sections={[section]} close={vi.fn()} saved={vi.fn()} />));
+    await waitFor(() => expect(host.textContent).toContain("V3"));
+
+    await act(async () => button("查看规则")!.click());
+    await waitFor(() => expect(host.textContent).toContain("PRE_ANSWER_IRRELEVANT"));
+    await act(async () => button("编辑草稿规则")!.click());
+
+    const dimension = host.querySelector<HTMLInputElement>('input[aria-label="规则 PRE_ANSWER_IRRELEVANT 维度"]')!;
+    await act(async () => {
+      const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!;
+      setValue.call(dimension, "客户需求理解");
+      dimension.dispatchEvent(new Event("input", { bubbles: true }));
+      dimension.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await act(async () => button("保存规则")!.click());
+    await waitFor(() => expect(host.textContent).toContain("规则已保存"));
+    expect(host.textContent).toContain("客户需求理解");
+
+    const patch = requests.find((request) => request.url.endsWith("/draft-3") && request.init?.method === "PATCH");
+    expect(patch).toBeTruthy();
+    expect(JSON.parse(String(patch?.init?.body)).businessRules.issues[0].dimension).toBe("客户需求理解");
   });
 });
