@@ -175,6 +175,7 @@ function Workspace({ session }: { session: CurrentSession }) {
     editSelectedRecord,
   } = useWorkspaceController({ canManageConfig: can("config:manage") });
   const selection = useRecordSelection({ jobId: job?.id, sectionId: currentSection?.id, filter });
+  const clearSelection = selection.clear;
   const detailDrawerOpen = isDetailDrawerViewport && detailOpen && Boolean(selected);
   useEffect(() => {
     const media = window.matchMedia?.("(max-width: 1199px)");
@@ -283,8 +284,8 @@ function Workspace({ session }: { session: CurrentSession }) {
     };
   }, [topMenu]);
   useEffect(() => {
-    if (targetedSummary && targetedSummary.skipped > 0) selection.clear();
-  }, [targetedSummary, selection.clear]);
+    if (targetedSummary && targetedSummary.skipped > 0) clearSelection();
+  }, [clearSelection, targetedSummary]);
   useEffect(() => subscribeAccessDenied((message) => {
     setDialog(null);
     setKnowledgeSection(null);
@@ -293,7 +294,7 @@ function Workspace({ session }: { session: CurrentSession }) {
     setPendingImportFile(null);
     setSelectingImportFile(null);
     setNotice(message);
-  }), []);
+  }), [setAnalysisCapacity, setDialog, setImportPreview, setKnowledgeSection, setNotice, setPendingImportFile, setSelectingImportFile]);
   if (knowledgeSection && can("config:manage")) {
     return <KnowledgeWorkspace
       section={knowledgeSection}
@@ -529,7 +530,11 @@ export function Detail({ record, section, fields, setRecord, onAnalyze, onRetry,
       : (section?.outputSchema ?? []).map((field, index) => ({ ...field, id: field.key, sectionId: section?.id ?? "", prompt: section?.prompt ?? "", required: Boolean(field.required), imageEnabled: section?.imageEnabled !== false, dependsOn: [], sortOrder: index, isEnabled: true, exportEnabled: true }));
   const attributionRun = latestFieldRuns.find((item) => item.fieldKey === "未成交归因" && (item.status === "completed" || item.status === "needs_review"));
   const attributionValue = attributionRun?.result?.["未成交归因"];
-  const runtimeResult = latestFieldRuns.length ? Object.assign({}, ...latestFieldRuns.slice().reverse().filter((item) => item.status === "completed" || item.status === "needs_review").map((item) => item.result)) : run?.result ?? {};
+  const runtimeResults = latestFieldRuns.reduceRight<Record<string, unknown>[]>((results, item) => {
+    if (item.status === "completed" || item.status === "needs_review") results.push(item.result);
+    return results;
+  }, []);
+  const runtimeResult = latestFieldRuns.length ? Object.assign({}, ...runtimeResults) : run?.result ?? {};
   const qualityRun = latestFieldRuns.find((item) =>
     item.fieldKey === "统一质检分析" && (item.status === "completed" || item.status === "needs_review"));
   const receptionValues = section?.id === "reception"

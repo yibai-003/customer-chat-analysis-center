@@ -200,17 +200,20 @@ export function updatePoolMember(id: string, raw: unknown) {
   return mapModelConfigRow(db.prepare(`${modelWithProviderSql} WHERE m.id=?`).get(id));
 }
 
-export function getPoolSummary() {  const members = listPoolMembers();
-  const summarize = (items: ModelConfig[]) => ({
+function summarizePoolMembers(items: ModelConfig[]) {
+  return {
     total: items.length,
     enabled: items.filter((item) => item.isEnabled && item.poolEnabled).length,
     verified: items.filter((item) => item.capabilityEligible).length,
     blocked: items.filter((item) => item.quotaBlocked || Boolean(item.cooldownUntil)).length,
-  });
+  };
+}
+
+export function getPoolSummary() {  const members = listPoolMembers();
   return {
     total: members.length,
-    vision: summarize(members.filter((item) => item.purpose === "vision")),
-    text: summarize(members.filter((item) => item.purpose === "text")),
+    vision: summarizePoolMembers(members.filter((item) => item.purpose === "vision")),
+    text: summarizePoolMembers(members.filter((item) => item.purpose === "text")),
   };
 }
 
@@ -354,7 +357,8 @@ export async function verifyPoolMembers(
   if (uniqueIds.length > MAX_VERIFICATION_IDS) {
     throw new Error("每次最多验证 50 个模型池成员");
   }
-  const results = new Array<PoolVerificationResult>(uniqueIds.length);
+  const results: PoolVerificationResult[] = [];
+  results.length = uniqueIds.length;
   let nextIndex = 0;
 
   const worker = async () => {

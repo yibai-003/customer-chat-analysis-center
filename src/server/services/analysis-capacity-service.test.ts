@@ -8,18 +8,18 @@ import {
   recommendAnalysisSettings,
 } from "./analysis-capacity-service";
 
-describe("analysis capacity recommendation", () => {
-  const recommend = (input: Partial<Parameters<typeof recommendAnalysisSettings>[0]>) => (
-    recommendAnalysisSettings({
-      logicalProcessors: 20,
-      totalMemoryGb: 16,
-      freeMemoryGb: 8,
-      diskFreeGb: 380,
-      activeJobs: 0,
-      ...input,
-    })
-  );
+const recommend = (input: Partial<Parameters<typeof recommendAnalysisSettings>[0]>) => (
+  recommendAnalysisSettings({
+    logicalProcessors: 20,
+    totalMemoryGb: 16,
+    freeMemoryGb: 8,
+    diskFreeGb: 380,
+    activeJobs: 0,
+    ...input,
+  })
+);
 
+describe("analysis capacity recommendation", () => {
   it("uses a conservative recommendation when free memory is below 3 GB", () => {
     expect(recommendAnalysisSettings({
       logicalProcessors: 20,

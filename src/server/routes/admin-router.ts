@@ -100,7 +100,7 @@ function listBackups() {
     }
     items.push({ name: entry.name, createdAt, valid });
   }
-  return items.sort((left, right) => (right.createdAt ?? right.name).localeCompare(left.createdAt ?? left.name));
+  return items.toSorted((left, right) => (right.createdAt ?? right.name).localeCompare(left.createdAt ?? left.name));
 }
 
 function busyWithWork() {

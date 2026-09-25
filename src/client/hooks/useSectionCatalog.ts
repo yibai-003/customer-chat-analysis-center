@@ -10,16 +10,17 @@ export function useSectionCatalog({ sections, setNotice }: {
   const [activeFields, setActiveFields] = useState<AnalysisField[]>([]);
   const childSections = sections.filter((section) => section.parentId);
   const currentSection = sections.find((section) => section.id === activeSection) ?? childSections[0];
+  const currentSectionId = currentSection?.id;
 
   useEffect(() => {
-    if (!currentSection) return;
+    if (!currentSectionId) return;
     const request = new AbortController();
     setActiveFields([]);
-    api<AnalysisField[]>(`/api/sections/${currentSection.id}/fields`, { signal: request.signal })
+    api<AnalysisField[]>(`/api/sections/${currentSectionId}/fields`, { signal: request.signal })
       .then(fields => { if (!request.signal.aborted) setActiveFields(fields); })
       .catch(error => { if (!request.signal.aborted) setNotice(error.message); });
     return () => request.abort();
-  }, [currentSection?.id]);
+  }, [currentSectionId, setNotice]);
 
   return { activeSection, setActiveSection, activeFields, currentSection, childSections };
 }

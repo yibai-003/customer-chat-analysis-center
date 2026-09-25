@@ -561,7 +561,7 @@ describe("explicit import section and manual refresh", () => {
   };
   it("uses the explicitly chosen section for both preview and upload, even with another task open", async () => {
     const refund = { ...section, id: "refund", name: "退款分析" };
-    responseFor = (url, init) => {
+    responseFor = (url, _init) => {
       if (url === "/api/sections") return jsonResponse([section, refund]);
       if (url === "/api/jobs/import-preview") return jsonResponse({ originalFilename: "new.xlsx", sectionId: "refund", sectionName: "退款分析", sectionConfigVersionId: "refund-v1", sectionVersionNumber: 1, platformId: "platform-1", platformCode: "TEST", platformName: "测试平台", platformConflicts: [], sheetCount: 1, imageCount: 1, missingHeaders: [], sheets: [] });
       if (url === "/api/jobs/import") return jsonResponse({ id: "import-1" });

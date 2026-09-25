@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KnowledgeBase, KnowledgeItem, KnowledgeItemPage } from "../../../shared/types";
 import type { KnowledgeApiClient } from "../../api/knowledge-api";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -48,10 +48,12 @@ export function KnowledgeItemList({
     enabled,
     page: pageNumber,
   });
-  baseIdRef.current = base.id;
-  requestRef.current = { baseId: base.id, search, enabled, page: pageNumber };
+  useLayoutEffect(() => {
+    baseIdRef.current = base.id;
+    requestRef.current = { baseId: base.id, search, enabled, page: pageNumber };
+  }, [base.id, enabled, pageNumber, search]);
 
-  const load = async (request: ItemLoadRequest = requestRef.current): Promise<boolean> => {
+  const load = useCallback(async (request: ItemLoadRequest = requestRef.current): Promise<boolean> => {
     const requestId = ++requestSequence.current;
     setLoading(true);
     setError("");
@@ -83,11 +85,14 @@ export function KnowledgeItemList({
         setLoading(false);
       }
     }
-  };
+  }, [apiClient]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     requestSequence.current += 1;
     mutationSequence.current += 1;
+  }, [base.id]);
+
+  useEffect(() => {
     setPage(emptyPage);
     setPageNumber(1);
     setSelectedIds([]);
@@ -99,7 +104,7 @@ export function KnowledgeItemList({
 
   useEffect(() => {
     void load({ baseId: base.id, search, enabled, page: pageNumber });
-  }, [base.id, search, enabled, pageNumber]);
+  }, [base.id, search, enabled, pageNumber, load]);
 
   useEffect(() => () => {
     requestSequence.current += 1;

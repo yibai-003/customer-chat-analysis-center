@@ -93,8 +93,8 @@ export function validateCatalog(input: unknown): Catalog {
 export function captureCatalog(database = db): Catalog {
   const result: Record<string, unknown> = { version: 1 };
   for (const group of groups) {
-    const columns = Object.keys(schemas[group].shape);
-    result[group] = database.prepare(`SELECT ${columns.join(",")} FROM ${tables[group]} ORDER BY id`).all();
+    const selectColumns = Object.keys(schemas[group].shape);
+    result[group] = database.prepare(`SELECT ${selectColumns.join(",")} FROM ${tables[group]} ORDER BY id`).all();
     if (group === "fields") for (const row of result[group] as Record<string, unknown>[]) {
       // Keep the digest of pre-feature catalogs stable so an upgrade is not a sync conflict.
       if (row.knowledge_sync_enabled === 0) delete row.knowledge_sync_enabled;
@@ -152,10 +152,10 @@ export function restoreCatalog(input: unknown) {
         if (group === "items") {
           const item = row as Catalog["items"][number];
           const base = catalog.bases.find((b) => b.id === item.knowledge_base_id)!;
-          const columns = JSON.parse(base.column_schema_json) as KnowledgeColumn[];
+          const knowledgeColumns = JSON.parse(base.column_schema_json) as KnowledgeColumn[];
           const contents = JSON.parse(item.values_json) as Record<string, string>;
-          values.path_key = buildKnowledgePathKey(columns, contents);
-          values.search_text = buildKnowledgeSearchText(columns, contents);
+          values.path_key = buildKnowledgePathKey(knowledgeColumns, contents);
+          values.search_text = buildKnowledgeSearchText(knowledgeColumns, contents);
         }
         const keys = Object.keys(values);
         db.prepare(`INSERT INTO ${tables[group]} (${keys.join(",")}) VALUES (${keys.map(() => "?").join(",")})

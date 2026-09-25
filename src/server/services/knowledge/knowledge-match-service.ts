@@ -192,7 +192,7 @@ async function matchKnowledgeWithinBudget(input: Parameters<typeof matchKnowledg
         };
       })
       .filter((candidate) => candidate.itemId)
-      .sort((left, right) => right.score - left.score || left.itemId.localeCompare(right.itemId))
+      .toSorted((left, right) => right.score - left.score || left.itemId.localeCompare(right.itemId))
       .slice(0, input.field.candidateLimit)
     : searchKnowledge({
       knowledgeBaseId: knowledgeBase.id as string,

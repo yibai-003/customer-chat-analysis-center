@@ -194,13 +194,15 @@ NNN-short-description.ts
 
 不要为每次小修复创建一篇新报告。优先更新已有指南、进度账本、验收记录或工单。
 
-## 4. 工单的固定位置
+## 4. 工单的固定位置和状态入口
 
 当前局域网版本的工单唯一入口是：
 
 ```text
 .scratch/lan-single-organization-upgrade/issues/
 ```
+
+这批文件是当前局域网发布线的历史和实施材料。新事项的状态、编号、负责人、优先级和依赖以 GitHub Issue 为准；详细规格可以保存在 `docs/work-items/<initiative-name>/`，不再在每个功能目录中重新创建一套局部编号。
 
 当前发布线执行期间不要移动这些工单，也不要在其他目录复制同名工单。每张工单至少包含：
 
@@ -231,7 +233,7 @@ docs/work-items/<initiative-name>/
 └── issues/
 ```
 
-这样工单既有固定位置，也不会和本地临时文件混淆。
+这里的 `issues/` 仅在确有离线材料需要保存时使用，不作为第二套状态系统。正式工单编号和状态仍以 GitHub Issue 为准。具体触发规则、状态定义、技能路由和关闭条件见[项目工作约定](project-work-agreement.md)。
 
 ## 5. 文件命名与排版
 

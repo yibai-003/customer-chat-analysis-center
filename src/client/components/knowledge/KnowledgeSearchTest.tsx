@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KnowledgeBase, KnowledgeCandidate } from "../../../shared/types";
 import type { KnowledgeApiClient } from "../../api/knowledge-api";
 
@@ -16,11 +16,12 @@ export function KnowledgeSearchTest({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const requestSequence = useRef(0);
-  const baseIdRef = useRef(base.id);
-  baseIdRef.current = base.id;
+
+  useLayoutEffect(() => {
+    requestSequence.current += 1;
+  }, [base.id]);
 
   useEffect(() => {
-    requestSequence.current += 1;
     setQuery("");
     setCandidates([]);
     setSearched(false);
@@ -35,14 +36,14 @@ export function KnowledgeSearchTest({
     setError("");
     try {
       const next = await apiClient.search(requestedBaseId, query, limit);
-      if (requestId !== requestSequence.current || baseIdRef.current !== requestedBaseId) return;
+      if (requestId !== requestSequence.current) return;
       setCandidates(next);
       setSearched(true);
     } catch (caught) {
-      if (requestId !== requestSequence.current || baseIdRef.current !== requestedBaseId) return;
+      if (requestId !== requestSequence.current) return;
       setError(caught instanceof Error ? caught.message : "检索测试失败");
     } finally {
-      if (requestId === requestSequence.current && baseIdRef.current === requestedBaseId) {
+      if (requestId === requestSequence.current) {
         setBusy(false);
       }
     }

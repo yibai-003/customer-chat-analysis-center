@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AnalysisSection, Job, ModelConfig, Platform } from "../../shared/types";
 import { api } from "../api";
 import { useAnalysisPolling } from "./useAnalysisPolling";
@@ -59,7 +59,6 @@ export function useJobSelection({ setNotice, records }: {
     commitJobSummary: next => commitJobSummary(next),
     refreshCurrentRecordPage,
   });
-
   const cancelForegroundOperations = () => {
     operationIdRef.current += 1;
     busyOperationIdRef.current = null;
@@ -200,6 +199,20 @@ export function useJobSelection({ setNotice, records }: {
       return false;
     }
   };
+  const refreshRef = useRef(refresh);
+  const cancelAnalysisPollRef = useRef(cancelAnalysisPoll);
+  const setNoticeRef = useRef(setNotice);
+  const invalidateRequestsRef = useRef(() => {
+    listRequestIdRef.current += 1;
+    detailRequestIdRef.current += 1;
+  });
+  // These refs back long-lived async cleanup callbacks and must track each render.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    refreshRef.current = refresh;
+    cancelAnalysisPollRef.current = cancelAnalysisPoll;
+    setNoticeRef.current = setNotice;
+  });
 
   const navigateToJob = async (jobId: string) => {
     if (jobId === activeJobIdRef.current && pendingNavigationRef.current === null) {
@@ -226,15 +239,16 @@ export function useJobSelection({ setNotice, records }: {
 
   useEffect(() => {
     mountedRef.current = true;
-    refresh().catch((error) => {
-      if (mountedRef.current) setNotice(error.message);
+    const cancelOnUnmount = cancelAnalysisPollRef.current;
+    const invalidateRequests = invalidateRequestsRef.current;
+    refreshRef.current().catch((error) => {
+      if (mountedRef.current) setNoticeRef.current(error.message);
     });
     return () => {
       mountedRef.current = false;
       refreshAbortRef.current?.abort();
-      cancelAnalysisPoll();
-      listRequestIdRef.current += 1;
-      detailRequestIdRef.current += 1;
+      cancelOnUnmount();
+      invalidateRequests();
       operationIdRef.current += 1;
     };
   }, []);

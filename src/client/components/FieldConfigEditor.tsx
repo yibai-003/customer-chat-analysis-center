@@ -6,6 +6,12 @@ import { PromptEditor } from "./PromptEditor";
 import { KnowledgeFieldSettings } from "./KnowledgeFieldSettings";
 import { SELECTABLE_EXECUTION_SETTINGS, executionSetting } from "./execution-registry";
 
+function isLostDealAttribution(field: AnalysisField) {
+  return field.sectionId === "lost-deal"
+    && field.key === "未成交归因"
+    && field.executionType === "lost_deal_attribution";
+}
+
 export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, sourceFields = [], sectionId, onValidationChange }: {
   fields: AnalysisField[];
   onChange: (index: number, patch: Partial<AnalysisField>) => void;
@@ -17,12 +23,10 @@ export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, sourceFie
 }) {
   const [expandedDependencies, setExpandedDependencies] = useState<Record<string, boolean>>({});
   const availableSourceFields = sourceFields.filter((sourceField) => !fields.some((field) => field.outputColumn === sourceField));
-  const effectiveSectionId = sectionId ?? fields[0]?.sectionId;
-  const isLostDealAttribution = (field: AnalysisField) => field.sectionId === "lost-deal"
-    && field.key === "未成交归因" && field.executionType === "lost_deal_attribution";
+  const effectiveSectionId = sectionId || fields[0]?.sectionId;
   const changeExecutionType = (index: number, field: AnalysisField, executionType: AnalysisField["executionType"]) => {
     const setting = executionSetting(executionType);
-    onChange(index, { executionType: setting.type, ...(setting.selectionPatch?.(field) ?? {}) });
+    onChange(index, { executionType: setting.type, ...setting.selectionPatch?.(field) });
   };
   return <div className="field-config-editor">
     <div className="schema-toolbar"><strong>字段解析链</strong><button onClick={onAdd} disabled={!availableSourceFields.length}>＋ 选择解析字段</button></div>

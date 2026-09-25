@@ -1,7 +1,11 @@
 import { z } from "zod";
 import { ANALYSIS_EXECUTION_TYPES } from "../../shared/types";
 
-const safeName = z.string().min(1).max(120).refine(value => Boolean(value.trim()) && !["__proto__", "prototype", "constructor"].includes(value) && !/[\u0000-\u001f]/.test(value), "名称包含保留字或控制字符");
+function hasControlCharacter(value: string) {
+  return [...value].some((character) => character.charCodeAt(0) <= 0x1f);
+}
+
+const safeName = z.string().min(1).max(120).refine(value => Boolean(value.trim()) && !["__proto__", "prototype", "constructor"].includes(value) && !hasControlCharacter(value), "名称包含保留字或控制字符");
 const id = z.string().min(1).max(200);
 const kind = z.enum(["string", "number", "boolean", "object"]);
 const options = z.array(z.string().max(200)).max(200);

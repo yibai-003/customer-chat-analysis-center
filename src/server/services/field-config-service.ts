@@ -137,7 +137,7 @@ export function topologicalFields(fields: AnalysisFieldLike[], sourceFields: str
     visited.add(key);
     result.push(byKey.get(key)!);
   };
-  [...fields].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).forEach((field) => visit(field.key));
+  fields.toSorted((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).forEach((field) => visit(field.key));
   return result;
 }
 

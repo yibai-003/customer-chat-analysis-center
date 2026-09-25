@@ -20,7 +20,6 @@ export function useRecordSelection(scope: {
     const allSelected = ids.length > 0 && ids.every((id) => current.includes(id));
     return allSelected ? current.filter((id) => !ids.includes(id)) : [...new Set([...current, ...ids])];
   }), []);
-
   const clear = useCallback(() => setSelectedIds([]), []);
 
   return {

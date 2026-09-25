@@ -46,7 +46,7 @@ export function isPoolMemberEligible(
 
 export function rankModelCandidates<T extends ModelConfig>(members: T[]): T[] {
   const tier = { A: 0, B: 1, C: 2 } as const;
-  return [...members].sort((left, right) => {
+  return members.toSorted((left, right) => {
     if (left.billingMode !== right.billingMode) return left.billingMode === "free" ? -1 : 1;
     if (left.isPurposeDefault !== right.isPurposeDefault) {
       return left.isPurposeDefault ? 1 : -1;

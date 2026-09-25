@@ -113,9 +113,9 @@ beforeEach(() => {
   vi.mocked(callModelPool).mockReset();
   vi.mocked(callModelPool).mockImplementation(async (messages) => {
     const model = routedModel("test-text");
-    const response = await callVisionModel(model as never, messages, { attempts: 1 });
+    const modelResponse = await callVisionModel(model as never, messages, { attempts: 1 });
     return {
-      ...response,
+      ...modelResponse,
       model,
       attempts: [{
         modelConfigId: model.id,

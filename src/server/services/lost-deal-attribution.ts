@@ -63,7 +63,7 @@ function parseReasonList(
     const candidate = knowledgeItemId ? allowed.get(knowledgeItemId) : undefined;
     const legacyName = asString(source.name);
     const legacyCandidate = !candidate && legacyName
-      ? [...allowed.values()].find((item) => item.name === legacyName)
+      ? [...allowed.values()].find((matchedCandidate) => matchedCandidate.name === legacyName)
       : undefined;
     const selected = candidate ?? legacyCandidate;
     const name = selected?.name ?? legacyName;
@@ -196,13 +196,16 @@ export function parseLostDealAttribution(
 }
 
 export function deriveLostDealFields(attribution: LostDealAttribution): Record<string, unknown> {
-  const names = (items: LostDealReason[]) => items.map((item) => item.name).filter(Boolean).join("\n");
   return {
-    客户原因: names(attribution.customerReasons),
-    客服原因: names(attribution.serviceReasons),
+    客户原因: reasonNames(attribution.customerReasons),
+    客服原因: reasonNames(attribution.serviceReasons),
     客户产品需求: attribution.specificDemandGrounded === false ? "" : attribution.specificDemand,
     未成交归因: attribution,
   };
+}
+
+function reasonNames(items: LostDealReason[]) {
+  return items.map((item) => item.name).filter(Boolean).join("\n");
 }
 
 function enabledKnowledgeNames(

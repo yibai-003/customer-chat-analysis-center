@@ -36,18 +36,18 @@ function analysisProgressKey(job: Job) {
   ].join(":");
 }
 
+function clearAnalysisPollTimeout(controller: AnalysisPollController) {
+  if (controller.timeoutHandle === null) return;
+  clearTimeout(controller.timeoutHandle);
+  controller.timeoutHandle = null;
+}
+
 interface PollOptions { mountedRef: RefObject<boolean>; activeJobIdRef: RefObject<string | null>; jobRef: RefObject<Job | null>; commitJobSummary: (job: Job) => void; refreshCurrentRecordPage: (jobId: string, current: () => boolean) => Promise<boolean>; setNotice: (message: string) => void }
 export function useAnalysisPolling(options: PollOptions) {
   const latest = useRef(options); latest.current = options;
   const { mountedRef, activeJobIdRef, jobRef, setNotice } = options;
   const analysisPollIdRef = useRef(0);
   const analysisPollRef = useRef<AnalysisPollController | null>(null);
-  const clearAnalysisPollTimeout = (controller: AnalysisPollController) => {
-    if (controller.timeoutHandle === null) return;
-    clearTimeout(controller.timeoutHandle);
-    controller.timeoutHandle = null;
-  };
-
   const cancelAnalysisPoll = (jobId?: string) => {
     const controller = analysisPollRef.current;
     if (!controller || (jobId && controller.jobId !== jobId)) return;

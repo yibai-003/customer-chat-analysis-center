@@ -47,7 +47,7 @@ function crc32Update(crc: number, buffer: Buffer) {
 
 function relationshipTargets(xml: string, source: string) {
   const targets: string[] = [];
-  const base = source.startsWith("_rels/") ? "" : source.replace(/(^|\/)\_rels\//, "/").replace(/\.rels$/i, "");
+  const base = source.startsWith("_rels/") ? "" : source.replace(/(^|\/)_rels\//, "/").replace(/\.rels$/i, "");
   for (const match of xml.matchAll(/<Relationship\b[^>]*Target="([^"]+)"[^>]*>/gi)) {
     const target = match[1];
     if (/^(?:https?:|file:|data:|\\\\)/i.test(target)) throw new UploadError("Excel 关系文件包含外部资源", 415);

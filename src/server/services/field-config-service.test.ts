@@ -62,36 +62,36 @@ describe("field config service", () => {
 
   it("keeps refund analysis to screenshot parsing, knowledge matching, and direct extraction", () => {
     const fields = listFields("refund");
-    expect(fields.filter((field) => field.isEnabled).map((field) => field.key)).toEqual([
+    expect(fields.filter((candidate) => candidate.isEnabled).map((candidate) => candidate.key)).toEqual([
       "reason",
       "reasonPathMatch",
       "一级选项",
       "二级选项",
       "三级选项",
     ]);
-    expect(fields.find((field) => field.key === "reason")).toMatchObject({
+    expect(fields.find((candidate) => candidate.key === "reason")).toMatchObject({
       label: "截图解析",
       type: "object",
       executionType: "ai",
       imageEnabled: true,
       exportEnabled: true,
     });
-    expect(fields.find((field) => field.key === "reason")?.prompt).toContain("责任线索只能从以下选项中选择一个");
-    expect(fields.find((field) => field.key === "reason")?.prompt).toContain("信息充分度只能填写");
-    expect(fields.find((field) => field.key === "reasonPathMatch")).toMatchObject({
+    expect(fields.find((candidate) => candidate.key === "reason")?.prompt).toContain("责任线索只能从以下选项中选择一个");
+    expect(fields.find((candidate) => candidate.key === "reason")?.prompt).toContain("信息充分度只能填写");
+    expect(fields.find((candidate) => candidate.key === "reasonPathMatch")).toMatchObject({
       executionType: "knowledge_match",
       exportEnabled: false,
       dependsOn: ["reason", "售后问题类型", "商品信息", "产品分类", "产品名称"],
     });
-    expect(fields.filter((field) => ["一级选项", "二级选项", "三级选项"].includes(field.key))).toEqual(
+    expect(fields.filter((candidate) => ["一级选项", "二级选项", "三级选项"].includes(candidate.key))).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ executionType: "knowledge_extract", matchFieldKey: "reasonPathMatch", knowledgeColumn: "一级原因" }),
         expect.objectContaining({ executionType: "knowledge_extract", matchFieldKey: "reasonPathMatch", knowledgeColumn: "二级原因" }),
         expect.objectContaining({ executionType: "knowledge_extract", matchFieldKey: "reasonPathMatch", knowledgeColumn: "三级原因" }),
       ]),
     );
-    expect(fields.find((field) => field.key === "responsibility")?.isEnabled).toBe(false);
-    expect(fields.find((field) => field.key === "suggestion")?.isEnabled).toBe(false);
+    expect(fields.find((candidate) => candidate.key === "responsibility")?.isEnabled).toBe(false);
+    expect(fields.find((candidate) => candidate.key === "suggestion")?.isEnabled).toBe(false);
   });
 
   it("orders dependent fields after their dependencies", () => {
