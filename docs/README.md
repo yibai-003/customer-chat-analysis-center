@@ -46,6 +46,8 @@
 
 ## 开发者
 
+- [Agent 协作规则](../AGENTS.md)
+- [项目工作约定](project-work-agreement.md)
 - [项目目录结构与后续开发规范](project-structure-and-development-guidelines.md)
 - [CI 质量闸门与发布工件](guides/ci-quality-gates.md)
 - [服务端输入约束](guides/server-input-validation.md)
