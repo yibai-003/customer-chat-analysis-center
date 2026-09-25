@@ -1,5 +1,6 @@
 import { runMigrations } from "./migrations";
 import { seedNewDatabase } from "./seed";
+import { reconcileReceptionV9 } from "./reconcile-reception-v9";
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
@@ -11,6 +12,7 @@ db.pragma("foreign_keys = ON");
 
 export function initDb(_options: { preserveConfiguration?: boolean } = {}) {
   runMigrations(db);
+  reconcileReceptionV9(db);
   if (db.prepare("SELECT COUNT(*) count FROM analysis_sections").get().count === 0) {
     db.transaction(() => seedNewDatabase(db))();
   }

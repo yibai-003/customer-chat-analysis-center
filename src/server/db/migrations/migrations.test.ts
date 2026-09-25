@@ -16,6 +16,7 @@ import { applyReceptionExcelSchemaConfiguration } from "./013-reception-excel-sc
 import { applyPoolRemovalAndEfficiencyIndexes } from "./015-pool-removal-and-efficiency-indexes";
 import { applyModelPools } from "./014-model-pools";
 
+const exec = promisify(execFile);
 let dir: string;
 let db: any;
 beforeEach(() => { dir = fs.mkdtempSync(path.join(os.tmpdir(), "schema-migrations-")); db = new Database(path.join(dir, "app.db")); });
@@ -308,6 +309,108 @@ describe("versioned migrations", () => {
       FROM audit_events
       WHERE action = 'config.version_migration' AND target_id = 'section-a'
     `).get()).toEqual({ count: 1 });
+  });
+  it("reconciles reception V7 to V9 during startup without advancing the schema version", async () => {
+    applyLegacyBaseline(db);
+    db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (
+        'reception', NULL, '接待流程质检', '', '[]', '[]',
+        1, 1, 1, '2026-09-22T00:00:00.000Z', '2026-09-22T00:00:00.000Z'
+      )
+    `).run();
+    runMigrations(db, migrations.filter((migration) => migration.version <= 27));
+    migrations.find((migration) => migration.version === 28)?.up(db);
+    migrations.find((migration) => migration.version === 29)?.up(db);
+    const currentSnapshot = db.prepare(`
+      SELECT section_snapshot_json, fields_snapshot_json, business_rules_json
+      FROM analysis_section_versions
+      WHERE section_id = 'reception' AND is_current = 1
+    `).get();
+    expect(db.prepare(`
+      SELECT version_number
+      FROM analysis_section_versions
+      WHERE section_id = 'reception' AND is_current = 1
+    `).get()).toEqual({ version_number: 7 });
+
+    db.prepare("INSERT INTO schema_migrations(version, name, applied_at) VALUES(28, ?, ?)").run(
+      "reception-issue-row-export",
+      "2026-09-24T11:57:54.668Z",
+    );
+    db.prepare("INSERT INTO schema_migrations(version, name, applied_at) VALUES(29, ?, ?)").run(
+      "revert-reception-issue-row-export",
+      "2026-09-24T11:57:54.669Z",
+    );
+
+    const databasePath = path.join(dir, "app.db");
+    db.close();
+    await exec(process.execPath, [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "-e",
+      "import('./src/server/db/client.ts').then(({ initDb }) => initDb())",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NODE_ENV: "test",
+        DATA_DIR: dir,
+        DATABASE_PATH: databasePath,
+      },
+      windowsHide: true,
+    });
+    db = new Database(databasePath);
+    const versions = db.prepare(`
+      SELECT version_number, is_current, export_settings_json,
+        section_snapshot_json, fields_snapshot_json, business_rules_json
+      FROM analysis_section_versions
+      WHERE section_id = 'reception'
+      ORDER BY version_number
+    `).all() as Array<{
+      version_number: number;
+      is_current: number;
+      export_settings_json: string;
+      section_snapshot_json: string;
+      fields_snapshot_json: string;
+      business_rules_json: string;
+    }>;
+    expect(versions).toHaveLength(9);
+    expect(versions[7]).toMatchObject({ version_number: 8, is_current: 0 });
+    expect(JSON.parse(versions[7].export_settings_json)).toMatchObject({
+      rowMode: "reception_issue_records",
+    });
+    expect(versions[8]).toMatchObject({ version_number: 9, is_current: 1 });
+    expect(JSON.parse(versions[8].export_settings_json)).toMatchObject({
+      rowMode: "screenshot_records",
+    });
+    expect(versions[8]).toMatchObject(currentSnapshot);
+    expect(appliedMigrations(db).at(-1)).toMatchObject({ version: 29 });
+    expect(appliedMigrations(db)).toHaveLength(28);
+    await exec(process.execPath, [
+      "--import",
+      "tsx",
+      "--input-type=module",
+      "-e",
+      "import('./src/server/db/client.ts').then(({ initDb }) => initDb())",
+    ], {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        NODE_ENV: "test",
+        DATA_DIR: dir,
+        DATABASE_PATH: databasePath,
+      },
+      windowsHide: true,
+    });
+    db.close();
+    db = new Database(databasePath);
+    expect(db.prepare(`
+      SELECT COUNT(*) AS count FROM analysis_section_versions
+      WHERE section_id = 'reception'
+    `).get()).toEqual({ count: 9 });
   });
   it("upgrades an existing v18 database with a real section foreign key and dimensioned reception version", () => {
     applyLegacyBaseline(db);
@@ -853,12 +956,12 @@ describe("versioned migrations", () => {
     db.close();
     const file = path.join(dir, "app.db");
     const before = fs.readFileSync(file);
-    const exec = promisify(execFile);
-    await exec(process.execPath, ["--import", "tsx", "src/server/db-migration-cli.ts"], { cwd: process.cwd(), env: { ...process.env, DATABASE_PATH: file }, windowsHide: true });
+    const runExec = promisify(execFile);
+    await runExec(process.execPath, ["--import", "tsx", "src/server/db-migration-cli.ts"], { cwd: process.cwd(), env: { ...process.env, DATABASE_PATH: file }, windowsHide: true });
     expect(fs.readFileSync(file)).toEqual(before);
     for (const command of ["db-check-cli.ts", "db-migration-cli.ts"]) {
       const missing = path.join(dir, "missing.db");
-      await expect(exec(process.execPath, ["--import", "tsx", `src/server/${command}`], { cwd: process.cwd(), env: { ...process.env, DATABASE_PATH: missing }, windowsHide: true })).rejects.toThrow();
+      await expect(runExec(process.execPath, ["--import", "tsx", `src/server/${command}`], { cwd: process.cwd(), env: { ...process.env, DATABASE_PATH: missing }, windowsHide: true })).rejects.toThrow();
       expect(fs.existsSync(missing)).toBe(false);
     }
   });
