@@ -1,23 +1,27 @@
 # syntax=docker/dockerfile:1
 
+ARG NPM_REGISTRY=https://registry.npmmirror.com/
+
 FROM node:22.23.2-bookworm-slim AS build
+ARG NPM_REGISTRY
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json .npmrc tsconfig.json vite.config.ts ./
-RUN npm ci --no-audit --no-fund
+RUN npm ci --no-audit --no-fund --registry="${NPM_REGISTRY}"
 COPY src ./src
 COPY scripts/check-installation.mjs ./scripts/check-installation.mjs
 RUN npm run build
 
 FROM node:22.23.2-bookworm-slim AS deps
+ARG NPM_REGISTRY
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci --omit=dev --no-audit --no-fund
+RUN npm ci --omit=dev --no-audit --no-fund --registry="${NPM_REGISTRY}"
 
 FROM node:22.23.2-bookworm-slim AS runtime
 ARG APP_VERSION=0.1.0
