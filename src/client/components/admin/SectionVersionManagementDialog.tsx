@@ -26,12 +26,6 @@ function message(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-function receptionRules(value: unknown): ReceptionRule[] {
-  if (!value || typeof value !== "object") return [];
-  const rules = (value as ReceptionBusinessRules).issues;
-  return Array.isArray(rules) ? rules : [];
-}
-
 function cloneReceptionRules(value: unknown): ReceptionBusinessRules {
   const cloned = structuredClone(value ?? {}) as Partial<ReceptionBusinessRules>;
   return {
@@ -226,7 +220,7 @@ function ReceptionRuleCatalog({
     setNotice("");
     setDraft(cloneReceptionRules(version.businessRules));
     setSavedRules(cloneReceptionRules(version.businessRules));
-  }, [version.id]);
+  }, [version.id, version.businessRules]);
 
   const updateRule = (id: string, patch: Partial<ReceptionRule>) => {
     setDraft((current) => ({

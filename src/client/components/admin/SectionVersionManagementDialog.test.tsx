@@ -8,6 +8,7 @@ import { SectionVersionManagementDialog } from "./SectionVersionManagementDialog
 let host: HTMLDivElement;
 let root: Root;
 let requests: Array<{ url: string; init?: RequestInit }>;
+let ruleDimension = "需求理解";
 
 const section: AnalysisSection = {
   id: "reception",
@@ -64,6 +65,7 @@ beforeEach(() => {
   document.body.append(host);
   root = createRoot(host);
   requests = [];
+  ruleDimension = "需求理解";
   let versions = [
     version("draft-3", 3, "draft"),
     version("published-2", 2, "published", true),
@@ -81,7 +83,7 @@ beforeEach(() => {
           issues: [{
             id: "PRE_ANSWER_IRRELEVANT",
             name: "答非所问",
-            dimension: "需求理解",
+             dimension: ruleDimension,
             scope: "preSale",
             criterion: "未围绕客户问题作答",
             deduction: 5,
@@ -179,5 +181,17 @@ describe("SectionVersionManagementDialog", () => {
     const patch = requests.find((request) => request.url.endsWith("/draft-3") && request.init?.method === "PATCH");
     expect(patch).toBeTruthy();
     expect(JSON.parse(String(patch?.init?.body)).businessRules.issues[0].dimension).toBe("客户需求理解");
+  });
+
+  it("refreshes an open rule catalog when the same version receives new rules", async () => {
+    await act(async () => root.render(<SectionVersionManagementDialog sections={[section]} close={vi.fn()} saved={vi.fn()} />));
+    await waitFor(() => expect(host.textContent).toContain("V3"));
+
+    await act(async () => button("查看规则")!.click());
+    await waitFor(() => expect(host.textContent).toContain("需求理解"));
+
+    ruleDimension = "更新后的维度";
+    await act(async () => button("查看规则")!.click());
+    await waitFor(() => expect(host.textContent).toContain("更新后的维度"));
   });
 });

@@ -284,7 +284,7 @@ function Workspace({ session }: { session: CurrentSession }) {
   }, [topMenu]);
   useEffect(() => {
     if (targetedSummary && targetedSummary.skipped > 0) selection.clear();
-  }, [targetedSummary]);
+  }, [targetedSummary, selection.clear]);
   useEffect(() => subscribeAccessDenied((message) => {
     setDialog(null);
     setKnowledgeSection(null);

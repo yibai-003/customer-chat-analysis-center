@@ -1,6 +1,7 @@
 node_modules
 dist
 data
+.runtime-ticket2-data/
 release
 .env
 deploy/.env

@@ -2,15 +2,15 @@
 
 **计划：** `docs/archive/architecture-remediation-plan-2026-09-17.md`
 
-**最后更新：** 2026-09-18（T1–T8 全部完成并推送；局域网发布收口按 `.scratch/lan-release-closure` 工单 01–03 跟踪）
+**最后更新：** 2026-09-24（T1–T8 已完成；接待质检真实 XLSX 发布门禁自动化通过，正式发布证据和固定主机升级回滚仍待完成）
 
 ## 恢复入口
 
-- 当前任务：无
-- 当前步骤：无
-- 下一步：无（T1–T8 已推送并由 CI 验证；局域网收口见工单 01–03 与验收记录）
-- 工作区状态：干净且与 `origin/main` 同步，HEAD `ebc4946d045542dc0884a96e2ba5d94deafb283e`
-- 恢复方法：读本入口 → 打开计划文档查看该任务未勾选步骤 → 继续执行，无需通读项目
+- 当前任务：接待质检真实 XLSX 发布收口与局域网正式发布验收
+- 当前步骤：补充真实脱敏/WPS 样本及 Excel/WPS 人工打开证据；完成固定主机 CI 镜像升级、回滚和再发布演练
+- 下一步：运行正式 `release:reception-xlsx` 门禁，确认 `officialReleaseEligible=true`；审查并同步本地 `main` 相对 `origin/main` 的 20 个提交
+- 工作区状态：非 clean；本地 `main` 相对 `origin/main` ahead 20，另有本地验收文档和运行数据待按归属处理
+- 恢复方法：读本入口 → 打开发布门禁指南和 `.scratch/lan-release-closure`、`.scratch/lan-single-organization-upgrade` 未完成工单 → 按外部环境条件继续验收
 
 ## 任务计划表
 
@@ -26,6 +26,7 @@
 | T6 质量闸门 | 已完成 | - | - | `npm run lint`（oxlint）0 error 且违规即红；修复 1 处条件 Hook；`npm run smoke` 3 秒可复跑；全量 561 项与 `typecheck`/`build`/`db:check` 通过 | 工具替换与 CA 处理见决策日志 |
 | T7 文档治理 | 已完成 | - | - | 根目录 25 → 4 篇；14 篇指南移入 `guides/`，12 份一次性记录移入 `archive/`；新增 `docs/README.md` 八主题索引；README 15 处链接更新；73 份 markdown 0 失效链接 | - |
 | T8 实例锁与平台健壮性 | 已完成 | - | - | `describePortOwner` 在 Windows 下解析占用进程名与 PID；错误信息含端口与处置提示；启动指南新增排查步骤；新增 2 项测试；全量 561 项通过 | - |
+| 发布收口 | 进行中 | 真实 XLSX/WPS 人工证据与固定主机升级回滚 | 运行正式发布门禁并完成最终签字 | 自动化接待 XLSX 门禁、901 项测试、typecheck、build、db:init/db:check、smoke 均通过；`officialReleaseEligible` 仍为 `false` | 需要外部脱敏真实样本、Excel/WPS 桌面验收和固定主机环境 |
 
 ## 时间线日志
 
@@ -43,6 +44,7 @@
 - 2026-09-17 / T2 / 完成模型池首启引导 / `/api/ready` 增加 `actions.verifyPoolMemberIds`；模型池控制台显示待验证默认模型与“验证默认模型”按钮（`enablePassed: true`）；拦截提示改为“验证并启用”；新增 3 项测试；全量 555 项通过；重启服务后实机 `/api/ready` 200 且 `actions.verifyPoolMemberIds` 为空
 - 2026-09-17 / T1 / 完成迁移冻结与 catalog 单一真相源 / 新增 `migrations-immutability.test.ts` 与 `migrations.lock.json`（13 个迁移）；篡改 006 后测试失败、恢复后通过；聚焦 28 项、全量 552 项测试通过；文档补充冻结规则与恢复提示
 - 2026-09-17 / 计划 / 建立账本与任务计划表 / 本文件
+- 2026-09-24 / 发布收口 / 自动化质量复核 / 901 项测试通过；接待 XLSX 自动化门禁通过；数据库迁移版本 29、完整性检查和 smoke 通过；正式发布仍等待真实 XLSX/WPS 证据与固定主机升级回滚
 
 ## 决策日志
 

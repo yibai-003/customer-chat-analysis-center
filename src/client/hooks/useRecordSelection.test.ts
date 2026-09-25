@@ -41,4 +41,19 @@ describe("record selection", () => {
     rerender({ ...scope, jobId: "job-2" });
     expect(result.current.selectedIds).toEqual([]);
   });
+
+  it("keeps selection actions stable when the scope is unchanged", () => {
+    const { result, rerender } = renderHook(() => useRecordSelection(scope));
+    const initialActions = {
+      toggle: result.current.toggle,
+      togglePage: result.current.togglePage,
+      clear: result.current.clear,
+    };
+
+    rerender();
+
+    expect(result.current.toggle).toBe(initialActions.toggle);
+    expect(result.current.togglePage).toBe(initialActions.togglePage);
+    expect(result.current.clear).toBe(initialActions.clear);
+  });
 });
