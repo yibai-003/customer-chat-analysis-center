@@ -4,6 +4,7 @@ import { runMigrations } from "../db/migrations";
 import { ensureConversationId, formatShanghaiDate } from "./conversation-id-service";
 
 let database: any;
+const fixedNow = (value: string) => () => new Date(value);
 
 beforeEach(() => {
   database = new Database(":memory:");
@@ -44,7 +45,7 @@ describe("conversation ID assignment", () => {
     insertRecord({ recordId: "record-format", jobId: "job-format", platformCode: "TMALL" });
 
     const conversationId = ensureConversationId(database, "record-format", {
-      now: () => new Date("2026-09-22T16:00:00.000Z"),
+      now: fixedNow("2026-09-22T16:00:00.000Z"),
       randomCode: () => "A1B2C3",
     });
 
@@ -69,7 +70,7 @@ describe("conversation ID assignment", () => {
   it("retries a globally colliding code and then persists the next candidate", () => {
     insertRecord({ recordId: "record-first", jobId: "job-first", platformCode: "JD" });
     insertRecord({ recordId: "record-second", jobId: "job-second", platformCode: "JD" });
-    const now = () => new Date("2026-09-22T04:00:00.000Z");
+    const now = fixedNow("2026-09-22T04:00:00.000Z");
 
     expect(ensureConversationId(database, "record-first", {
       now,
@@ -86,7 +87,7 @@ describe("conversation ID assignment", () => {
   it("fails clearly after the bounded collision retry limit", () => {
     insertRecord({ recordId: "record-taken", jobId: "job-taken", platformCode: "PDD" });
     insertRecord({ recordId: "record-exhausted", jobId: "job-exhausted", platformCode: "PDD" });
-    const now = () => new Date("2026-09-22T04:00:00.000Z");
+    const now = fixedNow("2026-09-22T04:00:00.000Z");
     ensureConversationId(database, "record-taken", {
       now,
       randomCode: () => "CCCCCC",
@@ -105,13 +106,13 @@ describe("conversation ID assignment", () => {
   it("always reuses an assigned ID without consuming another random code", () => {
     insertRecord({ recordId: "record-stable", jobId: "job-stable", platformCode: "DY" });
     const assigned = ensureConversationId(database, "record-stable", {
-      now: () => new Date("2026-09-22T04:00:00.000Z"),
+      now: fixedNow("2026-09-22T04:00:00.000Z"),
       randomCode: () => "D1E2F3",
     });
     let randomCalls = 0;
 
     const reused = ensureConversationId(database, "record-stable", {
-      now: () => new Date("2027-01-01T00:00:00.000Z"),
+      now: fixedNow("2027-01-01T00:00:00.000Z"),
       randomCode: () => {
         randomCalls += 1;
         return "ZZZZZZ";

@@ -34,6 +34,7 @@ import { createDraftVersion, publishSectionVersion } from "../services/section-c
 import { upsertSection } from "./repositories";
 
 let conversationFixtureSequence = 0;
+const fixedNow = (value: string) => () => new Date(value);
 
 function createConversationRecord(platformCode?: string) {
   conversationFixtureSequence += 1;
@@ -90,7 +91,7 @@ describe("job repository", () => {
     const processing = createConversationRecord(`CIDPROC${Date.now()}`);
     const completed = createConversationRecord(`CIDCOMP${Date.now()}`);
     const needsReview = createConversationRecord(`CIDREVIEW${Date.now()}`);
-    const now = () => new Date("2026-09-22T16:00:00.000Z");
+    const now = fixedNow("2026-09-22T16:00:00.000Z");
 
     expect(updateRecord(processing.record.id, { status: "processing" })).toMatchObject({
       status: "processing",
@@ -121,13 +122,13 @@ describe("job repository", () => {
   it("keeps the first conversation ID through retries and status round-trips", () => {
     const { record } = createConversationRecord(`CIDSTABLE${Date.now()}`);
     const first = updateRecord(record.id, { status: "completed" }, {
-      now: () => new Date("2026-09-22T04:00:00.000Z"),
+      now: fixedNow("2026-09-22T04:00:00.000Z"),
       randomCode: () => "STABL1",
     });
 
     updateRecord(record.id, { status: "failed" });
     const reused = updateRecord(record.id, { status: "needs_review" }, {
-      now: () => new Date("2027-01-01T00:00:00.000Z"),
+      now: fixedNow("2027-01-01T00:00:00.000Z"),
       randomCode: () => "CHANGD",
     });
 
@@ -167,7 +168,7 @@ describe("job repository", () => {
       imagePath: "collision.png",
     }]);
     const secondRecord = listRecords(secondJob.id)[0];
-    const now = () => new Date("2026-09-22T04:00:00.000Z");
+    const now = fixedNow("2026-09-22T04:00:00.000Z");
     updateRecord(first.record.id, { status: "completed" }, {
       now,
       randomCode: () => "COLLID",

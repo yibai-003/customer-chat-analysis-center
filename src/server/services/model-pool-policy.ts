@@ -6,6 +6,7 @@ export interface ModelCandidateOptions {
   now: number;
   allowPaid: boolean;
   failedMemberIds: ReadonlySet<string>;
+  capabilityEligible?: boolean;
 }
 
 function expiryTime(member: ModelConfig) {
@@ -28,7 +29,7 @@ export function isPoolMemberEligible(
   if (!member.isEnabled
     || !member.poolEnabled
     || member.providerEnabled === false
-    || !member.capabilityEligible
+    || !(options.capabilityEligible ?? member.capabilityEligible)
     || member.memberType !== "general"
     || options.failedMemberIds.has(member.id)
     || (member.billingMode === "paid" && !options.allowPaid)) {

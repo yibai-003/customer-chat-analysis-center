@@ -226,7 +226,7 @@ describe("model configuration management", () => {
     createReadyModel("legacy-text", "text", false);
     createReadyModel("legacy-vision", "vision", false);
     const text = createReadyModel("pool-text", "text", true);
-    const vision = createReadyModel("pool-vision", "vision", true);
+    createReadyModel("pool-vision", "vision", true);
 
     expect(getModelReadinessChecks()).toMatchObject({
       text: { configured: true, verified: true },

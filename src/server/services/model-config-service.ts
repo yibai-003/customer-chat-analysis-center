@@ -16,6 +16,7 @@ import {
   safeBaseUrlSchema,
   updateModelProvider,
 } from "./model-provider-service";
+import { isPoolMemberEligible } from "./model-pool-policy";
 
 const inputSchema = z.object({
   name: z.string().trim().min(1).max(120),
@@ -271,21 +272,12 @@ function poolMemberSchedulable(
   verified: boolean,
   now: number,
 ) {
-  if (!member.isEnabled
-    || !member.poolEnabled
-    || !member.providerEnabled
-    || !verified
-    || member.memberType !== "general") return false;
-  if (member.cooldownUntil && Date.parse(member.cooldownUntil) > now) return false;
-  if (member.billingMode === "free") {
-    if (member.quotaExpiresAt) {
-      const expiresAt = Date.parse(member.quotaExpiresAt);
-      if (!Number.isFinite(expiresAt) || expiresAt <= now) return false;
-    }
-    const safetyLimit = (member.quotaTotalTokens ?? 0) * member.quotaSafetyRatio;
-    if (member.quotaBlocked || member.quotaUsedTokens >= safetyLimit) return false;
-  }
-  return true;
+  return isPoolMemberEligible(member, {
+    now,
+    allowPaid: true,
+    failedMemberIds: new Set(),
+    capabilityEligible: verified,
+  });
 }
 
 function getModelReadinessForPurpose(purpose: "vision" | "text", now: number) {

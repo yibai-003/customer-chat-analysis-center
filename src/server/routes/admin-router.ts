@@ -15,6 +15,7 @@ import { managedKeyPath } from "../security/key-store";
 import { captureCatalog } from "../services/knowledge/knowledge-sync-service";
 import type { AuditEvent } from "../../shared/types";
 import { bindJobPlatform, createPlatform, disablePlatform, getPlatform, listJobs, listPlatforms, restorePlatform, updatePlatform } from "../db/repositories";
+import { createRouteResponders } from "../http/route-response";
 
 const roleSchema = z.enum(["admin", "config", "operator", "reviewer", "readonly"]);
 
@@ -123,11 +124,14 @@ export function createAdminRouter(): express.Router {
   const platformRead = requireCapability("config:manage", "platform.list", "platform");
   const platformWrite = requireCapability("config:manage", "platform.manage", "platform");
 
-  const ok = (res: express.Response, data: unknown) => res.json({ success: true, data, error: null });
-  const fail = (res: express.Response, error: unknown, status = 400) => res.status(status).json({
-    success: false,
-    data: null,
-    error: error instanceof ZodError ? "请求参数无效" : error instanceof Error ? error.message : "请求失败",
+  const { ok, fail } = createRouteResponders({
+    resolveMessage: (error) => (
+      error instanceof ZodError
+        ? "请求参数无效"
+        : error instanceof Error
+          ? error.message
+          : "请求失败"
+    ),
   });
 
   router.get("/users", usersRead, (_req, res) => ok(res, listUsers()));

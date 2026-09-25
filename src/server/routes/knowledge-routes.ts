@@ -24,6 +24,7 @@ import {
 import { searchKnowledge } from "../services/knowledge/knowledge-search-service";
 import { auditRequest } from "../auth/audit";
 import type { KnowledgeColumn } from "../../shared/types";
+import { createRouteResponders } from "../http/route-response";
 
 const PREVIEW_TTL_MS = 30 * 60 * 1000;
 
@@ -119,16 +120,14 @@ export function createKnowledgeRouter(upload: multer.Multer): express.Router {
   const importDirectory = path.join(config.dataDir, "knowledge-imports");
   cleanupPreviewDirectory(previewDirectory);
 
-  const ok = (res: express.Response, data: unknown) => (
-    res.json({ success: true, data, error: null })
-  );
-  const fail = (res: express.Response, error: unknown, status = 400) => (
-    res.status(error instanceof UploadError ? error.status : status).json({
-      success: false,
-      data: null,
-      error: error instanceof Error ? error.message : String(error || "请求失败"),
-    })
-  );
+  const { ok, fail } = createRouteResponders({
+    resolveStatus: (error, fallbackStatus) => (
+      error instanceof UploadError ? error.status : fallbackStatus
+    ),
+    resolveMessage: (error) => (
+      error instanceof Error ? error.message : String(error || "请求失败")
+    ),
+  });
 
   router.get("/sections/:sectionId/knowledge-bases", (req, res) => {
     return ok(res, listKnowledgeBases(req.params.sectionId));

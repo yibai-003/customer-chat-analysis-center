@@ -43,6 +43,7 @@ import {
   restoreSectionVersion,
   updateDraftSectionVersion,
 } from "./services/section-config-version-service";
+import { createRouteResponders } from "./http/route-response";
 
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
@@ -88,8 +89,11 @@ export function createApp(dependencies: AppDependencies = {}) {
     }
     next();
   });
-  const ok = (res: express.Response, data: unknown) => res.json({ success: true, data, error: null });
-  const fail = (res: express.Response, error: unknown, status = 400) => res.status(error instanceof UploadError ? error.status : status).json({ success: false, data: null, error: error instanceof Error ? error.message : "请求失败" });
+  const { ok, fail } = createRouteResponders({
+    resolveStatus: (error, fallbackStatus) => (
+      error instanceof UploadError ? error.status : fallbackStatus
+    ),
+  });
   const canView = requireCapability("task:view", "task.view", "task");
   const canImport = requireCapability("task:import", "task.import", "task");
   const canAnalyzeJob = requireCapability("task:analyze", "task.start_analysis", "job");
