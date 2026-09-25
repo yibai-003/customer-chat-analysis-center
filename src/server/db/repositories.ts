@@ -103,7 +103,7 @@ export function createPlatform(input: { name: string; code: string; id?: string 
     db.prepare("INSERT INTO platforms (id,name,code,is_enabled,created_at,updated_at) VALUES (?,?,?,1,?,?)")
       .run(id, name, code, now(), now());
   } catch (error) {
-    if (String(error).includes("UNIQUE constraint failed")) throw new Error("平台代码已存在");
+    if (String(error).includes("UNIQUE constraint failed")) throw new Error("平台代码已存在", { cause: error });
     throw error;
   }
   return getPlatform(id)!;
@@ -121,7 +121,7 @@ export function updatePlatform(id: string, input: { name?: string; code?: string
   try {
     db.prepare("UPDATE platforms SET name = ?, code = ?, updated_at = ? WHERE id = ?").run(name, code, now(), id);
   } catch (error) {
-    if (String(error).includes("UNIQUE constraint failed")) throw new Error("平台代码已存在");
+    if (String(error).includes("UNIQUE constraint failed")) throw new Error("平台代码已存在", { cause: error });
     throw error;
   }
   return getPlatform(id)!;

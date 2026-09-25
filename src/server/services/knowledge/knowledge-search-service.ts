@@ -175,7 +175,7 @@ export function searchKnowledge(input: KnowledgeSearchInput): KnowledgeCandidate
   const columns = JSON.parse(base.column_schema_json || "[]") as KnowledgeColumn[];
   return Array.from(candidates.values())
     .map((row) => calculateScore(row, columns, normalizedQuery))
-    .sort((left, right) => right.score - left.score || left.item_id.localeCompare(right.item_id))
+    .toSorted((left, right) => right.score - left.score || left.item_id.localeCompare(right.item_id))
     .slice(0, limit)
     .map((row) => ({
       itemId: row.item_id,

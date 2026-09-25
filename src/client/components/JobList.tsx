@@ -27,8 +27,8 @@ export function JobList({ jobs, sections, selectedId, canDelete = true, onSelect
       const body = await response.json().catch(() => ({}));
       if (!response.ok || body.success === false) throw new Error(body.error || "删除任务失败");
       onDeleted([job.id]);
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "删除任务失败");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "删除任务失败");
     }
   };
   const filteredJobs = useMemo(() => jobs.filter((job) => {
@@ -51,9 +51,9 @@ export function JobList({ jobs, sections, selectedId, canDelete = true, onSelect
       setSelectedIds([]);
       setPendingBulkDelete(false);
       onDeleted(deletedIds);
-    } catch (error) {
+    } catch (bulkDeleteError) {
       setPendingBulkDelete(false);
-      setError(error instanceof Error ? error.message : "批量删除任务失败");
+      setError(bulkDeleteError instanceof Error ? bulkDeleteError.message : "批量删除任务失败");
     }
   };
   return <><div className="job-filters"><input aria-label="搜索解析任务" placeholder="搜索文件名" value={search} onChange={(event) => setSearch(event.target.value)} /><select aria-label="按任务状态筛选" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">全部状态</option><option value="ready">待解析</option><option value="processing">解析中</option><option value="paused">已暂停</option><option value="completed">已完成</option><option value="failed">失败</option><option value="cancelled">已取消</option></select><select aria-label="按解析板块筛选" value={sectionId} onChange={(event) => setSectionId(event.target.value)}><option value="all">全部板块</option>{childSections.map((section) => <option value={section.id} key={section.id}>{section.name}</option>)}</select></div>{canDelete && <div className="job-bulk-bar"><label><input type="checkbox" aria-label="全选当前任务" checked={allVisibleSelected} onChange={toggleAll} />全选当前任务</label><span>{selectedIds.length ? `已选择 ${selectedIds.length} 个任务` : "未选择任务"}</span><button type="button" disabled={!selectedIds.length} onClick={() => setPendingBulkDelete(true)}>批量删除</button></div>}{filteredJobs.map((job) => <div key={job.id} className={`job ${selectedId === job.id ? "active" : ""}`}>

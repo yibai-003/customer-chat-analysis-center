@@ -95,7 +95,8 @@ export async function runWithConcurrency<T, R>(
   concurrency: number,
   runner: (item: T, index: number) => Promise<R>,
 ): Promise<R[]> {
-  const results = new Array<R>(items.length);
+  const results: R[] = [];
+  results.length = items.length;
   let nextIndex = 0;
   const workerCount = Math.max(1, Math.min(Math.floor(concurrency) || 1, items.length || 1));
   const worker = async () => {

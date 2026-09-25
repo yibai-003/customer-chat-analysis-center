@@ -7,6 +7,20 @@ import { PoolCheckbox } from "./PoolCheckbox";
 
 afterEach(cleanup);
 
+function ControlledPoolCheckbox() {
+  const [indeterminate, setIndeterminate] = useState(true);
+  return (
+    <PoolCheckbox
+      label="同步全选"
+      checked={false}
+      indeterminate={indeterminate}
+      onChange={() => {
+        flushSync(() => setIndeterminate(false));
+      }}
+    />
+  );
+}
+
 describe("PoolCheckbox", () => {
   it("keeps native checkbox semantics and forwards changes", () => {
     const onChange = vi.fn();
@@ -49,20 +63,6 @@ describe("PoolCheckbox", () => {
   });
 
   it("keeps a synchronous parent commit as the final indeterminate state", () => {
-    function ControlledPoolCheckbox() {
-      const [indeterminate, setIndeterminate] = useState(true);
-      return (
-        <PoolCheckbox
-          label="同步全选"
-          checked={false}
-          indeterminate={indeterminate}
-          onChange={() => {
-            flushSync(() => setIndeterminate(false));
-          }}
-        />
-      );
-    }
-
     render(<ControlledPoolCheckbox />);
     const checkbox = screen.getByRole("checkbox", { name: "同步全选" }) as HTMLInputElement;
     expect(checkbox.indeterminate).toBe(true);

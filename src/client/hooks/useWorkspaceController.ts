@@ -56,6 +56,9 @@ export function useWorkspaceController({ canManageConfig = true }: { canManageCo
     suspendAnalysisPoll: selection.poll.suspendAnalysisPoll,
     resumeAnalysisPoll: selection.poll.resumeAnalysisPoll,
   });
+  const jobSectionId = selection.job?.sectionId;
+  const activeSectionId = catalog.activeSection;
+  const setActiveSection = catalog.setActiveSection;
 
   useEffect(() => {
     const header = headerRef.current;
@@ -69,10 +72,10 @@ export function useWorkspaceController({ canManageConfig = true }: { canManageCo
   }, [knowledgeSection]);
 
   useEffect(() => {
-    if (selection.job?.sectionId && selection.job.sectionId !== catalog.activeSection) {
-      catalog.setActiveSection(selection.job.sectionId);
+    if (jobSectionId && jobSectionId !== activeSectionId) {
+      setActiveSection(jobSectionId);
     }
-  }, [selection.job?.id, selection.job?.sectionId]);
+  }, [activeSectionId, jobSectionId, setActiveSection]);
 
   return {
     headerRef,

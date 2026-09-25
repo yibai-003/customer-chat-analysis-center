@@ -17,7 +17,10 @@ export function ImportProgressDialog({
   const [error, setError] = useState("");
   const reported = useRef(false);
   const completedRef = useRef(onCompleted);
-  completedRef.current = onCompleted;
+
+  useEffect(() => {
+    completedRef.current = onCompleted;
+  }, [onCompleted]);
 
   useEffect(() => {
     let active = true;

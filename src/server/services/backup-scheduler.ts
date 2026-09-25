@@ -17,7 +17,7 @@ export function scheduleBackups(options: {
     try {
       if (!initialized) {
         const names = await fs.readdir(options.root).catch((e) => { if (e.code === "ENOENT") return []; throw e; });
-        for (const name of names.filter(n => n.startsWith("full-")).sort().reverse()) {
+        for (const name of names.filter(n => n.startsWith("full-")).toSorted().toReversed()) {
           try { lastSuccess = Date.parse((await verifyBackup(path.join(options.root, name))).createdAt); break; }
           catch { /* damaged packages do not suppress a fresh backup */ }
         }

@@ -331,7 +331,7 @@ export async function previewWorkbookStreaming(
       name: sheet.name,
       headers: Object.values(sheet.rows.get(1) ?? {}).map(normalizeExcelHeader).filter(Boolean),
       imageCount: supportedAnchors.length,
-      imageRows: supportedAnchors.map((anchor) => anchor.row).sort((left, right) => left - right),
+      imageRows: supportedAnchors.map((anchor) => anchor.row).toSorted((left, right) => left - right),
     };
   });
   const imageCount = summaries.reduce((sum, sheet) => sum + sheet.imageCount, 0);
