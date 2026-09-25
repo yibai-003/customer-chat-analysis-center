@@ -92,12 +92,13 @@ nginx 与应用在同一个 Compose 网络中，脚本使用本机生成的根 C
 - 启动应用与 nginx HTTPS 代理；
 - 将本机根 CA 和服务器证书生成到 `deploy/proxy-data/tls/`，并安装根证书到当前 Windows 用户的信任根；
 - 在本机 hosts 写入内网域名；
-- 仅对 `LAN_ALLOWED_CIDR` 放行本次配置的 HTTP/HTTPS 端口；默认是 `8080/8443`。
+- 仅对 `LAN_ALLOWED_CIDR` 放行 HTTPS 端口；默认是 `8443`。
 - 将代理端口只绑定到指定的 `LanIp`，不监听 VMware、WSL 或其他本机接口。
 
-默认使用 `8080/8443`，避免与本机其他服务占用标准 `80/443`；入口为
-`https://chat.customer.lan:8443`。如果标准端口空闲，可以通过
-`-HttpPort 80 -HttpsPort 443` 改用标准端口。
+正式入口为 `https://chat.customer.lan:8443`。正式代理不再发布 HTTP `8080`；
+局域网 HTTP 测试使用独立的 `8444` 测试栈，配置和数据隔离说明见
+[项目操作指南](project-operations.md)。`setup-local-lan-https.ps1` 的
+`-ApplyFirewall` 只创建正式 HTTPS 端口规则，并清理由该脚本管理的旧端口规则。
 
 其他内网电脑需要复制 `deploy/proxy-data/tls/root-ca.cer`，
 安装到受信任的根证书，并将 `chat.customer.lan` 解析到本机内网 IP。不要复制

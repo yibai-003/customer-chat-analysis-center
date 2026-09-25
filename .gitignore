@@ -5,8 +5,11 @@ data
 release
 .env
 deploy/.env
+deploy/.env.test
 deploy/data
 deploy/knowledge
+deploy/test-data
+deploy/test-knowledge
 deploy/proxy-data
 deploy/proxy-config
 .secrets/

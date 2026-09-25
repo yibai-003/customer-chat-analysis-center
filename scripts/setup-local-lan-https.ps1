@@ -8,7 +8,6 @@ param(
   [string]$DataDir = "",
   [string]$KnowledgeDir = "",
   [int]$AppPort = 8788,
-  [int]$HttpPort = 8080,
   [int]$HttpsPort = 8443,
   [switch]$ApplyFirewall,
   [switch]$InstallRoot,
@@ -119,7 +118,6 @@ function Ensure-EnvFile {
   $content = Set-EnvValue $content "LAN_HOSTNAME" $Hostname
   $content = Set-EnvValue $content "LAN_ALLOWED_CIDR" $AllowedCidr
   $content = Set-EnvValue $content "LAN_BIND_ADDRESS" $LanIp
-  $content = Set-EnvValue $content "LAN_HTTP_PORT" ([string]$HttpPort)
   $content = Set-EnvValue $content "LAN_HTTPS_PORT" ([string]$HttpsPort)
   Set-Content -LiteralPath $ResolvedEnvFile -Value $content -Encoding utf8
 }
@@ -181,7 +179,6 @@ function Ensure-ProxyConfig {
   $template = Get-Content -Raw (Join-Path $ProjectRoot "deploy/nginx-lan.conf.example")
   $maxUpload = Get-EnvValue "MAX_UPLOAD_MB" "2048"
   $config = $template.Replace("__LAN_HOSTNAME__", $Hostname)
-  $config = $config.Replace("__LAN_HTTPS_PORT__", [string]$HttpsPort)
   $config = $config.Replace("__MAX_UPLOAD_MB__", $maxUpload)
   Set-Content -LiteralPath $ProxyConfig -Value $config -Encoding ascii
 }
@@ -201,7 +198,7 @@ function Ensure-FirewallRules {
   $prefix = "客服解析中心 LAN HTTPS"
   Get-NetFirewallRule -DisplayName "$prefix *" -ErrorAction SilentlyContinue |
     Remove-NetFirewallRule -ErrorAction SilentlyContinue
-    foreach ($port in @($HttpPort, $HttpsPort)) {
+  foreach ($port in @($HttpsPort)) {
     New-NetFirewallRule `
       -DisplayName "$prefix $port" `
       -Direction Inbound `
@@ -210,7 +207,7 @@ function Ensure-FirewallRules {
       -LocalPort $port `
       -RemoteAddress $AllowedCidr `
       -Profile Private `
-      -Description "仅允许批准的局域网访问客服解析中心 HTTPS 入口" | Out-Null
+      -Description "仅允许批准的局域网访问客服解析中心正式 HTTPS 入口" | Out-Null
   }
 }
 
@@ -220,7 +217,6 @@ function Invoke-Compose([string[]]$Arguments) {
 }
 
 Assert-Hostname $Hostname
-Assert-Port $HttpPort "HttpPort"
 Assert-Port $HttpsPort "HttpsPort"
 $LanIp = Resolve-LanIp
 if (-not $SkipHosts -or $ApplyFirewall) {

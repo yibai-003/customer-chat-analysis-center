@@ -20,9 +20,3 @@ server {
         proxy_request_buffering off;
     }
 }
-
-server {
-    listen 80;
-    server_name __LAN_HOSTNAME__;
-    return 301 https://$host:__LAN_HTTPS_PORT__$request_uri;
-}

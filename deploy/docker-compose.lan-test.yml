@@ -1,0 +1,24 @@
+services:
+  app:
+    extends:
+      file: docker-compose.yml
+      service: app
+    restart: "no"
+    environment:
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS:?Set ALLOWED_HOSTS in deploy/.env.test}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:?Set ALLOWED_ORIGINS in deploy/.env.test}
+      SESSION_COOKIE_SECURE: "false"
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-256}
+      ANALYSIS_CONCURRENCY: ${ANALYSIS_CONCURRENCY:-1}
+
+  proxy:
+    image: nginx:latest
+    container_name: ${LAN_PROXY_CONTAINER_NAME:-customer-chat-analysis-test-proxy}
+    restart: "no"
+    depends_on:
+      app:
+        condition: service_started
+    ports:
+      - "${LAN_BIND_ADDRESS:?Set LAN_BIND_ADDRESS in deploy/.env.test}:8444:80"
+    volumes:
+      - ./nginx-lan-test.conf:/etc/nginx/conf.d/default.conf:ro

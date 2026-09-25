@@ -7,6 +7,7 @@
 | 使用者 | 建议从这里开始 |
 | --- | --- |
 | 局域网普通用户 | [局域网其他电脑访问使用手册](guides/lan-client-access.md) |
+| 本机、测试与正式版操作 | [项目操作指南](guides/project-operations.md) |
 | 部署与运维管理员 | [局域网部署与单实例运行](guides/lan-deployment.md) |
 | 日常系统管理员 | [局域网运维手册](guides/lan-operations.md) |
 | 项目开发者 | [项目目录结构与后续开发规范](project-structure-and-development-guidelines.md) |
@@ -24,6 +25,7 @@
 
 ### 部署和访问
 
+- [项目操作指南](guides/project-operations.md)：本机、局域网测试和正式版的日常启停。
 - [局域网部署与单实例运行](guides/lan-deployment.md)
 - [本地访问防护与启动配置](guides/local-access-and-startup.md)
 - [官方依赖源与可复现安装](guides/reproducible-installation.md)
