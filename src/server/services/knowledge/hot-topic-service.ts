@@ -9,7 +9,12 @@ import { getField } from "../field-config-service";
 import { getKnowledgeBase, getKnowledgeItem, listKnowledgeBases, listKnowledgeItems, upsertKnowledgeBase, upsertKnowledgeItem } from "./knowledge-repository";
 import { searchKnowledge } from "./knowledge-search-service";
 import { HOT_TOPIC_BASE_ID, HOT_TOPIC_BASE_NAME, HOT_TOPIC_QUESTION_COLUMN, isHotTopicField } from "../../../shared/hot-topic";
-import type { AnalysisField, AnalysisFieldRun, KnowledgeBase } from "../../../shared/types";
+import type {
+  AnalysisField,
+  AnalysisFieldRun,
+  KnowledgeBase,
+  SectionConfigVersion,
+} from "../../../shared/types";
 import type { KnowledgeSync } from "./knowledge-sync-service";
 
 let knowledgeSync: KnowledgeSync | undefined;
@@ -83,15 +88,30 @@ function knowledgeRevision(sectionId: string) {
     WHERE b.section_id = ? ORDER BY b.id, i.id`).all(sectionId));
 }
 
-function candidatesFor(question: string, bases: KnowledgeBase[], limit: number): Candidate[] {
+function candidatesFor(
+  question: string,
+  bases: KnowledgeBase[],
+  limit: number,
+  snapshot?: SectionConfigVersion["knowledgeSnapshot"],
+): Candidate[] {
   const candidates = new Map<string, Candidate>();
   for (const base of bases) {
     const column = resultColumn(base);
     if (!column) continue;
     // Small question dictionaries are sent in full to catch synonyms without shared trigrams.
-    const items = base.itemCount <= 100
-      ? listKnowledgeItems(base.id, { enabled: true, pageSize: 100 }).items.map((item) => ({ itemId: item.id, values: item.values }))
-      : searchKnowledge({ knowledgeBaseId: base.id, query: question, limit });
+    const snapshotBase = snapshot?.find((candidate) => candidate.id === base.id);
+    const items = snapshotBase
+      ? (Array.isArray(snapshotBase.items) ? snapshotBase.items : [])
+        .filter((item) => item && typeof item === "object" && item.isEnabled !== false)
+        .map((item) => ({
+          itemId: String(item.id ?? ""),
+          values: Object.fromEntries(Object.entries(
+            item.values && typeof item.values === "object" ? item.values : {},
+          ).map(([key, value]) => [key, String(value ?? "")])),
+        }))
+      : base.itemCount <= 100
+        ? listKnowledgeItems(base.id, { enabled: true, pageSize: 100 }).items.map((item) => ({ itemId: item.id, values: item.values }))
+        : searchKnowledge({ knowledgeBaseId: base.id, query: question, limit });
     for (const item of items) {
       if (!item.values[column]?.trim()) continue;
       candidates.set(item.itemId, {
@@ -106,7 +126,10 @@ function candidatesFor(question: string, bases: KnowledgeBase[], limit: number):
 }
 
 export function captureHotTopicQuestions(input: {
-  recordId: string; field: AnalysisField; dependencies: Record<string, unknown>;
+  recordId: string;
+  field: AnalysisField;
+  configVersion?: SectionConfigVersion;
+  dependencies: Record<string, unknown>;
 }): Promise<AnalysisFieldRun> {
   return withModelBudget(() => captureHotTopicWithinBudget(input));
 }
@@ -114,7 +137,7 @@ export function captureHotTopicQuestions(input: {
 function captureHotTopicWithinBudget(input: Parameters<typeof captureHotTopicQuestions>[0]): Promise<AnalysisFieldRun> {
   return serialized(async () => {
     assertAnalysisActive(); checkModelBudget();
-    const { field, recordId, dependencies } = input;
+    const { field, recordId, configVersion, dependencies } = input;
     const started = Date.now();
     const transcript: unknown[] = [];
     const modelsUsed: unknown[] = [];
@@ -166,11 +189,43 @@ function captureHotTopicWithinBudget(input: Parameters<typeof captureHotTopicQue
         { fieldPrompt: field.prompt, dependencies },
       );
       const questions = parseHotTopicQuestions(raw, limit, dependencies);
-      const revision = knowledgeRevision(field.sectionId);
-      const bases = listKnowledgeBases(field.sectionId).filter((base) => base.isEnabled && resultColumn(base));
+      const revision = configVersion
+        ? JSON.stringify(configVersion.knowledgeSnapshot)
+        : knowledgeRevision(field.sectionId);
+      const bases = configVersion
+        ? configVersion.knowledgeSnapshot.map((base) => ({
+          id: String(base.id ?? ""),
+          sectionId: String(base.sectionId ?? ""),
+          name: String(base.name ?? ""),
+          originalFilename: String(base.originalFilename ?? ""),
+          columns: Array.isArray(base.columns) ? base.columns : [],
+          itemCount: Number(base.itemCount ?? (Array.isArray(base.items) ? base.items.length : 0)),
+          isEnabled: base.isEnabled !== false,
+          createdAt: String(base.createdAt ?? ""),
+          updatedAt: String(base.updatedAt ?? ""),
+        } as KnowledgeBase)).filter((base) => base.isEnabled && resultColumn(base))
+        : listKnowledgeBases(field.sectionId).filter((base) => base.isEnabled && resultColumn(base));
+      if (configVersion && db.prepare(`
+        SELECT 1 FROM hot_topic_record_questions
+        WHERE record_id = ? AND field_id = ? LIMIT 1
+      `).get(recordId, field.id)) {
+        const capturedBase = getKnowledgeBase(HOT_TOPIC_BASE_ID);
+        if (capturedBase && capturedBase.isEnabled
+          && !bases.some((base) => base.id === capturedBase.id)) {
+          bases.push(capturedBase);
+        }
+      }
       const selections: Selection[] = [];
       for (const question of questions) {
-        const candidates = [...candidatesFor(question.question, bases, field.candidateLimit ?? 15), ...selections];
+        const candidates = [
+          ...candidatesFor(
+            question.question,
+            bases,
+            field.candidateLimit ?? 15,
+            configVersion?.knowledgeSnapshot,
+          ),
+          ...selections,
+        ];
         let selected = candidates.find((candidate) => normalize(candidate.question) === normalize(question.question));
         if (!selected && candidates.length) {
           const decision = parseJson(await ask(
@@ -197,7 +252,8 @@ function captureHotTopicWithinBudget(input: Parameters<typeof captureHotTopicQue
         }
       }
       knowledgeSync?.assertUnchanged();
-      if (knowledgeRevision(field.sectionId) !== revision || JSON.stringify(getField(field.id)) !== JSON.stringify(field)) {
+      if ((!configVersion && knowledgeRevision(field.sectionId) !== revision)
+        || (!configVersion && JSON.stringify(getField(field.id)) !== JSON.stringify(field))) {
         throw new HotTopicReview("分析期间知识库或字段配置已变更，请重试，未写入知识库");
       }
       const run = db.transaction(() => {
@@ -220,7 +276,9 @@ function captureHotTopicWithinBudget(input: Parameters<typeof captureHotTopicQue
               throw new HotTopicReview("已有同名停用问题，请在知识库检查后重试");
             }
             upsertKnowledgeItem({ id: selection.itemId, knowledgeBaseId: selection.baseId, values: selection.values, isEnabled: true });
-          } else if (!getKnowledgeItem(selection.itemId)?.isEnabled) throw new HotTopicReview("匹配词条已失效，请重试");
+          } else if (!configVersion && !getKnowledgeItem(selection.itemId)?.isEnabled) {
+            throw new HotTopicReview("匹配词条已失效，请重试");
+          }
         }
         db.prepare("DELETE FROM hot_topic_record_questions WHERE record_id = ? AND field_id = ?").run(recordId, field.id);
         for (const selection of selections) db.prepare(`INSERT INTO hot_topic_record_questions

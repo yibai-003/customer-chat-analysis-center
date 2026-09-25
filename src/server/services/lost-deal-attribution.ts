@@ -1,4 +1,4 @@
-import type { AnalysisField } from "../../shared/types";
+import type { AnalysisField, SectionConfigVersion } from "../../shared/types";
 import { db } from "../db/client";
 
 export interface LostDealReason {
@@ -63,7 +63,7 @@ function parseReasonList(
     const candidate = knowledgeItemId ? allowed.get(knowledgeItemId) : undefined;
     const legacyName = asString(source.name);
     const legacyCandidate = !candidate && legacyName
-      ? [...allowed.values()].find((item) => item.name === legacyName)
+      ? [...allowed.values()].find((matchedCandidate) => matchedCandidate.name === legacyName)
       : undefined;
     const selected = candidate ?? legacyCandidate;
     const name = selected?.name ?? legacyName;
@@ -196,13 +196,16 @@ export function parseLostDealAttribution(
 }
 
 export function deriveLostDealFields(attribution: LostDealAttribution): Record<string, unknown> {
-  const names = (items: LostDealReason[]) => items.map((item) => item.name).filter(Boolean).join("\n");
   return {
-    客户原因: names(attribution.customerReasons),
-    客服原因: names(attribution.serviceReasons),
+    客户原因: reasonNames(attribution.customerReasons),
+    客服原因: reasonNames(attribution.serviceReasons),
     客户产品需求: attribution.specificDemandGrounded === false ? "" : attribution.specificDemand,
     未成交归因: attribution,
   };
+}
+
+function reasonNames(items: LostDealReason[]) {
+  return items.map((item) => item.name).filter(Boolean).join("\n");
 }
 
 function enabledKnowledgeNames(
@@ -229,10 +232,34 @@ function enabledKnowledgeNames(
   }).filter((item) => item.name);
 }
 
-export function loadLostDealKnowledgeCandidates(field: AnalysisField): LostDealKnowledgeCandidates {
+export function loadLostDealKnowledgeCandidates(
+  field: AnalysisField,
+  knowledgeSnapshot?: SectionConfigVersion["knowledgeSnapshot"],
+): LostDealKnowledgeCandidates {
+  const snapshotNames = (baseName: string, valueColumn: string): LostDealKnowledgeCandidate[] | undefined => {
+    if (!knowledgeSnapshot) return undefined;
+    const base = knowledgeSnapshot.find((candidate) => candidate.name === baseName && candidate.isEnabled !== false);
+    if (!base || !Array.isArray(base.items)) return [];
+    return base.items.flatMap((item) => {
+      if (!item || typeof item !== "object" || item.isEnabled === false) return [];
+      const values = item.values && typeof item.values === "object"
+        ? item.values as Record<string, unknown>
+        : {};
+      const name = asString(values[valueColumn]);
+      return name ? [{
+        id: String(item.id ?? ""),
+        name,
+        definition: asString(values["定义"]),
+        applicable: asString(values["适用条件"]),
+        excluded: asString(values["排除条件"]),
+      }] : [];
+    });
+  };
   return {
-    customerReasons: enabledKnowledgeNames(field.sectionId, LOST_DEAL_CUSTOMER_BASE_NAME, "原因名称"),
-    serviceReasons: enabledKnowledgeNames(field.sectionId, LOST_DEAL_SERVICE_BASE_NAME, "问题名称"),
+    customerReasons: snapshotNames(LOST_DEAL_CUSTOMER_BASE_NAME, "原因名称")
+      ?? enabledKnowledgeNames(field.sectionId, LOST_DEAL_CUSTOMER_BASE_NAME, "原因名称"),
+    serviceReasons: snapshotNames(LOST_DEAL_SERVICE_BASE_NAME, "问题名称")
+      ?? enabledKnowledgeNames(field.sectionId, LOST_DEAL_SERVICE_BASE_NAME, "问题名称"),
     demandTypes: field.options?.map((item) => item.trim()).filter(Boolean) ?? [],
   };
 }

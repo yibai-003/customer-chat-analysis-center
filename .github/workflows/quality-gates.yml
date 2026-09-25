@@ -46,6 +46,20 @@ jobs:
       - name: test
         run: npm test
 
+      - name: reception XLSX automated release gate
+        env:
+          RECEPTION_GATE_ARTIFACT_DIR: artifacts/reception-xlsx
+        run: npm run test:reception-xlsx
+
+      - name: Upload reception XLSX acceptance record
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reception-xlsx-automated-acceptance
+          path: artifacts/reception-xlsx/
+          if-no-files-found: error
+          retention-days: 30
+
       - name: typecheck
         run: npm run typecheck
 

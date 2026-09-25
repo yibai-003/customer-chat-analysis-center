@@ -8,6 +8,9 @@ import type { JobOperationHelpers } from "./workspace-types";
 
 type AnalysisRunOptions = Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize" | "maxPaidTokens">>;
 type TargetedSummary = { selected: number; executable: number; skipped: number };
+const targetedNotice = (summary: TargetedSummary) =>
+  `已选择 ${summary.selected} 条：可执行 ${summary.executable} 条，跳过 ${summary.skipped} 条`;
+
 type PollControls = Pick<
   ReturnType<typeof useAnalysisPolling>,
   "startAnalysisPoll" | "cancelAnalysisPoll" | "suspendAnalysisPoll" | "resumeAnalysisPoll"
@@ -104,9 +107,6 @@ export function useAnalysisActions(deps: {
       finishBusyOperation(operation);
     }
   };
-
-  const targetedNotice = (summary: TargetedSummary) =>
-    `已选择 ${summary.selected} 条：可执行 ${summary.executable} 条，跳过 ${summary.skipped} 条`;
 
   const startBatchAnalysis = async (options: AnalysisRunOptions) => {
     if (!job || !currentSection) return;

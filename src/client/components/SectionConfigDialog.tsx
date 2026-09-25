@@ -31,16 +31,17 @@ export function SectionConfigDialog({ sections, close, saved }: { sections: Anal
   const [loading, setLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const requestId = useRef(0);
+  const sectionId = section?.id;
 
   useEffect(() => {
-    if (!section) return;
+    if (!sectionId) return;
     const currentRequestId = ++requestId.current;
     const controller = new AbortController();
     setFields([]);
     setFieldErrors({});
     setError("");
     setLoading(true);
-    api<AnalysisField[]>(`/api/sections/${section.id}/fields`, { signal: controller.signal })
+    api<AnalysisField[]>(`/api/sections/${sectionId}/fields`, { signal: controller.signal })
       .then((items) => {
         if (currentRequestId === requestId.current) setFields(items);
       })
@@ -52,7 +53,7 @@ export function SectionConfigDialog({ sections, close, saved }: { sections: Anal
         if (currentRequestId === requestId.current) setLoading(false);
       });
     return () => controller.abort();
-  }, [section?.id]);
+  }, [sectionId]);
 
   const updateFieldError = useCallback((fieldId: string, validationError: string) => {
     setFieldErrors((current) => {

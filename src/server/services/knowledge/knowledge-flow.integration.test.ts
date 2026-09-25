@@ -11,6 +11,8 @@ import { upsertField } from "../field-config-service";
 import { importWorkbook } from "../excel-import-service";
 import { exportJob } from "../excel-export-service";
 import { analyzeField } from "../field-analysis-service";
+import { createDraftVersion, publishSectionVersion } from "../section-config-version-service";
+import { attachConversationTestPlatform } from "../../testing/conversation-platform-fixture";
 import { importKnowledgeWorkbook } from "./knowledge-import-service";
 import { createKnowledgeWorkbook } from "./knowledge-test-fixtures";
 import {
@@ -252,10 +254,12 @@ describe("dynamic reason knowledge flow", () => {
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     });
 
+    publishSectionVersion(createDraftVersion(sectionId).id);
     const job = await importWorkbook(sourcePath, "客服记录.xlsx", {
       id: sectionId,
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     generatedDirectories.add(path.join(config.dataDir, "jobs", job.id));
     const recordId = (db.prepare(recordIdQuery).get(job.id) as { id: string }).id;
 
@@ -392,7 +396,7 @@ describe("dynamic reason knowledge flow", () => {
       `${job.id}-客服解析结果.xlsx`,
     );
     generatedFiles.add(expectedOutputPath);
-    const outputPath = await exportJob(job.id, [sectionId]);
+    const outputPath = await exportJob(job.id);
     expect(outputPath).toBe(expectedOutputPath);
     const exported = new ExcelJS.Workbook();
     await exported.xlsx.readFile(outputPath);

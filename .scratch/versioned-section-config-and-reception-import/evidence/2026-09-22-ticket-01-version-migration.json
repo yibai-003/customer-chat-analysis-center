@@ -1,0 +1,92 @@
+{
+  "ticket": "01-section-config-versions-and-v1-migration",
+  "date": "2026-09-22",
+  "branch": "feat/section-config-versions",
+  "schemaVersion": 19,
+  "verification": {
+    "tests": {
+      "command": "npm test",
+      "testFiles": 102,
+      "tests": 844,
+      "failures": 0
+    },
+    "typecheck": {
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "command": "npm run lint",
+      "exitCode": 0,
+      "note": "Existing repository warnings remain; the command completed without errors."
+    },
+    "build": {
+      "command": "npm run build",
+      "exitCode": 0
+    },
+    "databaseCheck": {
+      "commands": [
+        "npm run db:init",
+        "npm run db:check"
+      ],
+      "integrity": "ok",
+      "foreignKeys": 0,
+      "version": 19,
+      "supportedVersion": 19
+    }
+  },
+  "migration": {
+    "firstRun": {
+      "succeeded": 6,
+      "skipped": 0,
+      "errors": []
+    },
+      "secondRun": {
+      "succeeded": 0,
+      "skipped": 6,
+      "errors": []
+    },
+    "versions": {
+      "total": 6,
+      "currentPublishedV1": 6
+    },
+    "receptionBusinessRules": {
+      "issueCount": 35,
+      "gradeThresholds": {
+        "A": 95,
+        "B": 90,
+        "C": 80,
+        "D": 0
+      }
+    },
+    "auditEvents": {
+      "action": "config.version_migration",
+      "count": 6
+    },
+    "historicalBinding": {
+      "analysisUsesBoundSnapshot": true,
+      "retryPreservesBinding": true,
+      "exportUsesBoundSnapshot": true,
+      "exportRejectsOtherSections": true,
+      "liveFieldDeletionPreservesHistoricalRuns": true,
+      "progressUsesBoundFieldSnapshots": true,
+      "knowledgeMatchingRanksSnapshotCandidates": true
+    },
+    "immutability": {
+      "publishedDowngradeRejected": true,
+      "publishedDeleteRejected": true,
+      "sectionDeleteWithVersionsRejected": true,
+      "orphanSectionVersionRejectedByForeignKey": true
+    },
+    "upgrade": {
+      "fromSchemaVersion": 18,
+      "toSchemaVersion": 19,
+      "historicalJobBindingPreserved": true,
+      "receptionV1Preserved": true,
+      "dimensionedReceptionVersionActivated": true
+    },
+    "receptionBusinessRulesValidation": {
+      "allIssuesHaveDimensions": true,
+      "missingDimensionRejected": true
+    }
+  }
+}

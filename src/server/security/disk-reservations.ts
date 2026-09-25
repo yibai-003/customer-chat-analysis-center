@@ -61,7 +61,7 @@ export function reservedFileWriter(file: string, reservation: DiskReservation) {
         if (!written) { finish(new Error("磁盘写入未取得进展")); return; }
         offset += written;
         if (offset < chunk.length) { write(); return; }
-        try { reservation.consume(chunk.length); finish(); } catch (error) { finish(error as Error); }
+        try { reservation.consume(chunk.length); finish(); } catch (consumeError) { finish(consumeError as Error); }
       });
       if (chunk.length === 0) finish(); else write();
     },

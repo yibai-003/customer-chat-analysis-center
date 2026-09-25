@@ -9,6 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { createApp } from "../app";
 import { db, initDb } from "../db/client";
 import { addRecords, createJob, getJob, getRecord, listRecords, listSections } from "../db/repositories";
+import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 import { bootstrapFirstAdmin, createUser } from "./identity-service";
 import type { UserRole } from "../../shared/types";
 
@@ -36,7 +37,8 @@ let cookies: Record<string, string> = {};
 let jobId: string;
 let recordId: string;
 let sectionId: string;
-const imagePath = path.join(os.tmpdir(), `authorization-matrix-${process.pid}-${Date.now()}.png`);
+const imageDir = path.join(os.tmpdir(), `客服解析-authorization-matrix-${process.pid}-${Date.now()}`);
+const imagePath = path.join(imageDir, "聊天截图.png");
 const workbookPaths: string[] = [];
 let workbookBuffer: Buffer;
 
@@ -62,6 +64,7 @@ function seedFixture() {
   fs.writeFileSync(jobSourcePath, workbookBuffer);
   workbookPaths.push(jobSourcePath);
   const job = createJob("authorization-matrix.xlsx", jobSourcePath, { id: section.id, name: section.name });
+  attachConversationTestPlatform(job.id);
   addRecords(job.id, [{
     sheetName: "Sheet1",
     rowNumber: 2,
@@ -101,6 +104,7 @@ function cookieFor(role: string) {
 
 beforeAll(async () => {
   initDb();
+  fs.mkdirSync(imageDir, { recursive: true });
   fs.writeFileSync(imagePath, Buffer.from([0x89, 0x50, 0x4e, 0x47]));
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet("Sheet1");
@@ -121,7 +125,7 @@ beforeEach(async () => {
 });
 
 afterAll(async () => {
-  fs.rmSync(imagePath, { force: true });
+  fs.rmSync(imageDir, { recursive: true, force: true });
   for (const file of workbookPaths.splice(0)) fs.rmSync(file, { force: true });
   await new Promise<void>((resolve, reject) => {
     server.close((error) => error ? reject(error) : resolve());
@@ -217,6 +221,9 @@ describe("task and review authorization", () => {
     for (const role of ["readonly", "config"]) {
       expect((await request(`/api/jobs/${jobId}/export`, { cookie: cookieFor(role) })).status, role).toBe(403);
     }
+    expect((await request(`/api/jobs/${jobId}/export?sections=${sectionId},refund`, {
+      cookie: cookieFor("operator"),
+    })).status).toBe(400);
     expect((await request(`/api/jobs/${jobId}/export`)).status).toBe(401);
   });
 

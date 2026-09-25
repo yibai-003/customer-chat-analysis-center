@@ -23,6 +23,7 @@ import {
 } from "../services/model-pool-admin-service";
 import { requireCapability } from "../auth/capabilities";
 import { auditRequest } from "../auth/audit";
+import { createRouteResponders } from "../http/route-response";
 
 const idSchema = z.string().min(1).max(200);
 
@@ -121,20 +122,18 @@ export function createModelPoolRouter(): express.Router {
   const canRemove = requireCapability("config:manage", "pool.remove", "model_pool_member");
   const canRestore = requireCapability("config:manage", "pool.restore", "model_pool_member");
   const canUpdateSettings = requireCapability("config:manage", "pool.update_settings", "model_pool");
-  const ok = (res: express.Response, data: unknown) => (
-    res.json({ success: true, data, error: null })
-  );
-  const fail = (res: express.Response, error: unknown, status = errorStatus(error)) => (
-    res.status(status).json({
-      success: false,
-      data: null,
-      error: error instanceof ZodError
+  const { ok, fail } = createRouteResponders({
+    resolveStatus: (error, fallbackStatus) => (
+      fallbackStatus === 400 ? errorStatus(error) : fallbackStatus
+    ),
+    resolveMessage: (error) => (
+      error instanceof ZodError
         ? "请求参数无效"
         : error instanceof Error
           ? error.message
-          : String(error || "请求失败"),
-    })
-  );
+          : String(error || "请求失败")
+    ),
+  });
 
   router.get("/model-providers", canReadPool, (_req, res) => ok(res, listModelProviders()));
 

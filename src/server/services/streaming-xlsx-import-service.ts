@@ -10,16 +10,63 @@ import { config } from "../config";
 import { normalizeUploadedFilename } from "../utils/encoding";
 import { normalizeImageAnchor } from "./excel-import-service";
 import { diskReservations, reservedFileWriter } from "../security/disk-reservations";
-import { normalizeExcelHeader } from "./excel-template-service";
+import {
+  excelHeaderMatches,
+  excelHeaderParts,
+  normalizeExcelHeader,
+} from "./excel-template-service";
+import { getSectionVersion } from "./section-config-version-service";
+import type { ReceptionImportContract } from "./section-business-rules";
+import {
+  inspectReceptionResultRow,
+  receptionImportConflictMessage,
+  type ReceptionImportConflict,
+} from "./reception-import-contract";
 
 const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", isArray: (name) => ["sheet", "Relationship", "row", "c", "si", "r", "oneCellAnchor", "twoCellAnchor"].includes(name) });
 type StreamingAnchor = { row: number; column: number; embed: string; mediaPath?: string };
+type PlatformInput = { id: string; name: string; code: string };
+type SectionInput = { id: string; name: string; sourceFields?: string[]; sectionConfigVersionId?: string; sectionVersionNumber?: number };
+
+const receptionHeaderKeys: Record<string, string[]> = {
+  平台: ["platform_name"],
+  店铺: ["store_name"],
+  日期: ["business_date"],
+  客服: ["agent_name"],
+  分组: ["agent_group"],
+  客户ID: ["customer_id"],
+  聊天截图: ["chat_screenshot"],
+};
+const modernReceptionResultKeys = new Set([
+  "conversation_started_at",
+  "conversation_id",
+  "turn_count",
+  "rating",
+  "total_deduction",
+  "improvement_advice",
+  "needs_manual_review",
+  "dimension",
+  "issue",
+  "deduction",
+  "d_level",
+  "chat_excerpt",
+  "evidence",
+  "judgement_reason",
+]);
+const modernReceptionRequiredResultKeys = new Set([
+  "conversation_id",
+  "turn_count",
+  "rating",
+  "total_deduction",
+  "needs_manual_review",
+]);
 
 function asArray<T>(value: T | T[] | undefined): T[] {
   return value === undefined ? [] : Array.isArray(value) ? value : [value];
 }
 
 function resolveZipPath(base: string, target: string) {
+  if (target.startsWith("/")) return path.posix.normalize(target.slice(1));
   return path.posix.normalize(path.posix.join(path.posix.dirname(base), target));
 }
 
@@ -49,7 +96,7 @@ function sharedStringValues(xml: string) {
   });
 }
 
-function worksheetRows(xml: string, sharedStrings: string[]) {
+export function parseWorksheetRows(xml: string, sharedStrings: string[]) {
   const rows = new Map<number, Record<number, string>>();
   for (const row of asArray(parser.parse(xml)?.worksheet?.sheetData?.row)) {
     const rowNumber = Number(row["@_r"]);
@@ -58,7 +105,13 @@ function worksheetRows(xml: string, sharedStrings: string[]) {
       const ref = String(cell["@_r"] ?? "");
       const column = columnNumber(ref);
       const raw = cell.v;
-      const value = cell["@_t"] === "s" ? sharedStrings[Number(raw)] ?? "" : raw === undefined ? "" : String(raw);
+      const inlineText = xmlText(cell.is?.t)
+        || asArray(cell.is?.r).map((run: any) => xmlText(run.t)).join("");
+      const value = cell["@_t"] === "s"
+        ? sharedStrings[Number(raw)] ?? ""
+        : cell["@_t"] === "inlineStr"
+          ? inlineText
+          : raw === undefined ? "" : String(raw);
       cells[column] = value;
     }
     rows.set(rowNumber, cells);
@@ -66,7 +119,43 @@ function worksheetRows(xml: string, sharedStrings: string[]) {
   return rows;
 }
 
-function drawingAnchors(xml: string): StreamingAnchor[] {
+function normalizedPlatformValue(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function receptionHeaderMatches(actual: unknown, expected: string) {
+  if (excelHeaderMatches(actual, expected)) return true;
+  const key = excelHeaderParts(actual).key;
+  return Boolean(key && receptionHeaderKeys[expected]?.includes(key));
+}
+
+function platformConflicts(
+  sheetData: Array<{ name: string; rows: Map<number, Record<number, string>> }>,
+  platform?: PlatformInput,
+) {
+  if (!platform) return [];
+  const accepted = new Set([normalizedPlatformValue(platform.name), normalizedPlatformValue(platform.code)]);
+  const conflicts: Array<{ sheetName: string; rowNumber: number; value: string }> = [];
+  for (const sheet of sheetData) {
+    const headers = sheet.rows.get(1) ?? {};
+    const platformColumn = Object.entries(headers).find(([, value]) => receptionHeaderMatches(value, "平台"))?.[0];
+    if (!platformColumn) continue;
+    for (const [rowNumber, row] of sheet.rows) {
+      if (rowNumber === 1) continue;
+      const value = String(row[Number(platformColumn)] ?? "").trim();
+      if (value && !accepted.has(normalizedPlatformValue(value))) {
+        conflicts.push({ sheetName: sheet.name, rowNumber, value });
+      }
+    }
+  }
+  return conflicts;
+}
+
+function platformConflictMessage(conflicts: Array<{ sheetName: string; rowNumber: number; value: string }>) {
+  return `Excel 中的平台字段与所选平台不一致：${conflicts.map((conflict) => `${conflict.sheetName} 第 ${conflict.rowNumber} 行“${conflict.value}”`).join("；")}`;
+}
+
+export function parseDrawingAnchors(xml: string): StreamingAnchor[] {
   const drawing = parser.parse(xml)?.["xdr:wsDr"] ?? {};
   return [...asArray(drawing["xdr:oneCellAnchor"]), ...asArray(drawing["xdr:twoCellAnchor"])]
     .map((anchor: any) => {
@@ -79,6 +168,114 @@ function drawingAnchors(xml: string): StreamingAnchor[] {
       };
     })
     .filter((anchor): anchor is StreamingAnchor => Boolean(anchor.embed));
+}
+
+function rowSourceFields(
+  rows: Map<number, Record<number, string>>,
+  rowNumber: number,
+) {
+  const headers = rows.get(1) ?? {};
+  const row = rows.get(rowNumber) ?? {};
+  const sourceFields: Record<string, string> = {};
+  for (const [column, value] of Object.entries(row)) {
+    const header = normalizeExcelHeader(headers[Number(column)]);
+    if (header) sourceFields[header] = value;
+  }
+  return sourceFields;
+}
+
+function receptionContractForHeaders(
+  headers: Record<number, string>,
+  contract: ReceptionImportContract,
+) {
+  const modernColumns = Object.values(headers)
+    .map((header) => ({ header: normalizeExcelHeader(header), key: excelHeaderParts(header).key }))
+    .filter((item) => modernReceptionResultKeys.has(item.key));
+  if (!modernColumns.length) return contract;
+  return {
+    imageColumn: contract.imageColumn,
+    resultColumns: modernColumns.map((item) => item.header),
+    completeHistoricalResultRequiredColumns: modernColumns
+      .filter((item) => modernReceptionRequiredResultKeys.has(item.key))
+      .map((item) => item.header),
+  };
+}
+
+function resolveReceptionContract(section?: SectionInput): ReceptionImportContract | undefined {
+  if (section?.id !== "reception") return;
+  if (!section.sectionConfigVersionId) throw new Error("接待质检导入缺少配置版本");
+  const version = getSectionVersion(section.sectionConfigVersionId);
+  if (!version || version.sectionId !== "reception") throw new Error("接待质检导入配置版本无效");
+  const contract = (version.businessRules as { importContract?: ReceptionImportContract }).importContract;
+  if (!contract) throw new Error("接待质检配置版本缺少导入契约");
+  return contract;
+}
+
+function anchorsForContract(
+  sheet: { rows: Map<number, Record<number, string>>; anchors: StreamingAnchor[] },
+  contract?: ReceptionImportContract,
+) {
+  if (!contract) return sheet.anchors;
+  const imageHeader = Object.entries(sheet.rows.get(1) ?? {})
+    .find(([, value]) => receptionHeaderMatches(value, contract.imageColumn));
+  const imageColumn = imageHeader?.[0];
+  if (!imageColumn) return [];
+  const seenRows = new Set<number>();
+  const anchoredInImageColumn = sheet.anchors.filter((anchor) => {
+    if (anchor.column !== Number(imageColumn) || seenRows.has(anchor.row)) return false;
+    seenRows.add(anchor.row);
+    return true;
+  });
+  if (anchoredInImageColumn.length || excelHeaderParts(imageHeader?.[1]).key !== "chat_screenshot") {
+    return anchoredInImageColumn;
+  }
+
+  // WPS can retain the screenshot header while serializing floating images against
+  // an earlier column after columns were rearranged. When every image is uniquely
+  // associated with a data row, preserve the reliable row anchor instead.
+  seenRows.clear();
+  return sheet.anchors.filter((anchor) => {
+    if (anchor.row <= 1 || seenRows.has(anchor.row)) return false;
+    seenRows.add(anchor.row);
+    return true;
+  });
+}
+
+function inspectReceptionSheets(
+  sheetData: Array<{
+    name: string;
+    rows: Map<number, Record<number, string>>;
+    anchors: StreamingAnchor[];
+  }>,
+  contract?: ReceptionImportContract,
+) {
+  const pending: Array<{ sheetName: string; anchor: StreamingAnchor; sourceFields: Record<string, string> }> = [];
+  const historical: Array<{ sheetName: string; rowNumber: number }> = [];
+  const conflicts: ReceptionImportConflict[] = [];
+  const eligibleRows = new Set<string>();
+  if (!contract) return { pending, historical, conflicts, eligibleRows };
+
+  for (const sheet of sheetData) {
+    for (const anchor of anchorsForContract(sheet, contract)) {
+      eligibleRows.add(`${sheet.name}\u0000${anchor.row}`);
+      const sourceFields = rowSourceFields(sheet.rows, anchor.row);
+      const resolvedContract = receptionContractForHeaders(sheet.rows.get(1) ?? {}, contract);
+      const inspection = inspectReceptionResultRow(sourceFields, resolvedContract);
+      if (inspection.status === "empty") {
+        for (const field of resolvedContract.resultColumns) delete sourceFields[field];
+        pending.push({ sheetName: sheet.name, anchor, sourceFields });
+      } else if (inspection.status === "complete") {
+        historical.push({ sheetName: sheet.name, rowNumber: anchor.row });
+      } else {
+        conflicts.push({
+          sheetName: sheet.name,
+          rowNumber: anchor.row,
+          ...inspection,
+        });
+      }
+    }
+  }
+  return { pending, historical, conflicts, eligibleRows };
 }
 
 async function readEntry(directory: unzipper.CentralDirectory, entryPath: string) {
@@ -95,7 +292,8 @@ async function readOptionalEntry(directory: unzipper.CentralDirectory, entryPath
 export async function previewWorkbookStreaming(
   filePath: string,
   originalFilename: string,
-  section?: { id: string; name: string; sourceFields?: string[] },
+  section?: SectionInput,
+  platform?: PlatformInput,
 ) {
   const directory = await unzipper.Open.file(filePath);
   const workbookXml = await readEntry(directory, "xl/workbook.xml");
@@ -103,38 +301,61 @@ export async function previewWorkbookStreaming(
   const sharedStringsPath = [...workbookRelationships.entries()].find(([, target]) => target.endsWith("sharedStrings.xml"))?.[1];
   const sharedStrings = sharedStringsPath ? sharedStringValues(await readEntry(directory, resolveZipPath("xl/workbook.xml", sharedStringsPath))) : [];
   const sheets = asArray(parser.parse(workbookXml)?.workbook?.sheets?.sheet);
-  const summaries = [];
+  const sheetData: Array<{
+    name: string;
+    rows: Map<number, Record<number, string>>;
+    anchors: StreamingAnchor[];
+  }> = [];
   for (const sheet of sheets) {
     const name = String((sheet as any)["@_name"]);
     const sheetPath = resolveZipPath("xl/workbook.xml", workbookRelationships.get((sheet as any)["@_r:id"]) ?? "");
     const sheetXml = await readEntry(directory, sheetPath);
-    const rows = worksheetRows(sheetXml, sharedStrings);
+    const rows = parseWorksheetRows(sheetXml, sharedStrings);
     const relationshipsPath = resolveZipPath(sheetPath, `_rels/${path.posix.basename(sheetPath)}.rels`);
     const sheetRelationships = await readOptionalEntry(directory, relationshipsPath);
     const drawingTarget = [...relationshipMap(sheetRelationships ?? "").entries()]
       .find(([, target]) => target.includes("/drawing") || target.endsWith("drawing.xml"))?.[1];
-    let imageRows: number[] = [];
+    let anchors: StreamingAnchor[] = [];
     if (drawingTarget) {
       const drawingPath = resolveZipPath(sheetPath, drawingTarget);
       const drawingXml = await readEntry(directory, drawingPath);
-      imageRows = drawingAnchors(drawingXml).map((anchor) => anchor.row);
+      anchors = parseDrawingAnchors(drawingXml);
     }
-    summaries.push({
-      name,
-      headers: Object.values(rows.get(1) ?? {}).map(normalizeExcelHeader).filter(Boolean),
-      imageCount: imageRows.length,
-      imageRows,
-    });
+    sheetData.push({ name, rows, anchors });
   }
+  const contract = resolveReceptionContract(section);
+  const reception = inspectReceptionSheets(sheetData, contract);
+  const summaries = sheetData.map((sheet) => {
+    const supportedAnchors = anchorsForContract(sheet, contract);
+    return {
+      name: sheet.name,
+      headers: Object.values(sheet.rows.get(1) ?? {}).map(normalizeExcelHeader).filter(Boolean),
+      imageCount: supportedAnchors.length,
+      imageRows: supportedAnchors.map((anchor) => anchor.row).toSorted((left, right) => left - right),
+    };
+  });
   const imageCount = summaries.reduce((sum, sheet) => sum + sheet.imageCount, 0);
   const headers = new Set(summaries.flatMap((sheet) => sheet.headers));
+  const conflicts = platformConflicts(sheetData, platform);
   return {
     originalFilename: normalizeUploadedFilename(originalFilename),
     sheetCount: summaries.length,
     imageCount,
     sectionId: section?.id,
     sectionName: section?.name,
-    missingHeaders: (section?.sourceFields ?? []).filter((field) => !headers.has(field)),
+    sectionConfigVersionId: section?.sectionConfigVersionId,
+    sectionVersionNumber: section?.sectionVersionNumber,
+    platformId: platform?.id,
+    platformCode: platform?.code,
+    platformName: platform?.name,
+    platformConflicts: conflicts,
+    pendingRecordCount: contract ? reception.pending.length : imageCount,
+    historicalResultCount: reception.historical.length,
+    resultConflicts: reception.conflicts,
+    missingHeaders: contract
+      ? [contract.imageColumn].filter((field) =>
+        !summaries.some((sheet) => sheet.headers.some((header) => receptionHeaderMatches(header, field))))
+      : (section?.sourceFields ?? []).filter((field) => !headers.has(field)),
     sheets: summaries,
   };
 }
@@ -142,8 +363,9 @@ export async function previewWorkbookStreaming(
 export async function importWorkbookStreaming(
   filePath: string,
   originalFilename: string,
-  section?: { id: string; name: string },
+  section?: SectionInput,
   onProgress?: (progress: { totalImages?: number; processedImages: number; currentSheet: string; currentRow: number }) => void,
+  platform?: PlatformInput,
 ) {
   const directory = await unzipper.Open.file(filePath);
   const workbookXml = await readEntry(directory, "xl/workbook.xml");
@@ -168,21 +390,31 @@ export async function importWorkbookStreaming(
     const drawingTarget = [...relationshipMap(sheetRelationships ?? "").entries()]
       .find(([, target]) => target.includes("/drawing") || target.endsWith("drawing.xml"))?.[1];
     if (!drawingTarget) {
-      sheetData.push({ ...sheet, rows: worksheetRows(sheetXml, sharedStrings), anchors: [] });
+      sheetData.push({ ...sheet, rows: parseWorksheetRows(sheetXml, sharedStrings), anchors: [] });
       continue;
     }
     const drawingPath = resolveZipPath(sheet.path, drawingTarget);
     const drawingXml = await readEntry(directory, drawingPath);
     const drawingRelationshipsPath = resolveZipPath(drawingPath, `_rels/${path.posix.basename(drawingPath)}.rels`);
     const drawingRelationships = relationshipMap(await readEntry(directory, drawingRelationshipsPath));
-    const anchors = drawingAnchors(drawingXml).map((anchor) => ({
+    const anchors = parseDrawingAnchors(drawingXml).map((anchor) => ({
       ...anchor,
       mediaPath: resolveZipPath(drawingPath, drawingRelationships.get(anchor.embed!) ?? ""),
     }));
-    sheetData.push({ ...sheet, rows: worksheetRows(sheetXml, sharedStrings), anchors });
+    sheetData.push({ ...sheet, rows: parseWorksheetRows(sheetXml, sharedStrings), anchors });
   }
-  const allImages = sheetData.flatMap((sheet) => sheet.anchors);
-  if (!allImages.length) throw new Error("工作簿中没有识别到嵌入图片");
+  const contract = resolveReceptionContract(section);
+  const reception = inspectReceptionSheets(sheetData, contract);
+  const supportedImages = sheetData.flatMap((sheet) => anchorsForContract(sheet, contract));
+  if (!supportedImages.length) throw new Error(contract
+    ? `工作簿中没有识别到“${contract.imageColumn}”列的聊天截图`
+    : "工作簿中没有识别到嵌入图片");
+  const conflicts = platformConflicts(sheetData, platform);
+  if (conflicts.length) throw new Error(platformConflictMessage(conflicts));
+  if (reception.conflicts.length) throw new Error(receptionImportConflictMessage(reception.conflicts));
+  const imagesToImport = contract
+    ? reception.pending.map((item) => item.anchor)
+    : supportedImages;
   const stagingDir = path.join(config.dataDir, "job-staging", crypto.randomUUID());
   const stagingImageDir = path.join(stagingDir, "images");
   let jobId: string | undefined;
@@ -190,7 +422,7 @@ export async function importWorkbookStreaming(
   let processedImages = 0;
   const mediaByPath = new Map(directory.files.map((file) => [file.path, file]));
   // Count each anchor: one embedded media file can be written once per worksheet record.
-  const imageBytes = allImages.reduce((sum, image) => {
+  const imageBytes = imagesToImport.reduce((sum, image) => {
     const entry = image.mediaPath ? mediaByPath.get(image.mediaPath) : undefined;
     if (!entry || !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 1) throw new Error("图片资源缺失或声明大小无效");
     return sum + entry.uncompressedSize;
@@ -200,7 +432,7 @@ export async function importWorkbookStreaming(
   try {
     await fsPromises.mkdir(stagingImageDir, { recursive: true });
     await pipeline(fs.createReadStream(filePath), reservedFileWriter(path.join(stagingDir, "source.xlsx"), reservation));
-    onProgress?.({ totalImages: allImages.length, processedImages: 0, currentSheet: "", currentRow: 0 });
+    onProgress?.({ totalImages: imagesToImport.length, processedImages: 0, currentSheet: "", currentRow: 0 });
     const imported: Array<{ sheetName: string; rowNumber: number; anchor: unknown; sourceFields: Record<string, string>; imagePath: string }> = [];
     if (section) {
       const importedHeaders = [...new Set(sheetData.flatMap((sheet) =>
@@ -208,14 +440,16 @@ export async function importWorkbookStreaming(
       mergeSectionSourceFields(section.id, importedHeaders);
     }
     for (const sheet of sheetData) {
-      const headers = sheet.rows.get(1) ?? {};
-      for (const image of sheet.anchors) {
-        const sourceFields: Record<string, string> = {};
-        const row = sheet.rows.get(image.row) ?? {};
-        for (const [column, value] of Object.entries(row)) {
-          const header = normalizeExcelHeader(headers[Number(column)]);
-          if (header) sourceFields[header] = value;
-        }
+      const pendingByRow = new Map(reception.pending
+        .filter((item) => item.sheetName === sheet.name)
+        .map((item) => [item.anchor.row, item.sourceFields]));
+      const anchors = contract
+        ? anchorsForContract(sheet, contract).filter((image) => pendingByRow.has(image.row))
+        : sheet.anchors;
+      for (const image of anchors) {
+        const sourceFields = contract
+          ? pendingByRow.get(image.row)!
+          : rowSourceFields(sheet.rows, image.row);
         const extension = path.extname(image.mediaPath ?? "").toLowerCase() || ".png";
         const target = path.join(stagingImageDir, `${processedImages + 1}${extension}`);
         const mediaEntry = image.mediaPath ? mediaByPath.get(image.mediaPath) : undefined;
@@ -225,10 +459,16 @@ export async function importWorkbookStreaming(
         if (!stat.size) throw new Error(`第 ${image.row} 行图片为空`);
         imported.push({ sheetName: sheet.name, rowNumber: image.row, anchor: normalizeImageAnchor({ tl: { nativeRow: image.row - 1, nativeCol: image.column - 1 }, br: { nativeRow: image.row - 1, nativeCol: image.column - 1 } }), sourceFields, imagePath: target });
         processedImages++;
-        if (processedImages % 25 === 0) onProgress?.({ totalImages: allImages.length, processedImages, currentSheet: sheet.name, currentRow: image.row });
+        if (processedImages % 25 === 0) onProgress?.({ totalImages: imagesToImport.length, processedImages, currentSheet: sheet.name, currentRow: image.row });
       }
     }
-    const job = createJob(normalizeUploadedFilename(originalFilename), path.join(stagingDir, "source.xlsx"), section);
+    const job = createJob(
+      normalizeUploadedFilename(originalFilename),
+      path.join(stagingDir, "source.xlsx"),
+      section,
+      platform,
+      section?.sectionConfigVersionId,
+    );
     jobId = job.id;
     const targetJobDir = path.join(config.dataDir, "jobs", job.id);
     finalJobDir = targetJobDir;
@@ -237,7 +477,7 @@ export async function importWorkbookStreaming(
     const sourcePath = path.join(targetJobDir, "source.xlsx");
     updateJobSourcePath(job.id, sourcePath);
     addRecords(job.id, imported.map((record) => ({ ...record, imagePath: path.join(targetJobDir, "images", path.basename(record.imagePath)) })));
-    onProgress?.({ totalImages: allImages.length, processedImages, currentSheet: imported.at(-1)?.sheetName ?? "", currentRow: imported.at(-1)?.rowNumber ?? 0 });
+    onProgress?.({ totalImages: imagesToImport.length, processedImages, currentSheet: imported.at(-1)?.sheetName ?? "", currentRow: imported.at(-1)?.rowNumber ?? 0 });
     return { ...job, totalRecords: imported.length, sourcePath };
   } catch (error) {
     if (jobId) {

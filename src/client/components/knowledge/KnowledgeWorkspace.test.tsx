@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import fs from "node:fs";
-import { act, type ReactElement } from "react";
+import { act, type ReactElement, useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App, { Detail } from "../../App";
@@ -544,6 +545,7 @@ describe("knowledge workspace", () => {
       id: "record-1", jobId: "job-1", rowNumber: 2, sheetName: "Sheet1",
       sourceFields: {}, imageUrl: "/api/records/record-1/image", imagePath: "image.png",
       status: "completed", reviewStatus: "pending", humanResult: null, reviewNote: "",
+      conversationId: "TEST20260922ABC123", conversationIdAssignedAt: "2026-09-22T09:00:00.000Z",
       analysisRuns: [],
       fieldRuns: [
         {
@@ -614,6 +616,54 @@ describe("knowledge workspace", () => {
     }));
     expect(host.textContent).toContain("超时");
     expect(host.textContent).not.toContain("旧响应");
+  });
+
+  it("rejects an old item response before the base-change effect runs", async () => {
+    const first = deferred<KnowledgeItemPage>();
+    const second = deferred<KnowledgeItemPage>();
+    const baseTwo = { ...base, id: "base-2", name: "物流原因库" };
+    const api = createApi({
+      listItems: vi.fn()
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise),
+    });
+    let switchBase!: () => void;
+    const onSwitchReady = (callback: () => void) => {
+      switchBase = callback;
+    };
+    function Switcher({ onReady }: { onReady: (callback: () => void) => void }) {
+      const [currentBase, setCurrentBase] = useState(base);
+      useEffect(() => {
+        onReady(() => setCurrentBase(baseTwo));
+      }, [onReady]);
+      return <KnowledgeItemList base={currentBase} apiClient={api} onBaseCountChanged={vi.fn()} />;
+    }
+
+    await renderUi(<Switcher onReady={onSwitchReady} />);
+    await waitFor(() => expect(api.listItems).toHaveBeenCalledTimes(1));
+
+    flushSync(() => {
+      switchBase();
+    });
+    await act(async () => {
+      first.resolve({
+        items: [{ ...item, id: "old-item", values: { ...item.values, 二级原因: "旧响应" } }],
+        total: 1,
+        page: 1,
+        pageSize: 25,
+      });
+      await Promise.resolve();
+    });
+
+    expect(host.textContent).not.toContain("旧响应");
+    await waitFor(() => expect(api.listItems).toHaveBeenCalledTimes(2));
+    await act(async () => second.resolve({
+      items: [{ ...item, id: "new-item", knowledgeBaseId: baseTwo.id, values: { ...item.values, 二级原因: "新响应" } }],
+      total: 1,
+      page: 1,
+      pageSize: 25,
+    }));
+    await waitFor(() => expect(host.textContent).toContain("新响应"));
   });
 
   it("resets search state when the selected base changes", async () => {

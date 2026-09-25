@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
-import type { ImportJob, WorkbookPreview } from "../../shared/types";
+import type { ImportJob, Platform, WorkbookPreview } from "../../shared/types";
 import type { JobOperationToken } from "./workspace-types";
 import { api } from "../api";
-interface ImportOptions { captureJobOperation: () => JobOperationToken; startBusyOperation: (token: JobOperationToken) => void; finishBusyOperation: (token: JobOperationToken) => void; isJobOperationCurrent: (token: JobOperationToken) => boolean; setNotice: (message: string) => void; refresh: (jobId?: string) => Promise<boolean>; activeJobIdRef: RefObject<string | null>; pendingNavigationRef: RefObject<unknown> }
+interface ImportOptions { captureJobOperation: () => JobOperationToken; startBusyOperation: (token: JobOperationToken) => void; finishBusyOperation: (token: JobOperationToken) => void; isJobOperationCurrent: (token: JobOperationToken) => boolean; setNotice: (message: string) => void; refresh: (jobId?: string) => Promise<boolean>; activeJobIdRef: RefObject<string | null>; pendingNavigationRef: RefObject<unknown>; platforms: Platform[] }
 export function useImportWorkflow(options: ImportOptions) {
   const previewAbortRef = useRef<AbortController | null>(null);
   useEffect(() => () => previewAbortRef.current?.abort(), []);
@@ -12,12 +12,13 @@ export function useImportWorkflow(options: ImportOptions) {
   const [selectingImportFile, setSelectingImportFile] = useState<File | null>(null);
   const [importJobId, setImportJobId] = useState<string | null>(null);
   const pendingImportOriginRef = useRef<JobOperationToken | null>(null);
-  const commitImport = async (file: File, sectionId: string) => {
+  const commitImport = async (file: File, sectionId: string, platformId: string) => {
     const operation = captureJobOperation();
     startBusyOperation(operation); setNotice("");
     try {
       const form = new FormData(); form.append("file", file);
       form.append("sectionId", sectionId);
+      form.append("platformId", platformId);
       const created = await api<ImportJob>("/api/jobs/import", { method: "POST", body: form });
       if (!isJobOperationCurrent(operation)) return;
       pendingImportOriginRef.current = operation;
@@ -35,7 +36,7 @@ export function useImportWorkflow(options: ImportOptions) {
     setPendingImportFile(null);
     setSelectingImportFile(file);
   };
-  const previewImport = async (file: File, sectionId: string) => {
+  const previewImport = async (file: File, sectionId: string, platformId: string) => {
     previewAbortRef.current?.abort();
     const request = new AbortController(); previewAbortRef.current = request;
     const operation = captureJobOperation();
@@ -43,10 +44,11 @@ export function useImportWorkflow(options: ImportOptions) {
     try {
       const form = new FormData(); form.append("file", file);
       form.append("sectionId", sectionId);
+      form.append("platformId", platformId);
       const preview = await api<WorkbookPreview>("/api/jobs/import-preview", { method: "POST", body: form, signal: request.signal });
       if (request.signal.aborted || !isJobOperationCurrent(operation)) return;
       setSelectingImportFile(null);
-      setPendingImportFile(file); setImportPreview({ ...preview, sectionId });
+      setPendingImportFile(file); setImportPreview({ ...preview, sectionId, platformId });
     } catch (error) {
       if (isJobOperationCurrent(operation)) {
         if (!request.signal.aborted) setNotice(error instanceof Error ? error.message : "读取 Excel 失败");

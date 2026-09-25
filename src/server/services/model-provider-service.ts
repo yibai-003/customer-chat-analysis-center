@@ -365,7 +365,7 @@ export async function testModelProvider(id: string) {
         db.prepare("UPDATE model_providers SET last_tested_at=?,last_error=?,updated_at=? WHERE id=?")
           .run(testedAt, message || "连接请求失败", testedAt, id);
       }
-      throw new Error(message || "连接请求失败");
+      throw new Error(message || "连接请求失败", { cause: error });
     }
   }
 

@@ -1,5 +1,5 @@
 import { BotanicalArt, ArtworkCredits } from "../BotanicalArt";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KnowledgeBase } from "../../../shared/types";
 import type { KnowledgeApiClient } from "../../api/knowledge-api";
 import { ConfirmDialog } from "../ConfirmDialog";
@@ -33,12 +33,13 @@ export function KnowledgeBaseList({
   const [pendingDelete, setPendingDelete] = useState<KnowledgeBase | null>(null);
   const [error, setError] = useState("");
   const [busyAction, setBusyAction] = useState<string | null>(null);
-  const sectionIdRef = useRef(sectionId);
   const mutationSequence = useRef(0);
-  sectionIdRef.current = sectionId;
+
+  useLayoutEffect(() => {
+    mutationSequence.current += 1;
+  }, [sectionId]);
 
   useEffect(() => {
-    mutationSequence.current += 1;
     setBusyAction(null);
     setPendingDelete(null);
     setError("");
@@ -47,18 +48,17 @@ export function KnowledgeBaseList({
   const toggle = async (base: KnowledgeBase) => {
     if (busyAction) return;
     const requestId = ++mutationSequence.current;
-    const requestedSectionId = sectionId;
     setBusyAction(`toggle:${base.id}`);
     setError("");
     try {
       await apiClient.updateBase(base.id, { isEnabled: !base.isEnabled });
-      if (requestId !== mutationSequence.current || sectionIdRef.current !== requestedSectionId) return;
+      if (requestId !== mutationSequence.current) return;
       await onChanged();
     } catch (caught) {
-      if (requestId !== mutationSequence.current || sectionIdRef.current !== requestedSectionId) return;
+      if (requestId !== mutationSequence.current) return;
       setError(caught instanceof Error ? caught.message : "更新知识库状态失败");
     } finally {
-      if (requestId === mutationSequence.current && sectionIdRef.current === requestedSectionId) {
+      if (requestId === mutationSequence.current) {
         setBusyAction(null);
       }
     }
@@ -68,19 +68,18 @@ export function KnowledgeBaseList({
     if (!pendingDelete || busyAction) return;
     const target = pendingDelete;
     const requestId = ++mutationSequence.current;
-    const requestedSectionId = sectionId;
     setPendingDelete(null);
     setBusyAction(`delete:${target.id}`);
     setError("");
     try {
       await apiClient.deleteBase(target.id);
-      if (requestId !== mutationSequence.current || sectionIdRef.current !== requestedSectionId) return;
+      if (requestId !== mutationSequence.current) return;
       await onChanged();
     } catch (caught) {
-      if (requestId !== mutationSequence.current || sectionIdRef.current !== requestedSectionId) return;
+      if (requestId !== mutationSequence.current) return;
       setError(caught instanceof Error ? caught.message : "删除知识库失败");
     } finally {
-      if (requestId === mutationSequence.current && sectionIdRef.current === requestedSectionId) {
+      if (requestId === mutationSequence.current) {
         setBusyAction(null);
       }
     }

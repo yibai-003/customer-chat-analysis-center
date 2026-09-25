@@ -4,6 +4,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import Database from "better-sqlite3";
+import { ensureSectionConfigV1 } from "./018-section-config-versions";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { appliedMigrations, currentSchemaVersion, migrations, runMigrations } from "./index";
 import { applyLegacyBaseline } from "./002-legacy-baseline";
@@ -25,7 +26,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -64,8 +65,8 @@ describe("versioned migrations", () => {
 
     runMigrations(db);
 
-    expect(currentSchemaVersion).toBe(17);
-    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]);
+    expect(currentSchemaVersion).toBe(29);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
     const qwenRows = db.prepare(`
       SELECT
         model.provider_id,
@@ -145,6 +146,364 @@ describe("versioned migrations", () => {
     expect(legacy).toEqual({ organization_id: "org-default", created_by_user_id: null });
     runMigrations(db);
     expect(db.prepare("SELECT COUNT(*) n FROM organizations").get()).toEqual({ n: 1 });
+  });
+  it("creates immutable section version storage and migrates each current section to V1", () => {
+    applyLegacyBaseline(db);
+    db.exec(`
+      INSERT INTO analysis_sections
+        (id, parent_id, name, prompt, output_schema_json, source_fields_json,
+         sort_order, is_enabled, image_enabled, created_at, updated_at)
+      VALUES ('section-a', NULL, '板块 A', 'prompt-a', '[{"key":"result","label":"结果","type":"string"}]',
+        '["平台"]', 1, 1, 1, 'before', 'before');
+      INSERT INTO analysis_fields
+        (id, section_id, key, label, field_type, prompt, options_json, output_column,
+         is_required, image_enabled, depends_on_json, sort_order, is_enabled,
+         execution_type, export_enabled, created_at, updated_at)
+      VALUES ('field-a', 'section-a', 'result', '结果', 'string', 'field-prompt', '[]',
+        '结果', 1, 1, '[]', 0, 1, 'ai', 1, 'before', 'before');
+      INSERT INTO knowledge_bases
+        (id, section_id, name, original_filename, column_schema_json, item_count, is_enabled, created_at, updated_at)
+      VALUES ('base-a', 'section-a', '知识库 A', 'a.xlsx', '[{"name":"原因","roles":["result"]}]', 1, 1, 'before', 'before');
+      INSERT INTO knowledge_items
+        (id, knowledge_base_id, path_key, values_json, search_text, is_enabled, created_at, updated_at)
+      VALUES ('item-a', 'base-a', '原因 A', '{"原因":"原因 A"}', '原因 A', 1, 'before', 'before');
+      INSERT INTO jobs
+        (id, original_filename, source_path, section_id, section_name, status, created_at, updated_at)
+      VALUES ('job-a', 'a.xlsx', 'a.xlsx', 'section-a', '板块 A', 'completed', 'before', 'before');
+    `);
+
+    const liveConfigurationBefore = db.prepare(`
+      SELECT s.prompt, s.output_schema_json, s.source_fields_json,
+             f.prompt AS field_prompt, f.output_column
+      FROM analysis_sections s
+      JOIN analysis_fields f ON f.section_id = s.id
+      WHERE s.id = 'section-a' AND f.id = 'field-a'
+    `).get();
+
+    runMigrations(db);
+
+    const version = db.prepare(`
+      SELECT section_id, version_number, status, is_current,
+             section_snapshot_json, fields_snapshot_json, knowledge_snapshot_json
+      FROM analysis_section_versions
+      WHERE section_id = 'section-a'
+    `).get() as any;
+    expect(version).toMatchObject({
+      section_id: "section-a",
+      version_number: 1,
+      status: "published",
+      is_current: 1,
+    });
+    expect(JSON.parse(version.section_snapshot_json)).toMatchObject({
+      name: "板块 A",
+      prompt: "prompt-a",
+      sourceFields: ["平台"],
+    });
+    expect(JSON.parse(version.fields_snapshot_json)).toEqual([
+      expect.objectContaining({ key: "result", prompt: "field-prompt" }),
+    ]);
+    expect(JSON.parse(version.knowledge_snapshot_json)).toEqual([
+      expect.objectContaining({
+        id: "base-a",
+        items: [expect.objectContaining({ id: "item-a", values: { 原因: "原因 A" } })],
+      }),
+    ]);
+    expect(db.prepare("SELECT section_config_version_id FROM jobs WHERE id='job-a'").get())
+      .toEqual({ section_config_version_id: expect.any(String) });
+    expect(db.prepare(`
+      SELECT s.prompt, s.output_schema_json, s.source_fields_json,
+             f.prompt AS field_prompt, f.output_column
+      FROM analysis_sections s
+      JOIN analysis_fields f ON f.section_id = s.id
+      WHERE s.id = 'section-a' AND f.id = 'field-a'
+    `).get()).toEqual(liveConfigurationBefore);
+    expect(db.prepare(`
+      SELECT action, target_id, metadata_json
+      FROM audit_events
+      WHERE action = 'config.version_migration' AND target_id = 'section-a'
+    `).get()).toMatchObject({
+      action: "config.version_migration",
+      target_id: "section-a",
+      metadata_json: JSON.stringify({ sectionId: "section-a", versionNumber: 1, binding: "legacy-v1" }),
+    });
+  });
+  it("creates platform dictionary and task binding columns", () => {
+    applyLegacyBaseline(db);
+    runMigrations(db);
+
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='platforms'").get()).toBeTruthy();
+    expect(db.prepare("PRAGMA table_info(platforms)").all()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "code" }),
+      expect.objectContaining({ name: "is_enabled" }),
+    ]));
+    expect(db.prepare("PRAGMA table_info(jobs)").all()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "platform_id" }),
+      expect.objectContaining({ name: "platform_code" }),
+      expect.objectContaining({ name: "platform_name" }),
+    ]));
+    expect(db.prepare("PRAGMA table_info(import_jobs)").all()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "platform_id" }),
+      expect.objectContaining({ name: "platform_code" }),
+      expect.objectContaining({ name: "platform_name" }),
+    ]));
+  });
+  it("adds globally unique conversation IDs without backfilling historical records", () => {
+    applyLegacyBaseline(db);
+    runMigrations(db);
+
+    expect(db.prepare("PRAGMA table_info(records)").all()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "conversation_id" }),
+      expect.objectContaining({ name: "conversation_id_assigned_at" }),
+    ]));
+    db.prepare(`
+      INSERT INTO jobs (id, original_filename, source_path, status, created_at, updated_at)
+      VALUES ('conversation-job', 'conversation.xlsx', 'conversation.xlsx', 'ready', 'now', 'now')
+    `).run();
+    const insertRecord = db.prepare(`
+      INSERT INTO records (
+        id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
+        image_path, status, review_status, review_note, created_at, updated_at
+      ) VALUES (?, 'conversation-job', 'Sheet1', ?, '{}', '{}', ?, 'pending', 'pending', '', 'now', 'now')
+    `);
+    insertRecord.run("conversation-record-1", 2, "one.png");
+    insertRecord.run("conversation-record-2", 3, "two.png");
+    expect(db.prepare("SELECT conversation_id FROM records WHERE id = 'conversation-record-1'").get())
+      .toEqual({ conversation_id: null });
+    db.prepare("UPDATE records SET conversation_id = 'TEST20260922ABC123' WHERE id = 'conversation-record-1'").run();
+    expect(() => db.prepare(
+      "UPDATE records SET conversation_id = 'TEST20260922ABC123' WHERE id = 'conversation-record-2'",
+    ).run()).toThrow(/UNIQUE constraint failed/);
+  });
+  it("does not duplicate V1 snapshots or overwrite existing job bindings when rerun", () => {
+    applyLegacyBaseline(db);
+    db.exec(`
+      INSERT INTO analysis_sections
+        (id, name, prompt, output_schema_json, source_fields_json, created_at, updated_at)
+      VALUES ('section-a', '板块 A', 'prompt-a', '[]', '[]', 'before', 'before');
+      INSERT INTO jobs
+        (id, original_filename, source_path, section_id, section_name, status, created_at, updated_at)
+      VALUES ('job-a', 'a.xlsx', 'a.xlsx', 'section-a', '板块 A', 'completed', 'before', 'before');
+    `);
+    runMigrations(db);
+    const first = db.prepare("SELECT id FROM analysis_section_versions WHERE section_id='section-a'").get().id;
+    const firstSnapshot = db.prepare(
+      "SELECT section_snapshot_json, fields_snapshot_json FROM analysis_section_versions WHERE id = ?",
+    ).get(first);
+    db.prepare("UPDATE jobs SET section_config_version_id = ? WHERE id = 'job-a'").run(first);
+    runMigrations(db);
+    expect(ensureSectionConfigV1(db)).toEqual({
+      succeeded: 0,
+      skipped: 1,
+      errors: [],
+    });
+    expect(db.prepare(
+      "SELECT section_snapshot_json, fields_snapshot_json FROM analysis_section_versions WHERE id = ?",
+    ).get(first)).toEqual(firstSnapshot);
+    expect(db.prepare("SELECT COUNT(*) AS count FROM analysis_section_versions WHERE section_id='section-a'").get())
+      .toEqual({ count: 1 });
+    expect(db.prepare("SELECT section_config_version_id FROM jobs WHERE id = 'job-a'").get())
+      .toEqual({ section_config_version_id: first });
+    expect(db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM audit_events
+      WHERE action = 'config.version_migration' AND target_id = 'section-a'
+    `).get()).toEqual({ count: 1 });
+  });
+  it("upgrades an existing v18 database with a real section foreign key and dimensioned reception version", () => {
+    applyLegacyBaseline(db);
+    db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (
+        'reception', NULL, '接待流程质检', '', '[]', '[]',
+        1, 1, 1, '2026-09-22T00:00:00.000Z', '2026-09-22T00:00:00.000Z'
+      )
+    `).run();
+    runMigrations(db, migrations.filter((migration) => migration.version <= 18));
+    const receptionV1 = db.prepare(`
+      SELECT id, business_rules_json
+      FROM analysis_section_versions
+      WHERE section_id = 'reception' AND is_current = 1
+    `).get() as { id: string; business_rules_json: string };
+    const legacyRules = JSON.parse(receptionV1.business_rules_json) as {
+      issues: Array<Record<string, unknown>>;
+      importContract?: unknown;
+    };
+    legacyRules.issues[0].deduction = 77;
+    for (const issue of legacyRules.issues) delete issue.dimension;
+    delete legacyRules.importContract;
+    db.exec("DROP TRIGGER section_versions_immutable_content");
+    db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
+      .run(JSON.stringify(legacyRules), receptionV1.id);
+    db.prepare(`
+      INSERT INTO jobs (
+        id, original_filename, source_path, section_id, section_name,
+        section_config_version_id, status, created_at, updated_at
+      ) VALUES (
+        'legacy-v18-reception-job', 'legacy.xlsx', 'legacy.xlsx', 'reception',
+        '接待流程质检', ?, 'completed', '2026-09-22T00:00:00.000Z', '2026-09-22T00:00:00.000Z'
+      )
+    `).run(receptionV1.id);
+    expect((db.prepare("PRAGMA foreign_key_list(analysis_section_versions)").all() as Array<{ table: string }>))
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ table: "analysis_sections" })]));
+
+    runMigrations(db);
+
+    expect(appliedMigrations(db).at(-1)).toMatchObject({
+      version: 29,
+      name: "revert-reception-issue-row-export",
+    });
+    expect(db.prepare("PRAGMA foreign_key_list(analysis_section_versions)").all())
+      .toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          table: "analysis_sections",
+          from: "section_id",
+          on_delete: "RESTRICT",
+        }),
+      ]));
+    expect(db.prepare("SELECT section_config_version_id FROM jobs WHERE id = 'legacy-v18-reception-job'").get())
+      .toEqual({ section_config_version_id: receptionV1.id });
+    const versions = db.prepare(`
+      SELECT id, version_number, is_current, business_rules_json, export_settings_json
+      FROM analysis_section_versions
+      WHERE section_id = 'reception'
+      ORDER BY version_number
+    `).all() as Array<{
+      id: string;
+      version_number: number;
+      is_current: number;
+      business_rules_json: string;
+      export_settings_json: string;
+    }>;
+    expect(versions).toHaveLength(9);
+    expect(versions[0]).toMatchObject({ id: receptionV1.id, version_number: 1, is_current: 0 });
+    expect((JSON.parse(versions[0].business_rules_json).issues as Array<{ dimension?: string }>)[0].dimension)
+      .toBeUndefined();
+    expect(versions[1]).toMatchObject({ version_number: 2, is_current: 0 });
+    expect((JSON.parse(versions[1].business_rules_json).issues as Array<{ dimension?: string }>)
+      .every((issue) => Boolean(issue.dimension?.trim()))).toBe(true);
+    expect((JSON.parse(versions[1].business_rules_json).issues as Array<{ deduction?: number }>)[0].deduction)
+      .toBe(77);
+    expect(versions[2]).toMatchObject({ version_number: 3, is_current: 0 });
+    expect(JSON.parse(versions[2].business_rules_json).importContract).toEqual({
+      imageColumn: "聊天截图",
+      resultColumns: [
+        "问题点-售前",
+        "问题点-售后",
+        "有无违规-售后",
+        "客服问题 识别问题并打标签",
+        "接待流程质检结果",
+        "优化建议-售前",
+      ],
+      completeHistoricalResultRequiredColumns: [
+        "问题点-售前",
+        "问题点-售后",
+        "有无违规-售后",
+        "客服问题 识别问题并打标签",
+        "接待流程质检结果",
+        "优化建议-售前",
+      ],
+    });
+    expect(versions[3]).toMatchObject({ version_number: 4, is_current: 0 });
+    expect((JSON.parse(versions[3].business_rules_json).issues as Array<{ deduction?: number }>)[0].deduction)
+      .toBe(77);
+    expect(versions[4]).toMatchObject({ version_number: 5, is_current: 0 });
+    expect(versions[5]).toMatchObject({ version_number: 6, is_current: 0 });
+    expect(versions[6]).toMatchObject({ version_number: 7, is_current: 0 });
+    expect(versions[7]).toMatchObject({ version_number: 8, is_current: 0 });
+    expect(JSON.parse(versions[7].export_settings_json)).toMatchObject({
+      rowMode: "reception_issue_records",
+      outputColumns: expect.arrayContaining([
+        expect.objectContaining({ key: "platform_name", outputColumn: "平台 (platform_name)" }),
+        expect.objectContaining({ key: "conversation_id", outputColumn: "会话ID (conversation_id)" }),
+        expect.objectContaining({ format: "reception_issue_names_csv", outputColumn: "问题 (issue)" }),
+      ]),
+    });
+    expect(versions[8]).toMatchObject({ version_number: 9, is_current: 1 });
+    expect(JSON.parse(versions[8].export_settings_json)).toMatchObject({
+      rowMode: "screenshot_records",
+    });
+    const strictFields = JSON.parse((db.prepare(
+      "SELECT fields_snapshot_json FROM analysis_section_versions WHERE id = ?",
+    ).get(versions[8].id) as { fields_snapshot_json: string }).fields_snapshot_json) as Array<{
+      key: string;
+      executionType: string;
+      imageEnabled: boolean;
+      dependsOn: string[];
+    }>;
+    expect(strictFields).toHaveLength(16);
+    expect(strictFields.filter((field) => field.executionType === "reception_quality_derive")).toHaveLength(14);
+    expect(strictFields).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: "截图内容总结",
+        executionType: "reception_screenshot_facts",
+        imageEnabled: true,
+        dependsOn: [],
+      }),
+      expect.objectContaining({
+        key: "统一质检分析",
+        executionType: "reception_quality_analysis",
+        imageEnabled: false,
+        dependsOn: ["截图内容总结"],
+      }),
+    ]));
+    expect(() => db.prepare(`
+      UPDATE analysis_section_versions SET section_snapshot_json = '{}'
+      WHERE id = ?
+    `).run(versions[8].id)).toThrow("已发布配置版本内容不可修改");
+    expect(() => db.prepare(`
+      INSERT INTO analysis_section_versions (
+        id, section_id, version_number, status, is_current,
+        section_snapshot_json, fields_snapshot_json, export_settings_json,
+        dependencies_snapshot_json, knowledge_snapshot_json, business_rules_json,
+        created_at, updated_at
+      ) VALUES (
+        'orphan-v19', 'missing-section', 1, 'draft', 0,
+        '{}', '[]', '{"outputColumns":[]}', '[]', '[]', '{}', 'now', 'now'
+      )
+    `).run()).toThrow(/FOREIGN KEY constraint failed/);
+    expect(db.pragma("foreign_key_check")).toEqual([]);
+  });
+  it("rejects edits and deletes of published snapshots while allowing lifecycle metadata changes", () => {
+    applyLegacyBaseline(db);
+    db.exec(`
+      INSERT INTO analysis_sections
+        (id, name, prompt, output_schema_json, source_fields_json, created_at, updated_at)
+      VALUES ('section-a', '板块 A', 'prompt-a', '[]', '[]', 'before', 'before');
+    `);
+    runMigrations(db);
+    const versionId = db.prepare("SELECT id FROM analysis_section_versions WHERE section_id='section-a'").get().id;
+    expect(() => db.prepare(`
+      UPDATE analysis_section_versions
+      SET section_snapshot_json = '{}'
+      WHERE id = ?
+    `).run(versionId)).toThrow("已发布配置版本内容不可修改");
+    expect(() => db.prepare("DELETE FROM analysis_section_versions WHERE id = ?").run(versionId))
+      .toThrow("已发布配置版本不可删除");
+    expect(() => db.prepare("DELETE FROM analysis_sections WHERE id = 'section-a'").run())
+      .toThrow("存在配置版本的板块不能删除");
+    expect(() => db.prepare(`
+      INSERT INTO analysis_section_versions (
+        id, section_id, version_number, status, is_current,
+        section_snapshot_json, fields_snapshot_json, export_settings_json,
+        dependencies_snapshot_json, knowledge_snapshot_json, business_rules_json,
+        created_at, updated_at
+      ) VALUES (
+        'orphan-version', 'missing-section', 1, 'draft', 0,
+        '{}', '[]', '{"outputColumns":[]}', '[]', '[]', '{}', 'now', 'now'
+      )
+    `).run()).toThrow(/FOREIGN KEY constraint failed/);
+    expect(() => db.prepare(`
+      UPDATE analysis_section_versions
+      SET status = 'draft'
+      WHERE id = ?
+    `).run(versionId)).toThrow("已发布配置版本不能降级为草稿");
+    expect(() => db.prepare(`
+      UPDATE analysis_section_versions
+      SET is_current = 0, archived_at = 'archived'
+      WHERE id = ?
+    `).run(versionId)).not.toThrow();
   });
   it("keeps audit events append-only and independent of account deletion", () => {
     applyLegacyBaseline(db);

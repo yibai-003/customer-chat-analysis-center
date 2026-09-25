@@ -4,6 +4,7 @@ import {
   type AnalysisExecutionType,
   type AnalysisField,
   type AnalysisFieldRun,
+  type SectionConfigVersion,
 } from "../../../shared/types";
 
 export type ExecutionRecord = NonNullable<ReturnType<typeof getRecord>>;
@@ -13,6 +14,7 @@ export interface FieldExecutionInput {
   sectionName: string;
   record: ExecutionRecord;
   field: AnalysisField;
+  configVersion: SectionConfigVersion;
   context: Record<string, unknown>;
   image: Buffer | null;
 }

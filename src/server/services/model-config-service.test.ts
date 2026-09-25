@@ -18,6 +18,32 @@ import {
 import { listModelProviders, resolveModelMember } from "./model-provider-service";
 import { loginAdmin } from "../auth/test-admin";
 
+function createReadyModel(
+  name: string,
+  purpose: "vision" | "text",
+  poolEnabled: boolean,
+) {
+  const model = createModelConfig({
+    name,
+    baseUrl: `https://${name}.example/v1`,
+    apiKey: `${name}-secret`,
+    model: `${name}-model`,
+    purpose,
+    supportsVision: purpose === "vision",
+  });
+  db.prepare(`UPDATE model_configs SET pool_enabled=?, billing_mode='free',
+    quota_total_tokens=1000, quota_used_tokens=0, quota_expires_at=?,
+    quota_safety_ratio=0.95, capability_json=?, capability_checked_at=?
+    WHERE id=?`).run(
+    poolEnabled ? 1 : 0,
+    new Date(Date.now() + 86_400_000).toISOString(),
+    JSON.stringify({ text: true, json: true, vision: purpose === "vision" }),
+    Date.now(),
+    model.id,
+  );
+  return model;
+}
+
 describe("model configuration management", () => {
   beforeEach(() => {
     initDb();
@@ -30,32 +56,6 @@ describe("model configuration management", () => {
       paid_monthly_token_limit=0, capability_ttl_ms=86400000 WHERE id='default'`).run();
   });
   afterEach(() => vi.restoreAllMocks());
-
-  function createReadyModel(
-    name: string,
-    purpose: "vision" | "text",
-    poolEnabled: boolean,
-  ) {
-    const model = createModelConfig({
-      name,
-      baseUrl: `https://${name}.example/v1`,
-      apiKey: `${name}-secret`,
-      model: `${name}-model`,
-      purpose,
-      supportsVision: purpose === "vision",
-    });
-    db.prepare(`UPDATE model_configs SET pool_enabled=?, billing_mode='free',
-      quota_total_tokens=1000, quota_used_tokens=0, quota_expires_at=?,
-      quota_safety_ratio=0.95, capability_json=?, capability_checked_at=?
-      WHERE id=?`).run(
-      poolEnabled ? 1 : 0,
-      new Date(Date.now() + 86_400_000).toISOString(),
-      JSON.stringify({ text: true, json: true, vision: purpose === "vision" }),
-      Date.now(),
-      model.id,
-    );
-    return model;
-  }
 
   it("updates an existing configuration without returning the API key", () => {
     const created = createModelConfig({
@@ -226,7 +226,7 @@ describe("model configuration management", () => {
     createReadyModel("legacy-text", "text", false);
     createReadyModel("legacy-vision", "vision", false);
     const text = createReadyModel("pool-text", "text", true);
-    const vision = createReadyModel("pool-vision", "vision", true);
+    createReadyModel("pool-vision", "vision", true);
 
     expect(getModelReadinessChecks()).toMatchObject({
       text: { configured: true, verified: true },

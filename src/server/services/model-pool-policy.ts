@@ -6,6 +6,7 @@ export interface ModelCandidateOptions {
   now: number;
   allowPaid: boolean;
   failedMemberIds: ReadonlySet<string>;
+  capabilityEligible?: boolean;
 }
 
 function expiryTime(member: ModelConfig) {
@@ -28,7 +29,7 @@ export function isPoolMemberEligible(
   if (!member.isEnabled
     || !member.poolEnabled
     || member.providerEnabled === false
-    || !member.capabilityEligible
+    || !(options.capabilityEligible ?? member.capabilityEligible)
     || member.memberType !== "general"
     || options.failedMemberIds.has(member.id)
     || (member.billingMode === "paid" && !options.allowPaid)) {
@@ -45,7 +46,7 @@ export function isPoolMemberEligible(
 
 export function rankModelCandidates<T extends ModelConfig>(members: T[]): T[] {
   const tier = { A: 0, B: 1, C: 2 } as const;
-  return [...members].sort((left, right) => {
+  return members.toSorted((left, right) => {
     if (left.billingMode !== right.billingMode) return left.billingMode === "free" ? -1 : 1;
     if (left.isPurposeDefault !== right.isPurposeDefault) {
       return left.isPurposeDefault ? 1 : -1;

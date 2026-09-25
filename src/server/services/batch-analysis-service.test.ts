@@ -21,7 +21,9 @@ import {
 import { analyzeRecordFields } from "./field-analysis-service";
 import { listFields, upsertField } from "./field-config-service";
 import { createFieldRun } from "./field-run-service";
+import { createDraftVersion, publishSectionVersion } from "./section-config-version-service";
 import { paidTokensRemaining } from "../ai/model-budget";
+import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 import {
   analyzeJob,
   prepareTargetedRecordIds,
@@ -76,6 +78,7 @@ describe("batch analysis concurrency", () => {
 describe("batch analysis scheduling", () => {
   it("does not declare the whole job complete after retrying a subset", async () => {
     const job = createJob("partial.xlsx", "partial.xlsx", { id: "refund", name: "refund" });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [1,2].map(rowNumber => ({ sheetName: "Sheet1", rowNumber, anchor: {}, sourceFields: {}, imagePath: "test.png" })));
     const records = listRecords(job.id);
     updateRecord(records[0].id, { status: "failed" });
@@ -111,6 +114,7 @@ describe("batch analysis scheduling", () => {
 
   it("validates targeted record selections and splits executable from skipped records", () => {
     const job = createJob("targeted.xlsx", "targeted.xlsx", { id: "refund", name: "refund" });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [1, 2, 3, 4].map((rowNumber) => ({
       sheetName: "Sheet1", rowNumber, anchor: {}, sourceFields: {}, imagePath: "test.png",
     })));
@@ -118,6 +122,7 @@ describe("batch analysis scheduling", () => {
     updateRecord(records[0].id, { status: "completed" });
     updateRecord(records[1].id, { status: "failed" });
     const otherJob = createJob("other.xlsx", "other.xlsx", { id: "refund", name: "refund" });
+    attachConversationTestPlatform(otherJob.id);
     addRecords(otherJob.id, [{ sheetName: "Sheet1", rowNumber: 1, anchor: {}, sourceFields: {}, imagePath: "other.png" }]);
     const otherRecord = listRecords(otherJob.id)[0];
 
@@ -251,6 +256,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "付费预算",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -271,6 +277,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [
       { sheetName: "Sheet1", rowNumber: 1, anchor: {}, sourceFields: {}, imagePath: "completed.png" },
       { sheetName: "Sheet1", rowNumber: 2, anchor: {}, sourceFields: {}, imagePath: "pending.png" },
@@ -321,6 +328,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -383,10 +391,12 @@ describe("batch analysis scheduling", () => {
       type: "string",
       isEnabled: false,
     });
+    publishSectionVersion(createDraftVersion(sectionId).id);
     const job = createJob("disabled-baseline.xlsx", "disabled-baseline.xlsx", {
       id: sectionId,
       name: "停用字段基线",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -411,6 +421,70 @@ describe("batch analysis scheduling", () => {
     });
   });
 
+  it("keeps progress based on the bound field snapshot after live fields are deleted", async () => {
+    const sectionId = `snapshot-progress-${Date.now()}`;
+    upsertSection({
+      id: sectionId,
+      name: "版本进度基线",
+      prompt: "测试",
+      outputSchema: [],
+    });
+    const first = upsertField({
+      sectionId,
+      key: "first",
+      label: "字段一",
+      type: "string",
+      isEnabled: true,
+    });
+    const second = upsertField({
+      sectionId,
+      key: "second",
+      label: "字段二",
+      type: "string",
+      isEnabled: true,
+    });
+    publishSectionVersion(createDraftVersion(sectionId).id);
+    const job = createJob("snapshot-progress.xlsx", "snapshot-progress.xlsx", {
+      id: sectionId,
+      name: "版本进度基线",
+    });
+    attachConversationTestPlatform(job.id);
+    addRecords(job.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 1,
+      anchor: {},
+      sourceFields: {},
+      imagePath: "snapshot-progress.png",
+    }]);
+    const record = listRecords(job.id)[0];
+    updateRecord(record.id, { status: "completed" });
+    createFieldRun({
+      recordId: record.id,
+      fieldId: first.id,
+      fieldSnapshot: first,
+      status: "completed",
+    });
+    createFieldRun({
+      recordId: record.id,
+      fieldId: second.id,
+      fieldSnapshot: second,
+      status: "completed",
+    });
+    db.prepare("DELETE FROM analysis_fields WHERE section_id = ?").run(sectionId);
+
+    await analyzeJob(job.id, sectionId, { concurrency: 1, batchSize: 5 });
+
+    expect(getJob(job.id)).toMatchObject({
+      status: "completed",
+      completedRecords: 1,
+      totalFields: 2,
+      completedFields: 2,
+      failedFields: 0,
+      skippedFields: 0,
+    });
+    expect(analyzeRecordFields).not.toHaveBeenCalled();
+  });
+
   it.each([
     ["paused", requestJobPause],
     ["cancelled", requestJobCancel],
@@ -422,6 +496,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, Array.from({ length: 3 }, (_, index) => ({
       sheetName: "Sheet1",
       rowNumber: index + 1,
@@ -474,6 +549,7 @@ describe("batch analysis scheduling", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -520,6 +596,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     const server: Server = createApp({ analyzeJobRunner } as never).listen(0);
     await new Promise<void>((resolve) => server.once("listening", resolve));
     const address = server.address() as AddressInfo;
@@ -556,6 +633,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -590,6 +668,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -635,6 +714,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,
@@ -696,6 +776,7 @@ describe("batch analysis API", () => {
       id: "refund",
       name: "退货分析",
     });
+    attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 1,

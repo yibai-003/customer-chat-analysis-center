@@ -3,11 +3,33 @@ import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../db/client";
-import { updateRecord } from "../db/repositories";
-import { analyzeField, analyzeRecordFields, executeFieldGraph } from "./field-analysis-service";
+import {
+  applySectionConfigVersions,
+  ensureSectionConfigV1,
+} from "../db/migrations/018-section-config-versions";
+import {
+  addRecords,
+  createJob,
+  getJob,
+  listRecords,
+  updateRecord,
+  upsertSection,
+} from "../db/repositories";
+import {
+  analyzeField as analyzeBoundField,
+  analyzeRecordFields as analyzeBoundRecordFields,
+  executeFieldGraph,
+} from "./field-analysis-service";
 import { createFieldRun, getFieldResultContext } from "./field-run-service";
 import { listKnowledgeItems } from "./knowledge/knowledge-repository";
+import { upsertField } from "./field-config-service";
+import {
+  createDraftVersion,
+  publishSectionVersion,
+} from "./section-config-version-service";
+import { sectionBusinessRules } from "./section-business-rules";
 import type { AnalysisField, ModelConfig, ModelPurpose, ModelRouteResult } from "../../shared/types";
+import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 
 vi.mock("./model-pool-service", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./model-pool-service")>();
@@ -122,6 +144,16 @@ const fields: AnalysisField[] = [
   },
 ];
 
+function analyzeRecordFields(recordId: string, sectionId: string) {
+  ensureSectionConfigV1(db);
+  return analyzeBoundRecordFields(recordId, sectionId);
+}
+
+function analyzeField(recordId: string, sectionId: string, fieldKey: string) {
+  ensureSectionConfigV1(db);
+  return analyzeBoundField(recordId, sectionId, fieldKey);
+}
+
 describe("field analysis executor", { timeout: 20_000 }, () => {
   const imagePath = path.join(os.tmpdir(), "task-5-dispatch.png");
 
@@ -151,10 +183,14 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
       DELETE FROM analysis_field_runs;
       DELETE FROM records;
       DELETE FROM jobs;
+      DROP TRIGGER IF EXISTS section_versions_immutable_delete;
+      DROP TRIGGER IF EXISTS section_versions_restrict_section_delete;
+      DELETE FROM analysis_section_versions WHERE section_id = 'task-5-dispatch';
       DELETE FROM analysis_fields WHERE section_id = 'task-5-dispatch';
       DELETE FROM knowledge_bases WHERE section_id = 'task-5-dispatch';
       DELETE FROM analysis_sections WHERE id = 'task-5-dispatch';
     `);
+    applySectionConfigVersions(db);
   });
 
   afterAll(() => {
@@ -189,6 +225,51 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
     expect(order).toEqual(["screenshotContent"]);
   });
 
+  it("executes historical jobs with their bound field snapshot after a newer version is published", async () => {
+    const sectionId = "version-snapshot-execution";
+    upsertSection({ id: sectionId, name: "版本执行", prompt: "", sourceFields: [] });
+    const field = upsertField({
+      sectionId,
+      key: "textAi",
+      label: "文本结果",
+      type: "string",
+      prompt: "V1 专用提示词",
+      imageEnabled: false,
+    });
+    const v1 = publishSectionVersion(createDraftVersion(sectionId).id);
+    const job = createJob("version-execution.xlsx", "version-execution.xlsx", {
+      id: sectionId,
+      name: "版本执行",
+    });
+    attachConversationTestPlatform(job.id);
+    addRecords(job.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 2,
+      anchor: {},
+      sourceFields: {},
+      imagePath: "unused",
+    }]);
+
+    upsertField({
+      id: field.id,
+      sectionId,
+      key: "textAi",
+      label: "文本结果",
+      type: "string",
+      prompt: "V2 实时提示词",
+      imageEnabled: false,
+    });
+    publishSectionVersion(createDraftVersion(sectionId).id);
+
+    const record = listRecords(job.id)[0]!;
+    await analyzeRecordFields(record.id, sectionId);
+
+    const messages = JSON.stringify(vi.mocked(callModelPool).mock.calls.at(-1)?.[0]);
+    expect(messages).toContain("V1 专用提示词");
+    expect(messages).not.toContain("V2 实时提示词");
+    expect(getJob(job.id)?.sectionConfigVersionId).toBe(v1.id);
+  });
+
   it("dispatches each field by execution type and never selects a model for extraction", async () => {
     const timestamp = "2026-09-09T00:00:00.000Z";
     db.prepare(`
@@ -216,6 +297,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -352,6 +434,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'reception.xlsx', 'reception.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -366,7 +449,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         export_enabled, candidate_limit, is_enabled, created_at, updated_at
       ) VALUES (?, 'task-5-dispatch', ?, ?, ?, ?, '[]', 0, ?, ?, ?, ?, ?, 15, 1, ?, ?)
     `);
-    insertField.run("reception-facts", "截图内容总结", "截图内容总结", "object", "只抽取事实", 1, "[]", 0, "ai", 0, timestamp, timestamp);
+    insertField.run("reception-facts", "截图内容总结", "截图内容总结", "object", "只抽取事实", 1, "[]", 0, "reception_screenshot_facts", 0, timestamp, timestamp);
     insertField.run("reception-quality", "统一质检分析", "统一质检分析", "object", "统一售前售后标准", 0, '["截图内容总结"]', 1, "reception_quality_analysis", 0, timestamp, timestamp);
     for (const [index, key] of [
       "问题点-售前",
@@ -396,35 +479,41 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         options.purpose,
         JSON.stringify({
           截图内容总结: {
-            会话场景: "混合",
-            聊天内容总结: "客户先咨询尺寸，后申请退款。",
-            证据片段: ["客户：尺寸多大", "客户：我要退款"],
+            sceneHints: ["售前", "售后"],
+            dialogueTurns: [
+              { id: "T1", speaker: "客户", time: "09:30", text: "尺寸多大" },
+              { id: "T2", speaker: "客服", time: "09:31", text: "请看详情页" },
+              { id: "T3", speaker: "客户", time: "09:32", text: "我要退款" },
+            ],
+            customerIntents: ["咨询尺寸", "申请退款"],
+            serviceActions: ["回复详情页"],
+            businessFacts: [],
+            missingSignals: [],
           },
         }),
         '{"facts":true}',
       ))
-      .mockImplementationOnce(async (_messages, options) => routedResponse(
+      .mockImplementation(async (_messages, options) => routedResponse(
         options.purpose,
         JSON.stringify({
           scene: "混合",
+          checkedRuleIds: (sectionBusinessRules("reception").issues as Array<{ id: string }>).map((rule) => rule.id),
           preSaleIssues: [{
-            name: "答非所问",
-            evidence: "客服：请看详情页",
+            issueId: "PRE_ANSWER_IRRELEVANT",
+            evidenceIds: ["T2"],
+            chatQuotes: ["请看详情页"],
+            evidenceExplanation: "客服原文未回应尺寸",
             reason: "未回答客户尺寸问题",
-            deduction: 10,
-            forceD: false,
-            violationCount: 1,
           }],
           afterSaleIssues: [{
-            name: "漏回复",
-            evidence: "客户提出退款后无人工回复",
+            issueId: "POST_NO_REPLY",
+            evidenceIds: ["T3"],
+            chatQuotes: ["我要退款"],
+            evidenceExplanation: "客户提出退款后无人工回复",
             reason: "没有有效回应退款诉求",
-            deduction: 0,
-            forceD: false,
-            violationCount: 1,
           }],
-          unverifiableItems: [],
-          suggestion: "先回答尺寸，再明确说明退款处理步骤",
+          blockingUnverifiableItems: [],
+          informationalUnverifiableItems: [],
           confidence: 0.9,
         }),
         '{"quality":true}',
@@ -434,9 +523,9 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
 
     expect(progress).toEqual({
       total: 8,
-      completed: 8,
+      completed: 1,
       failed: 0,
-      needsReview: 0,
+      needsReview: 7,
       skipped: 0,
     });
     expect(vi.mocked(callModelPool).mock.calls.map(([, options]) => options)).toEqual([
@@ -444,7 +533,8 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         purpose: "vision",
         recordId: "task-5-dispatch-record",
         fieldId: "reception-facts",
-        operation: "ai",
+        operation: "reception_screenshot_facts",
+        validate: expect.any(Function),
       }),
       expect.objectContaining({
         purpose: "text",
@@ -457,10 +547,27 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
     const qualityValidator = vi.mocked(callModelPool).mock.calls[1][1].validate;
     expect(qualityValidator?.('{"scene":"invalid"}')).toEqual({ valid: false });
     expect(qualityValidator?.(JSON.stringify({
+      scene: "售前",
+      checkedRuleIds: [],
+      preSaleIssues: [{
+        issueId: "PRE_NOT_CONFIGURED",
+        evidenceIds: ["T2"],
+        chatQuotes: ["请看详情页"],
+        evidenceExplanation: "说明",
+        reason: "理由",
+      }],
+      afterSaleIssues: [],
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    }))).toEqual({ valid: false });
+    expect(qualityValidator?.(JSON.stringify({
       scene: "无法判断",
+      checkedRuleIds: (sectionBusinessRules("reception").issues as Array<{ id: string }>).map((rule) => rule.id),
       preSaleIssues: [],
       afterSaleIssues: [],
-      unverifiableItems: ["缺少可靠时间戳"],
+      blockingUnverifiableItems: ["缺少可靠时间戳"],
+      informationalUnverifiableItems: [],
       confidence: 0.4,
     }))).toEqual({ valid: true });
     const runs = db.prepare(`
@@ -474,12 +581,57 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
       model_config_snapshot_json: string;
     }>;
     const results = Object.fromEntries(runs.map((run) => [run.key, JSON.parse(run.result_json)]));
-    expect(results["接待流程质检结果"]).toEqual({ 接待流程质检结果: "B" });
+    expect(results["接待流程质检结果"]).toEqual({ 接待流程质检结果: "C" });
     expect(results["有无违规-售后"]).toEqual({ "有无违规-售后": "有违规" });
     expect(results["客服问题识别问题并打标签"]).toEqual({
-      客服问题识别问题并打标签: "答非所问、漏回复",
+      客服问题识别问题并打标签: "答非所问/漏回复",
     });
     expect(runs.filter((run) => JSON.parse(run.model_config_snapshot_json).strategy === "local_rules")).toHaveLength(6);
+
+    const retried = await analyzeRecordFields("task-5-dispatch-record", "task-5-dispatch");
+    expect(retried).toEqual({
+      total: 8,
+      completed: 1,
+      failed: 0,
+      needsReview: 7,
+      skipped: 0,
+    });
+    expect(vi.mocked(callModelPool).mock.calls).toHaveLength(3);
+    expect(vi.mocked(callModelPool).mock.calls.filter(([, options]) => options.purpose === "vision"))
+      .toHaveLength(1);
+    expect(vi.mocked(callModelPool).mock.calls.filter(([, options]) => options.purpose === "text"))
+      .toHaveLength(2);
+
+    vi.mocked(callModelPool).mockImplementationOnce(async (_messages, options) => routedResponse(
+      options.purpose,
+      JSON.stringify({
+        scene: "售前",
+        checkedRuleIds: [],
+        preSaleIssues: [{
+          issueId: "PRE_NOT_CONFIGURED",
+          evidenceIds: ["T2"],
+          chatQuotes: ["请看详情页"],
+          evidenceExplanation: "说明",
+          reason: "理由",
+        }],
+        afterSaleIssues: [],
+        blockingUnverifiableItems: [],
+        informationalUnverifiableItems: [],
+        confidence: 0.9,
+      }),
+      '{"unknownIssue":true}',
+    ));
+    const failedRun = await analyzeField(
+      "task-5-dispatch-record",
+      "task-5-dispatch",
+      "统一质检分析",
+    );
+    expect(failedRun).toMatchObject({
+      status: "failed",
+      errorMessage: expect.stringContaining("目录外问题 ID"),
+    });
+    expect(vi.mocked(callModelPool).mock.calls.filter(([, options]) => options.purpose === "vision"))
+      .toHaveLength(1);
   });
 
   it("reuses a completed summary and recalculates descendants after an upstream retry", async () => {
@@ -544,6 +696,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -734,6 +887,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -769,6 +923,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -818,6 +973,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -868,6 +1024,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-dispatch-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-dispatch-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
@@ -916,6 +1073,7 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
         completed_records, failed_records, created_at, updated_at
       ) VALUES (?, 'source.xlsx', 'source.xlsx', 'ready', 1, 0, 0, ?, ?)
     `).run("task-5-context-job", timestamp, timestamp);
+    attachConversationTestPlatform("task-5-context-job");
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,

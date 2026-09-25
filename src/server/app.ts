@@ -11,13 +11,13 @@ import { config } from "./config";
 import { initDb } from "./db/client";
 import { startImportJob } from "./services/import-worker";
 import { previewWorkbookStreaming } from "./services/streaming-xlsx-import-service";
-import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSections, upsertSection, deleteSection, requestJobPause, requestJobCancel, createImportJob, getImportJob, updateImportJob } from "./db/repositories";
+import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSections, upsertSection, deleteSection, requestJobPause, requestJobCancel, createImportJob, getImportJob, updateImportJob, getPlatform, listPlatforms } from "./db/repositories";
 import { analyzeRecord } from "./services/analysis-service";
 import { analyzeJob, prepareTargetedRecordIds, retryFailedJob } from "./services/batch-analysis-service";
 import { exportJob } from "./services/excel-export-service";
 import { clearDefaultModel, createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
-import { listFields, upsertField, deleteField } from "./services/field-config-service";
+import { listEnabledFields, upsertField, deleteField } from "./services/field-config-service";
 import { analyzeField, retryField } from "./services/field-analysis-service";
 import { normalizeUploadedFilename } from "./utils/encoding";
 import { createKnowledgeRouter } from "./routes/knowledge-routes";
@@ -32,6 +32,18 @@ import { requireAuth } from "./auth/session-auth";
 import { requireCapability } from "./auth/capabilities";
 import { auditRequest } from "./auth/audit";
 import { correlationId } from "./auth/correlation";
+import {
+  activateSectionVersion,
+  archiveSectionVersion,
+  createDraftVersion,
+  deleteDraftSectionVersion,
+  getSectionVersion,
+  listSectionVersions,
+  publishSectionVersion,
+  restoreSectionVersion,
+  updateDraftSectionVersion,
+} from "./services/section-config-version-service";
+import { createRouteResponders } from "./http/route-response";
 
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
@@ -77,8 +89,11 @@ export function createApp(dependencies: AppDependencies = {}) {
     }
     next();
   });
-  const ok = (res: express.Response, data: unknown) => res.json({ success: true, data, error: null });
-  const fail = (res: express.Response, error: unknown, status = 400) => res.status(error instanceof UploadError ? error.status : status).json({ success: false, data: null, error: error instanceof Error ? error.message : "请求失败" });
+  const { ok, fail } = createRouteResponders({
+    resolveStatus: (error, fallbackStatus) => (
+      error instanceof UploadError ? error.status : fallbackStatus
+    ),
+  });
   const canView = requireCapability("task:view", "task.view", "task");
   const canImport = requireCapability("task:import", "task.import", "task");
   const canAnalyzeJob = requireCapability("task:analyze", "task.start_analysis", "job");
@@ -138,6 +153,7 @@ export function createApp(dependencies: AppDependencies = {}) {
     pageSize: Number(req.query.pageSize),
     status: typeof req.query.status === "string" ? req.query.status : undefined,
   })));
+  app.get("/api/platforms", canView, (_req, res) => ok(res, listPlatforms(false)));
   app.delete("/api/jobs/:id", canDelete, async (req, res) => {
     try {
       await removeJob(req.params.id);
@@ -163,13 +179,17 @@ export function createApp(dependencies: AppDependencies = {}) {
     try {
       await validateXlsx(req.file.path, req.file.originalname);
       const filename = normalizeUploadedFilename(req.file.originalname);
-      const section = req.body.sectionId ? listSections().find((item) => item.id === req.body.sectionId && item.isEnabled) : undefined;
-      if (req.body.sectionId && !section) return fail(res, "解析板块不存在或未启用");
+      const section = req.body.sectionId ? listSections().find((item) => item.id === req.body.sectionId && item.isEnabled && item.parentId && item.currentVersionId) : undefined;
+      if (!section) return fail(res, "请选择一个有当前已发布版本的启用解析板块");
+      const platform = req.body.platformId ? getPlatform(req.body.platformId) : undefined;
+      if (!platform || !platform.isEnabled) return fail(res, "请选择一个启用的平台");
       const importJob = createImportJob({
         filename,
         sourcePath: req.file.path,
-        sectionId: section?.id,
-        sectionName: section?.name,
+        sectionId: section.id,
+        sectionName: section.name,
+        sectionConfigVersionId: section.currentVersionId ?? undefined,
+        platform,
       });
       const durableDir = path.join(config.dataDir, "imports", importJob.id);
       fs.mkdirSync(durableDir, { recursive: true });
@@ -178,7 +198,7 @@ export function createApp(dependencies: AppDependencies = {}) {
       moved = true;
       updateImportJob(importJob.id, { sourcePath: durablePath });
       startImportJob(importJob.id);
-      auditRequest(req, { action: "task.import", targetType: "import_job", targetId: importJob.id, metadata: { filename, sectionId: section?.id ?? null } });
+      auditRequest(req, { action: "task.import", targetType: "import_job", targetId: importJob.id, metadata: { filename, sectionId: section.id, sectionConfigVersionId: importJob.sectionConfigVersionId, platformId: platform.id, platformCode: platform.code } });
       return ok(res, getImportJob(importJob.id));
     } catch (error) { return fail(res, error); }
     finally { if (req.file && !moved) fs.rmSync(req.file.path, { force: true }); }
@@ -193,16 +213,36 @@ export function createApp(dependencies: AppDependencies = {}) {
     }
     try {
       await validateXlsx(req.file.path, req.file.originalname);
-      const section = req.body.sectionId ? listSections().find((item) => item.id === req.body.sectionId && item.isEnabled) : undefined;
-      if (req.body.sectionId && !section) return fail(res, "解析板块不存在或未启用");
-      return ok(res, await previewWorkbookStreaming(req.file.path, req.file.originalname, section && { id: section.id, name: section.name, sourceFields: section.sourceFields }));
+      const section = req.body.sectionId ? listSections().find((item) => item.id === req.body.sectionId && item.isEnabled && item.parentId && item.currentVersionId) : undefined;
+      if (!section) return fail(res, "请选择一个有当前已发布版本的启用解析板块");
+      const platform = req.body.platformId ? getPlatform(req.body.platformId) : undefined;
+      if (!platform || !platform.isEnabled) return fail(res, "请选择一个启用的平台");
+      return ok(res, await previewWorkbookStreaming(
+        req.file.path,
+        req.file.originalname,
+        { id: section.id, name: section.name, sourceFields: section.sourceFields, sectionConfigVersionId: section.currentVersionId ?? undefined, sectionVersionNumber: section.currentVersionNumber ?? undefined },
+        platform,
+      ));
     } catch (error) { return fail(res, error); }
     finally { if (req.file) fs.rmSync(req.file.path, { force: true }); }
   });
-  app.get("/api/records/:id/image", canView, (req, res) => {
+  app.get("/api/records/:id/image", canView, (req, res, next) => {
     const record = getRecord(req.params.id);
     if (!record || !fs.existsSync(record.imagePath)) return res.status(404).end();
-    return res.sendFile(path.resolve(record.imagePath));
+    res.type(path.extname(record.imagePath) || "application/octet-stream");
+    const stream = fs.createReadStream(record.imagePath);
+    stream.on("error", (error: NodeJS.ErrnoException) => {
+      if (res.headersSent) {
+        res.destroy(error);
+        return;
+      }
+      if (error.code === "ENOENT") {
+        res.status(404).end();
+        return;
+      }
+      next(error);
+    });
+    stream.pipe(res);
   });
   app.post("/api/records/:id/analyze", canAnalyzeRecord, async (req, res) => {
     try {
@@ -302,16 +342,126 @@ export function createApp(dependencies: AppDependencies = {}) {
       return ok(res, getJob(req.params.id));
     } catch (error) { return fail(res, error); }
   });
-  app.get("/api/jobs/:id/export", canExport, async (req, res) => {
+  app.get("/api/jobs/:id/export", canExport, async (req, res, next) => {
     try {
-      const ids = String(req.query.sections ?? "").split(",").filter(Boolean);
-      const output = await exportJob(req.params.id, ids.length ? ids : listSections().filter((section) => section.parentId).map((section) => section.id));
-      auditRequest(req, { action: "task.export", targetType: "job", targetId: req.params.id, metadata: { sections: ids } });
-      return res.download(output);
+      if (req.query.sections !== undefined) throw new Error("导出不接受板块参数，板块由任务绑定版本唯一确定");
+      const output = await exportJob(req.params.id);
+      const job = getJob(req.params.id);
+      auditRequest(req, {
+        action: "task.export",
+        targetType: "job",
+        targetId: req.params.id,
+        metadata: {
+          sectionId: job?.sectionId ?? null,
+          sectionConfigVersionId: job?.sectionConfigVersionId ?? null,
+        },
+      });
+      res.attachment(path.basename(output));
+      const stream = fs.createReadStream(output);
+      stream.on("error", (error) => {
+        if (res.headersSent) {
+          res.destroy(error);
+          return;
+        }
+        next(error);
+      });
+      stream.pipe(res);
+      return;
     } catch (error) { return fail(res, error); }
   });
   app.get("/api/sections", canView, (_req, res) => ok(res, listSections()));
-  app.get("/api/sections/:id/fields", canView, (req, res) => ok(res, listFields(req.params.id)));
+  app.get("/api/sections/:id/versions", canView, (req, res) => ok(res, listSectionVersions(req.params.id)));
+  app.get("/api/section-config-versions/:id", canView, (req, res) => {
+    const version = getSectionVersion(req.params.id);
+    return version ? ok(res, version) : fail(res, "配置版本不存在", 404);
+  });
+  app.post("/api/sections/:id/versions", canManageConfig, (req, res) => {
+    try {
+      const version = createDraftVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_create_draft",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.post("/api/section-config-versions/:id/publish", canManageConfig, (req, res) => {
+    try {
+      const version = publishSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_publish",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.patch("/api/section-config-versions/:id", canManageConfig, (req, res) => {
+    try {
+      const version = updateDraftSectionVersion(req.params.id, req.body ?? {});
+      auditRequest(req, {
+        action: "config.version_update_draft",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.delete("/api/section-config-versions/:id", canManageConfig, (req, res) => {
+    try {
+      const version = getSectionVersion(req.params.id);
+      if (!version) return fail(res, "配置版本不存在", 404);
+      deleteDraftSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_delete_draft",
+        targetType: "section_config_version",
+        targetId: req.params.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, true);
+    } catch (error) { return fail(res, error); }
+  });
+  app.post("/api/section-config-versions/:id/archive", canManageConfig, (req, res) => {
+    try {
+      const version = archiveSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_archive",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.post("/api/section-config-versions/:id/restore", canManageConfig, (req, res) => {
+    try {
+      const version = restoreSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_restore",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.post("/api/section-config-versions/:id/activate", canManageConfig, (req, res) => {
+    try {
+      const version = activateSectionVersion(req.params.id);
+      auditRequest(req, {
+        action: "config.version_activate",
+        targetType: "section_config_version",
+        targetId: version.id,
+        metadata: { sectionId: version.sectionId, versionNumber: version.versionNumber },
+      });
+      return ok(res, version);
+    } catch (error) { return fail(res, error); }
+  });
+  app.get("/api/sections/:id/fields", canView, (req, res) => ok(res, listEnabledFields(req.params.id)));
   app.post("/api/sections/:id/fields", canManageConfig, (req, res) => {
     try {
       const field = upsertField({ ...req.body, sectionId: req.params.id });

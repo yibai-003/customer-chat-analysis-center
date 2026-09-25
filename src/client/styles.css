@@ -307,6 +307,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .admin-users-modal .modal{width:min(880px,100%)}
 .admin-users-loading{color:#81908a;font-size:12px;padding:10px 0}
 .admin-users-list{display:grid;gap:6px;margin-bottom:18px}
+.admin-create-form select{display:block;width:100%;margin-top:6px;padding:9px;border:2px solid var(--pixel-line);background:#fff;color:#34433b;font-size:11px}
+.platform-backfill-form{margin-top:22px;padding-top:18px;border-top:2px solid var(--pixel-ink)}
+.platform-backfill-form h3{margin:0 0 4px;font-size:13px}
+.version-row{grid-template-columns:minmax(220px,1fr) 80px auto}
 .admin-user-row{display:grid;grid-template-columns:minmax(180px,1.4fr) 120px 70px auto;gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--pixel-line);background:#f1f6ed}
 .admin-user-identity strong,.admin-user-identity span,.admin-user-identity small{display:block}
 .admin-user-identity strong{color:var(--pixel-ink);font-size:12px}
@@ -371,3 +375,20 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .verify-result li span{display:inline-block;min-width:34px;font-weight:700}
 .verify-result li.ok span{color:#547638}.verify-result li.bad span{color:#9d543f}
 @media(max-width:800px){.audit-filters{grid-template-columns:1fr 1fr}.backup-toolbar{flex-direction:column;align-items:flex-start}}
+.reception-rule-catalog{margin:14px 0 18px;padding:14px;border:2px solid var(--pixel-ink);background:#f7f9f4}
+.reception-rule-catalog-header{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding-bottom:11px;border-bottom:2px solid var(--pixel-ink)}
+.reception-rule-catalog-header small{color:#81908a;font:9px "Cascadia Mono","Consolas",monospace;letter-spacing:.1em}
+.reception-rule-catalog-header h3{margin:4px 0 3px;color:var(--pixel-ink);font-size:14px}
+.reception-rule-catalog-header p{margin:0;color:#718078;font-size:10px}
+.reception-rule-table-wrap{margin-top:12px;overflow-x:auto}
+.reception-rule-table{width:100%;min-width:760px;border-collapse:collapse;background:#fff}
+.reception-rule-table th,.reception-rule-table td{padding:8px 9px;border:1px solid var(--pixel-line);text-align:left;vertical-align:top;font-size:10px;line-height:1.5}
+.reception-rule-table th{background:#eef2ed;color:#55685d;font-weight:700;white-space:nowrap}
+.reception-rule-table td{color:#34433b}
+.reception-rule-table code{color:#3f5c4e;font:9px "Cascadia Mono","Consolas",monospace;overflow-wrap:anywhere}
+.reception-rule-table td:nth-child(5),.reception-rule-table td:nth-child(6){text-align:center;white-space:nowrap}
+.reception-rule-catalog-actions{display:flex;align-items:center;justify-content:flex-end;gap:6px;flex-wrap:wrap}
+.reception-rule-table input:not([type="checkbox"]),.reception-rule-table textarea{width:100%;min-width:100px;padding:5px;border:1px solid var(--pixel-line);background:#fbfcf8;color:var(--pixel-ink);font:10px inherit}
+.reception-rule-table textarea{min-height:54px;resize:vertical}
+.reception-rule-table input[type="checkbox"]{width:16px;height:16px;accent-color:#668c43}
+@media(max-width:700px){.reception-rule-catalog-header{flex-direction:column}.reception-rule-catalog-header .button{align-self:flex-start}}

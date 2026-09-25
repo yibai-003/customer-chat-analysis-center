@@ -10,7 +10,7 @@ import "./index";
 
 describe("field execution registry", () => {
   it("registers a handler for every declared analysis execution type", () => {
-    expect([...registeredExecutionTypes()].sort()).toEqual([...ANALYSIS_EXECUTION_TYPES].sort());
+    expect(registeredExecutionTypes().toSorted()).toEqual(ANALYSIS_EXECUTION_TYPES.toSorted());
   });
 
   it("rejects execution types without a registered handler", () => {

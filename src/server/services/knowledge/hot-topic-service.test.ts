@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../../db/client";
+import { applySectionConfigVersions } from "../../db/migrations/018-section-config-versions";
 import { upsertField } from "../field-config-service";
 import { analyzeField, analyzeRecordFields } from "../field-analysis-service";
 import { captureHotTopicQuestions, parseHotTopicQuestions, setHotTopicKnowledgeSync } from "./hot-topic-service";
@@ -9,6 +10,8 @@ import { callModelPool } from "../model-pool-service";
 import { HOT_TOPIC_BASE_ID, HOT_TOPIC_PROMPT } from "../../../shared/hot-topic";
 import { withAnalysisCancellation, cancelAnalysis } from "../analysis-cancellation";
 import type { AnalysisField, ModelConfig, ModelRouteResult } from "../../../shared/types";
+import { createDraftVersion, publishSectionVersion } from "../section-config-version-service";
+import { attachConversationTestPlatform } from "../../testing/conversation-platform-fixture";
 
 vi.mock("../../ai/openai-compatible-client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../ai/openai-compatible-client")>();
@@ -84,15 +87,25 @@ function routedResponse(
 
 beforeEach(() => {
   initDb();
-  db.exec("DELETE FROM knowledge_item_fts; DELETE FROM analysis_sections; DELETE FROM jobs;");
+  db.exec(`
+    DELETE FROM jobs;
+    DROP TRIGGER IF EXISTS section_versions_immutable_delete;
+    DROP TRIGGER IF EXISTS section_versions_restrict_section_delete;
+    DELETE FROM analysis_section_versions;
+    DELETE FROM knowledge_item_fts;
+    DELETE FROM analysis_sections;
+  `);
   initDb();
+  applySectionConfigVersions(db);
   db.prepare("DELETE FROM analysis_fields WHERE section_id='hot-topic'").run();
   db.prepare("UPDATE analysis_sections SET source_fields_json=? WHERE id='hot-topic'").run(JSON.stringify(["截图解析"]));
   field = upsertField({ sectionId: "hot-topic", key: "高频问题", label: "高频问题", type: "string", prompt: HOT_TOPIC_PROMPT,
     executionType: "ai", imageEnabled: false, dependsOn: ["截图解析"], knowledgeSyncEnabled: true });
+  publishSectionVersion(createDraftVersion("hot-topic").id);
   const timestamp = new Date().toISOString();
   db.prepare(`INSERT INTO jobs(id,original_filename,source_path,status,created_at,updated_at)
     VALUES ('job-one','test.xlsx','test.xlsx','ready',?,?)`).run(timestamp, timestamp);
+  attachConversationTestPlatform("job-one");
   for (const id of ["record-one", "record-two"]) db.prepare(`INSERT INTO records
     (id,job_id,sheet_name,row_number,anchor_json,source_fields_json,image_path,status,review_status,created_at,updated_at)
     VALUES (?,'job-one','Sheet1',2,'{}',?,'','pending','pending',?,?)`).run(id, JSON.stringify(dependencies), timestamp, timestamp);
@@ -100,9 +113,9 @@ beforeEach(() => {
   vi.mocked(callModelPool).mockReset();
   vi.mocked(callModelPool).mockImplementation(async (messages) => {
     const model = routedModel("test-text");
-    const response = await callVisionModel(model as never, messages, { attempts: 1 });
+    const modelResponse = await callVisionModel(model as never, messages, { attempts: 1 });
     return {
-      ...response,
+      ...modelResponse,
       model,
       attempts: [{
         modelConfigId: model.id,
@@ -400,6 +413,7 @@ describe("hot-topic capture", () => {
 
   it("uses generated dependencies ahead of empty Excel output columns in batch and individual retry", async () => {
     upsertField({ sectionId: "hot-topic", key: "截图解析", label: "截图解析", type: "string", prompt: "解析", imageEnabled: false });
+    publishSectionVersion(createDraftVersion("hot-topic").id);
     db.prepare("UPDATE records SET source_fields_json=?").run(JSON.stringify({ 截图解析: "" }));
     vi.mocked(callVisionModel).mockResolvedValueOnce(response({ 截图解析: evidence }))
       .mockResolvedValueOnce(extract()).mockResolvedValueOnce(extract());

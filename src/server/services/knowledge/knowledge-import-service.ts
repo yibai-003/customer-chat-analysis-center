@@ -59,7 +59,7 @@ function assertSavedColumns(
 function stableJson(value: Record<string, string>): string {
   return JSON.stringify(
     Object.fromEntries(
-      Object.entries(value).sort(([left], [right]) => left.localeCompare(right)),
+      Object.entries(value).toSorted(([left], [right]) => left.localeCompare(right)),
     ),
   );
 }

@@ -112,6 +112,10 @@ export interface ImportJob {
   jobId: string | null;
   sectionId: string | null;
   sectionName: string | null;
+  sectionConfigVersionId: string | null;
+  platformId?: string | null;
+  platformCode?: string | null;
+  platformName?: string | null;
   status: ImportJobStatus;
   totalImages: number;
   processedImages: number;
@@ -133,6 +137,8 @@ export interface RecordSummary {
   imageUrl: string;
   status: RecordStatus;
   reviewStatus: ReviewStatus;
+  conversationId: string | null;
+  conversationIdAssignedAt: string | null;
 }
 
 export interface RecordPageQuery {
@@ -157,6 +163,10 @@ export interface Job {
   originalFilename: string;
   sectionId: string | null;
   sectionName: string | null;
+  sectionConfigVersionId?: string | null;
+  platformId?: string | null;
+  platformCode?: string | null;
+  platformName?: string | null;
   status: JobStatus;
   totalRecords: number;
   completedRecords: number;
@@ -175,6 +185,22 @@ export interface WorkbookPreview {
   imageCount: number;
   sectionId?: string;
   sectionName?: string;
+  sectionConfigVersionId?: string;
+  sectionVersionNumber?: number;
+  platformId?: string;
+  platformCode?: string;
+  platformName?: string;
+  platformConflicts?: Array<{ sheetName: string; rowNumber: number; value: string }>;
+  pendingRecordCount?: number;
+  historicalResultCount?: number;
+  resultConflicts?: Array<{
+    sheetName: string;
+    rowNumber: number;
+    status: "conflict";
+    filledFields: string[];
+    missingFields: string[];
+    extraFields: string[];
+  }>;
   missingHeaders: string[];
   sheets: Array<{
     name: string;
@@ -194,6 +220,77 @@ export interface AnalysisSection {
   isEnabled: boolean;
   imageEnabled?: boolean;
   sourceFields?: string[];
+  currentVersionId?: string | null;
+  currentVersionNumber?: number | null;
+}
+
+export interface Platform {
+  id: string;
+  name: string;
+  code: string;
+  isEnabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SectionConfigVersionStatus = "draft" | "published" | "archived";
+
+export type SectionExportRowMode = "records" | "screenshot_records";
+export type SectionExportColumnSource =
+  | "field_result"
+  | "platform_name"
+  | "conversation_id"
+  | "reception_quality";
+export type SectionExportValueFormat =
+  | "value"
+  | "reception_issue_names_csv"
+  | "reception_issue_dimensions_csv"
+  | "reception_issue_deductions_csv"
+  | "reception_total_deduction"
+  | "reception_has_d_level"
+  | "reception_chat_quotes"
+  | "reception_evidence_explanations"
+  | "reception_reasons"
+  | "reception_suggestions"
+  | "reception_grade"
+  | "reception_review_required"
+  | "reception_start_time"
+  | "reception_round_count";
+export interface SectionExportColumn {
+  key: string;
+  outputColumn: string | null;
+  source?: SectionExportColumnSource;
+  format?: SectionExportValueFormat;
+}
+
+export interface SectionConfigVersion {
+  id: string;
+  sectionId: string;
+  versionNumber: number;
+  status: SectionConfigVersionStatus;
+  isCurrent: boolean;
+  sectionSnapshot: AnalysisSection;
+  fieldsSnapshot: AnalysisField[];
+  exportSettings: {
+    rowMode?: SectionExportRowMode;
+    outputColumns: SectionExportColumn[];
+  };
+  dependenciesSnapshot: Array<{ key: string; dependsOn: string[] }>;
+  knowledgeSnapshot: Array<Record<string, unknown>>;
+  businessRules: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt?: string;
+  archivedAt?: string;
+}
+
+export interface SectionConfigVersionPatch {
+  sectionSnapshot?: Partial<AnalysisSection>;
+  fieldsSnapshot?: AnalysisField[];
+  exportSettings?: SectionConfigVersion["exportSettings"];
+  dependenciesSnapshot?: SectionConfigVersion["dependenciesSnapshot"];
+  knowledgeSnapshot?: SectionConfigVersion["knowledgeSnapshot"];
+  businessRules?: Record<string, unknown>;
 }
 
 export interface OutputField {
@@ -212,6 +309,7 @@ export const ANALYSIS_EXECUTION_TYPES = [
   "lost_deal_attribution",
   "lost_deal_derive",
   "lost_deal_script",
+  "reception_screenshot_facts",
   "reception_quality_analysis",
   "reception_quality_derive",
 ] as const;
@@ -474,6 +572,7 @@ export interface AnalysisRun {
 export interface RecordDetail extends RecordSummary {
   jobId: string;
   imagePath: string;
+  configFields?: AnalysisField[];
   humanResult: Record<string, unknown> | null;
   reviewNote: string;
   sectionReviews?: Record<string, {

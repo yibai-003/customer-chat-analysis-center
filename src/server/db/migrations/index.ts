@@ -18,6 +18,18 @@ import { applyModelPools } from "./014-model-pools";
 import { applyPoolRemovalAndEfficiencyIndexes } from "./015-pool-removal-and-efficiency-indexes";
 import { applyIdentityAndSessions } from "./016-identity-and-sessions";
 import { applyImmutableAuditEvents } from "./017-immutable-audit-events";
+import { applySectionConfigVersions } from "./018-section-config-versions";
+import { applySectionVersionIntegrity } from "./019-section-version-integrity";
+import { applyPlatformDictionaryAndTaskBinding } from "./020-platform-dictionary-task-binding";
+import { applyGlobalConversationId } from "./021-global-conversation-id";
+import { applyReceptionImportContract } from "./022-reception-import-contract";
+import { applyReceptionTwoStageAnalysis } from "./023-reception-two-stage-analysis";
+import { applyReceptionScreenshotRowExport } from "./024-reception-screenshot-row-export";
+import { applyReceptionV4ModernTemplate } from "./025-reception-v4-modern-template";
+import { applyReceptionV5DerivedResults } from "./026-reception-v5-derived-results";
+import { applyReceptionV5LiveCoreSync } from "./027-reception-v5-live-core-sync";
+import { applyReceptionIssueRowExport } from "./028-reception-issue-row-export";
+import { revertReceptionIssueRowExport } from "./029-revert-reception-issue-row-export";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
@@ -37,8 +49,20 @@ export const migrations: Migration[] = [
   { version: 15, name: "pool-removal-and-efficiency-indexes", up: applyPoolRemovalAndEfficiencyIndexes },
   { version: 16, name: "identity-and-sessions", up: applyIdentityAndSessions },
   { version: 17, name: "immutable-audit-events", up: applyImmutableAuditEvents },
+  { version: 18, name: "section-config-versions", up: applySectionConfigVersions },
+  { version: 19, name: "section-version-integrity", up: applySectionVersionIntegrity },
+  { version: 20, name: "platform-dictionary-task-binding", up: applyPlatformDictionaryAndTaskBinding },
+  { version: 21, name: "global-conversation-id", up: applyGlobalConversationId },
+  { version: 22, name: "reception-import-contract", up: applyReceptionImportContract },
+  { version: 23, name: "reception-two-stage-analysis", up: applyReceptionTwoStageAnalysis },
+  { version: 24, name: "reception-screenshot-row-export", up: applyReceptionScreenshotRowExport },
+  { version: 25, name: "reception-v4-modern-template", up: applyReceptionV4ModernTemplate },
+  { version: 26, name: "reception-v5-derived-results", up: applyReceptionV5DerivedResults },
+  { version: 27, name: "reception-v5-live-core-sync", up: applyReceptionV5LiveCoreSync },
+  { version: 28, name: "reception-issue-row-export", up: applyReceptionIssueRowExport },
+  { version: 29, name: "revert-reception-issue-row-export", up: revertReceptionIssueRowExport },
 ];
-export const currentSchemaVersion = 17;
+export const currentSchemaVersion = 29;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();
@@ -63,12 +87,24 @@ export function runMigrations(db: any, steps: Migration[] = migrations) {
     try { if (check.pragma("integrity_check", { simple: true }) !== "ok") throw new Error("迁移前备份校验失败"); }
     finally { check.close(); }
   }
-  // Apply all pending steps atomically: no partial schema or premature version stamp.
-  db.transaction(() => {
-    db.exec("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL)");
-    for (const step of pending) {
-      step.up(db);
-      db.prepare("INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)").run(step.version, step.name, new Date().toISOString());
-    }
-  })();
+  // Version 19 rebuilds a referenced parent table. SQLite requires foreign-key
+  // enforcement to be disabled before the transaction; final validation still
+  // occurs before commit so the complete pending set remains atomic.
+  const rebuildsReferencedTable = pending.some((step) => step.version === 19);
+  if (rebuildsReferencedTable) db.pragma("foreign_keys = OFF");
+  try {
+    db.transaction(() => {
+      db.exec("CREATE TABLE IF NOT EXISTS schema_migrations(version INTEGER PRIMARY KEY,name TEXT NOT NULL,applied_at TEXT NOT NULL)");
+      for (const step of pending) {
+        step.up(db);
+        db.prepare("INSERT INTO schema_migrations(version,name,applied_at) VALUES(?,?,?)").run(step.version, step.name, new Date().toISOString());
+      }
+      if (rebuildsReferencedTable) {
+        const violations = db.pragma("foreign_key_check") as unknown[];
+        if (violations.length) throw new Error(`迁移后外键校验失败：${JSON.stringify(violations.slice(0, 20))}`);
+      }
+    })();
+  } finally {
+    if (rebuildsReferencedTable) db.pragma("foreign_keys = ON");
+  }
 }

@@ -168,6 +168,8 @@ describe("capability gating in the workspace", () => {
     expectButtonVisible("批量解析 →", true);
     expectButtonVisible("导出结果 ↗", true);
     expectButtonVisible("板块配置", false);
+    expectButtonVisible("配置版本", false);
+    expectButtonVisible("平台字典", false);
     expectButtonVisible("模型配置", false);
     expectButtonVisible("账号管理", false);
     expectButtonVisible("审计日志", false);
@@ -205,6 +207,8 @@ describe("capability gating in the workspace", () => {
     expectButtonVisible("批量解析 →", false);
     expectButtonVisible("导出结果 ↗", false);
     expectButtonVisible("板块配置", false);
+    expectButtonVisible("配置版本", false);
+    expectButtonVisible("平台字典", false);
     expectButtonVisible("模型配置", false);
     expectButtonVisible("账号管理", false);
     expectButtonVisible("审计日志", false);
@@ -223,6 +227,8 @@ describe("capability gating in the workspace", () => {
     await renderWorkspace("config");
     await openManagementMenu();
     expectButtonVisible("板块配置", true);
+    expectButtonVisible("配置版本", true);
+    expectButtonVisible("平台字典", true);
     expectButtonVisible("模型配置", true);
     expectButtonVisible("＋ 导入 Excel", false);
     expectButtonVisible("批量解析 →", false);
@@ -241,6 +247,8 @@ describe("capability gating in the workspace", () => {
     expectButtonVisible("审计日志", true);
     expectButtonVisible("备份管理", true);
     expectButtonVisible("板块配置", true);
+    expectButtonVisible("配置版本", true);
+    expectButtonVisible("平台字典", true);
   });
 
   it("clears privileged dialogs and reports an access error when the server denies an action", async () => {

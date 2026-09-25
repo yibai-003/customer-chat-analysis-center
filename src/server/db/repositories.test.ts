@@ -25,7 +25,38 @@ import {
   recoverStaleJobRuns,
   releaseJobRun,
   listBatchRecordIds,
+  createPlatform,
+  listPlatforms,
+  disablePlatform,
+  restorePlatform,
 } from "./repositories";
+import { createDraftVersion, publishSectionVersion } from "../services/section-config-version-service";
+import { upsertSection } from "./repositories";
+
+let conversationFixtureSequence = 0;
+const fixedNow = (value: string) => () => new Date(value);
+
+function createConversationRecord(platformCode?: string) {
+  conversationFixtureSequence += 1;
+  const suffix = conversationFixtureSequence;
+  const platform = platformCode
+    ? createPlatform({ name: `会话平台 ${suffix}`, code: platformCode })
+    : undefined;
+  const job = createJob(
+    `conversation-${suffix}.xlsx`,
+    `conversation-${suffix}.xlsx`,
+    undefined,
+    platform,
+  );
+  addRecords(job.id, [{
+    sheetName: "Sheet1",
+    rowNumber: 2,
+    anchor: {},
+    sourceFields: {},
+    imagePath: `conversation-${suffix}.png`,
+  }]);
+  return { job, record: listRecords(job.id)[0] };
+}
 
 describe("job repository", () => {
   beforeAll(() => initDb());
@@ -35,6 +66,130 @@ describe("job repository", () => {
     expect(job.originalFilename).toBe("sample.xlsx");
     expect(job.status).toBe("ready");
     expect(job.sectionName).toBeNull();
+  });
+
+  it("maintains globally unique platforms and keeps disabled platforms restorable", () => {
+    const platform = createPlatform({ name: "平台测试", code: "TEST" });
+    expect(platform).toMatchObject({ name: "平台测试", code: "TEST", isEnabled: true });
+    expect(() => createPlatform({ name: "重复代码", code: " test " })).toThrow("平台代码已存在");
+    expect(disablePlatform(platform.id)).toMatchObject({ id: platform.id, isEnabled: false });
+    expect(restorePlatform(platform.id)).toMatchObject({ id: platform.id, isEnabled: true });
+    expect(listPlatforms().find((item) => item.id === platform.id)).toMatchObject({ code: "TEST" });
+  });
+
+  it("stores the selected platform snapshot on a bound task", () => {
+    const platform = createPlatform({ name: "绑定平台", code: "BOUND" });
+    const job = createJob("bound-platform.xlsx", "bound-platform.xlsx", { id: "refund", name: "退货分析" }, platform);
+    expect(job).toMatchObject({
+      platformId: platform.id,
+      platformCode: "BOUND",
+      platformName: "绑定平台",
+    });
+  });
+
+  it("assigns a conversation ID only when a record enters a final analysis state", () => {
+    const processing = createConversationRecord(`CIDPROC${Date.now()}`);
+    const completed = createConversationRecord(`CIDCOMP${Date.now()}`);
+    const needsReview = createConversationRecord(`CIDREVIEW${Date.now()}`);
+    const now = fixedNow("2026-09-22T16:00:00.000Z");
+
+    expect(updateRecord(processing.record.id, { status: "processing" })).toMatchObject({
+      status: "processing",
+      conversationId: null,
+      conversationIdAssignedAt: null,
+    });
+    expect(updateRecord(processing.record.id, { status: "failed" })).toMatchObject({
+      status: "failed",
+      conversationId: null,
+    });
+    expect(updateRecord(completed.record.id, { status: "completed" }, {
+      now,
+      randomCode: () => "ABC123",
+    })).toMatchObject({
+      status: "completed",
+      conversationId: `${completed.job.platformCode}20260923ABC123`,
+      conversationIdAssignedAt: "2026-09-22T16:00:00.000Z",
+    });
+    expect(updateRecord(needsReview.record.id, { status: "needs_review" }, {
+      now,
+      randomCode: () => "DEF456",
+    })).toMatchObject({
+      status: "needs_review",
+      conversationId: `${needsReview.job.platformCode}20260923DEF456`,
+    });
+  });
+
+  it("keeps the first conversation ID through retries and status round-trips", () => {
+    const { record } = createConversationRecord(`CIDSTABLE${Date.now()}`);
+    const first = updateRecord(record.id, { status: "completed" }, {
+      now: fixedNow("2026-09-22T04:00:00.000Z"),
+      randomCode: () => "STABL1",
+    });
+
+    updateRecord(record.id, { status: "failed" });
+    const reused = updateRecord(record.id, { status: "needs_review" }, {
+      now: fixedNow("2027-01-01T00:00:00.000Z"),
+      randomCode: () => "CHANGD",
+    });
+
+    expect(reused.conversationId).toBe(first.conversationId);
+    expect(reused.conversationIdAssignedAt).toBe(first.conversationIdAssignedAt);
+  });
+
+  it("rolls back a final status when a historical task still lacks a platform", () => {
+    const { record } = createConversationRecord();
+
+    expect(() => updateRecord(record.id, { status: "completed" }, {
+      randomCode: () => "ABC123",
+    })).toThrow("历史任务缺少平台，请先补录平台");
+    expect(getRecord(record.id)).toMatchObject({
+      status: "pending",
+      conversationId: null,
+      conversationIdAssignedAt: null,
+    });
+  });
+
+  it("rolls back the final status when collision retries are exhausted", () => {
+    const platformCode = `CIDCOLLIDE${Date.now()}`;
+    const first = createConversationRecord(platformCode);
+    const secondPlatform = listPlatforms().find((item) => item.code === platformCode)!;
+    conversationFixtureSequence += 1;
+    const secondJob = createJob(
+      `conversation-${conversationFixtureSequence}.xlsx`,
+      `conversation-${conversationFixtureSequence}.xlsx`,
+      undefined,
+      secondPlatform,
+    );
+    addRecords(secondJob.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 2,
+      anchor: {},
+      sourceFields: {},
+      imagePath: "collision.png",
+    }]);
+    const secondRecord = listRecords(secondJob.id)[0];
+    const now = fixedNow("2026-09-22T04:00:00.000Z");
+    updateRecord(first.record.id, { status: "completed" }, {
+      now,
+      randomCode: () => "COLLID",
+    });
+
+    expect(() => updateRecord(secondRecord.id, { status: "completed" }, {
+      now,
+      randomCode: () => "COLLID",
+      maxAttempts: 2,
+    })).toThrow("会话 ID 生成失败：随机码碰撞次数超过上限");
+    expect(getRecord(secondRecord.id)).toMatchObject({
+      status: "pending",
+      conversationId: null,
+    });
+  });
+
+  it("rejects a disabled platform for new bound tasks", () => {
+    const platform = createPlatform({ name: "停用平台", code: `DISABLED_${Date.now()}` });
+    disablePlatform(platform.id);
+    expect(() => createJob("disabled-platform.xlsx", "disabled-platform.xlsx", { id: "refund", name: "退货分析" }, platform))
+      .toThrow("平台已停用");
   });
 
   it("deletes a job and its database records", () => {
@@ -47,6 +202,33 @@ describe("job repository", () => {
     const job = createJob("bound.xlsx", "bound.xlsx", { id: "refund", name: "退货分析" });
     expect(() => assertJobSection(job.id, "reception")).toThrow("任务已绑定解析板块：退货分析");
     expect(() => assertJobSection(job.id, "refund")).not.toThrow();
+  });
+
+  it("binds the current section version at job creation and preserves old bindings", () => {
+    const sectionId = "job-version-binding";
+    upsertSection({ id: sectionId, name: "任务版本绑定", prompt: "V1" });
+    const initialDraft = createDraftVersion(sectionId);
+    const initialPublished = publishSectionVersion(initialDraft.id);
+    const first = createJob("version-1.xlsx", "version-1.xlsx", { id: sectionId, name: "任务版本绑定" });
+    expect(first.sectionConfigVersionId).toBe(initialPublished.id);
+
+    const draft = createDraftVersion(sectionId);
+    const published = publishSectionVersion(draft.id);
+    const second = createJob("version-2.xlsx", "version-2.xlsx", { id: sectionId, name: "任务版本绑定" });
+
+    expect(published.isCurrent).toBe(true);
+    expect(second.sectionConfigVersionId).toBe(published.id);
+    updateJobSection(first.id, { id: sectionId, name: "任务版本绑定" });
+    expect(getJob(first.id)?.sectionConfigVersionId).toBe(first.sectionConfigVersionId);
+  });
+
+  it("rejects section-bound jobs when no published current version exists", () => {
+    const sectionId = "job-version-required";
+    upsertSection({ id: sectionId, name: "缺少版本", prompt: "" });
+    expect(() => createJob("missing-version.xlsx", "missing-version.xlsx", {
+      id: sectionId,
+      name: "缺少版本",
+    })).toThrow("没有当前启用的已发布配置版本");
   });
 
   it("can bind a legacy unbound job on first analysis", () => {
@@ -139,7 +321,8 @@ describe("job repository", () => {
   });
 
   it("updates bound record status and task counts on review without changing other section reviews", () => {
-    const job = createJob("review-status.xlsx", "review-status.xlsx", { id: "refund", name: "退款分析" });
+    const platform = createPlatform({ name: "复核状态平台", code: "REVIEWSTATUS" });
+    const job = createJob("review-status.xlsx", "review-status.xlsx", { id: "refund", name: "退款分析" }, platform);
     addRecords(job.id, [{ sheetName: "Sheet1", rowNumber: 2, anchor: {}, sourceFields: {}, imagePath: "test.png" }]);
     const record = db.prepare("SELECT id FROM records WHERE job_id=?").get(job.id);
     updateRecord(record.id, { status: "failed", reviewStatus: "needs_review" });
@@ -267,7 +450,8 @@ describe("job repository", () => {
   });
 
   it("filters record pages by analysis or review status", () => {
-    const job = createJob("status-filter.xlsx", "status-filter.xlsx");
+    const platform = createPlatform({ name: "状态筛选平台", code: "STATUSFILTER" });
+    const job = createJob("status-filter.xlsx", "status-filter.xlsx", undefined, platform);
     addRecords(job.id, [
       { sheetName: "Sheet1", rowNumber: 1, anchor: {}, sourceFields: {}, imagePath: "completed.png" },
       { sheetName: "Sheet1", rowNumber: 2, anchor: {}, sourceFields: {}, imagePath: "review.png" },
@@ -292,7 +476,8 @@ describe("job repository", () => {
   });
 
   it("loads only the next ordered batch of eligible record IDs", () => {
-    const job = createJob("batch-candidates.xlsx", "batch-candidates.xlsx");
+    const platform = createPlatform({ name: "批次候选平台", code: "BATCHCANDIDATES" });
+    const job = createJob("batch-candidates.xlsx", "batch-candidates.xlsx", undefined, platform);
     addRecords(job.id, Array.from({ length: 6 }, (_, index) => ({
       sheetName: "Sheet1",
       rowNumber: index + 1,
@@ -323,7 +508,8 @@ describe("job repository", () => {
   });
 
   it("returns a RecordPage from the records API and parses its query parameters", async () => {
-    const job = createJob("records-api.xlsx", "records-api.xlsx");
+    const platform = createPlatform({ name: "记录接口平台", code: "RECORDSAPI" });
+    const job = createJob("records-api.xlsx", "records-api.xlsx", undefined, platform);
     addRecords(job.id, Array.from({ length: 6 }, (_, index) => ({
       sheetName: "Sheet1",
       rowNumber: index + 1,

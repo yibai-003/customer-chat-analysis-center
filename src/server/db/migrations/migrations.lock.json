@@ -14,5 +14,17 @@
   "014-model-pools.ts": "6228ed3a32bb31d1de6e784589ec2dcf8215e6ce24b62abb4e7d66a0631edaf3",
   "015-pool-removal-and-efficiency-indexes.ts": "c667d77ca63f0d6bb4bc6dae2bbe8f7a381ca86e78bcd2efea675c10f1c06bff",
   "016-identity-and-sessions.ts": "8064e21d7b38fb90d417eb18ef0a7f81d1851a6cd255156c08824db74fd465c0",
-  "017-immutable-audit-events.ts": "a0b5bc81b52e2f4def3c6fcb4ac0070525eded25d575cca07e731e2594fa7cab"
+  "017-immutable-audit-events.ts": "a0b5bc81b52e2f4def3c6fcb4ac0070525eded25d575cca07e731e2594fa7cab",
+  "018-section-config-versions.ts": "7e05946e3d27e608de2ab2449646fcc2d33baced7cdea53bea69c5d34c60154a",
+  "019-section-version-integrity.ts": "ef0527fe3bc173e0c486ef41052a8965b9d3e61f094ed31bd455c7395eb41c35",
+  "020-platform-dictionary-task-binding.ts": "474d35a9a47c622fdf083d238fea501071919f9f979abccb216bb47bb20cb3d4",
+  "021-global-conversation-id.ts": "97fe9f05e362c27681ae5eb1f2e3d8bac25eb5ddf18a73e2e5400920f7025f40",
+  "022-reception-import-contract.ts": "f6c83f341d03a30779e054e82b7b4c6d1b97e980ea31952cc0867846e1126949",
+  "023-reception-two-stage-analysis.ts": "5079bbd44480bde63a3012750065baef2c7df47aaae7ee689aa0f2ba12507ef7",
+  "024-reception-screenshot-row-export.ts": "b2a0ccfdea2b45a0ab9114b7fda0b89ad415806928d861d41115f5a54a8f7817",
+  "025-reception-v4-modern-template.ts": "b3d3d9465038ec4ad12a26e838c91635b74d9a1daf66c1338f7297b3e873ec83",
+  "026-reception-v5-derived-results.ts": "36ae4c62555e96457698ec920e58840e8d910dc3bd005fbb6ec924a788a5cb18",
+  "027-reception-v5-live-core-sync.ts": "afae0929f5f2320f0873408b61a3b22c9c3cb9acb764934ab0844cbbb0421ea3",
+  "028-reception-issue-row-export.ts": "5877a4a270ce8ae52e17a125cde6244887fdcbdd561ebbb9d931767a34224bce",
+  "029-revert-reception-issue-row-export.ts": "e62fc6aace170e855287e2c2215281cc04b6c9a0f7412fd94eca01be5cefdf8b"
 }

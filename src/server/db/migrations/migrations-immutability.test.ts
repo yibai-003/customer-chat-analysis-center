@@ -12,7 +12,7 @@ function frozenDigest(file: string) {
 }
 
 function numberedMigrations() {
-  return fs.readdirSync(migrationsDir).filter((name) => /^\d{3}-.+\.ts$/.test(name)).sort();
+  return fs.readdirSync(migrationsDir).filter((name) => /^\d{3}-.+\.ts$/.test(name)).toSorted();
 }
 
 function readLock() {

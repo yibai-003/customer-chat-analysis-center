@@ -14,6 +14,8 @@ import { verifyRestoredEnvironment } from "../services/restore-verification";
 import { managedKeyPath } from "../security/key-store";
 import { captureCatalog } from "../services/knowledge/knowledge-sync-service";
 import type { AuditEvent } from "../../shared/types";
+import { bindJobPlatform, createPlatform, disablePlatform, getPlatform, listJobs, listPlatforms, restorePlatform, updatePlatform } from "../db/repositories";
+import { createRouteResponders } from "../http/route-response";
 
 const roleSchema = z.enum(["admin", "config", "operator", "reviewer", "readonly"]);
 
@@ -57,6 +59,18 @@ const verifySchema = z.object({
   targetDir: z.string().min(1).max(1000),
 }).strict();
 
+const platformCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  code: z.string().trim().min(1).max(60),
+}).strict();
+
+const platformUpdateSchema = platformCreateSchema.partial().refine((value) => Object.keys(value).length > 0, "至少修改一项");
+
+const platformBackfillSchema = z.object({
+  platformId: z.string().min(1).max(200),
+  reason: z.string().trim().min(1).max(500),
+}).strict();
+
 function actorFrom(req: express.Request): AuditActor {
   return {
     id: req.currentUser?.id,
@@ -86,7 +100,7 @@ function listBackups() {
     }
     items.push({ name: entry.name, createdAt, valid });
   }
-  return items.sort((left, right) => (right.createdAt ?? right.name).localeCompare(left.createdAt ?? left.name));
+  return items.toSorted((left, right) => (right.createdAt ?? right.name).localeCompare(left.createdAt ?? left.name));
 }
 
 function busyWithWork() {
@@ -107,15 +121,72 @@ export function createAdminRouter(): express.Router {
   const backupRestore = requireCapability("backup:manage", "backup.restore", "backup");
   const backupVerify = requireCapability("backup:manage", "backup.verify", "backup");
   const backupDrill = requireCapability("backup:manage", "backup.drill", "backup");
+  const platformRead = requireCapability("config:manage", "platform.list", "platform");
+  const platformWrite = requireCapability("config:manage", "platform.manage", "platform");
 
-  const ok = (res: express.Response, data: unknown) => res.json({ success: true, data, error: null });
-  const fail = (res: express.Response, error: unknown, status = 400) => res.status(status).json({
-    success: false,
-    data: null,
-    error: error instanceof ZodError ? "请求参数无效" : error instanceof Error ? error.message : "请求失败",
+  const { ok, fail } = createRouteResponders({
+    resolveMessage: (error) => (
+      error instanceof ZodError
+        ? "请求参数无效"
+        : error instanceof Error
+          ? error.message
+          : "请求失败"
+    ),
   });
 
   router.get("/users", usersRead, (_req, res) => ok(res, listUsers()));
+
+  router.get("/platforms", platformRead, (_req, res) => ok(res, listPlatforms(true)));
+
+  router.post("/platforms", platformWrite, (req, res) => {
+    try {
+      const platform = createPlatform(platformCreateSchema.parse(req.body));
+      auditRequest(req, { action: "config.platform_create", targetType: "platform", targetId: platform.id, metadata: { code: platform.code, name: platform.name } });
+      return ok(res, platform);
+    } catch (error) { return fail(res, error); }
+  });
+
+  router.patch("/platforms/:id", platformWrite, (req, res) => {
+    try {
+      const platform = updatePlatform(req.params.id, platformUpdateSchema.parse(req.body));
+      auditRequest(req, { action: "config.platform_update", targetType: "platform", targetId: platform.id, metadata: { code: platform.code, name: platform.name } });
+      return ok(res, platform);
+    } catch (error) { return fail(res, error); }
+  });
+
+  router.post("/platforms/:id/disable", platformWrite, (req, res) => {
+    try {
+      const platform = disablePlatform(req.params.id);
+      auditRequest(req, { action: "config.platform_disable", targetType: "platform", targetId: platform.id, metadata: { code: platform.code } });
+      return ok(res, platform);
+    } catch (error) { return fail(res, error); }
+  });
+
+  router.post("/platforms/:id/restore", platformWrite, (req, res) => {
+    try {
+      const platform = restorePlatform(req.params.id);
+      auditRequest(req, { action: "config.platform_restore", targetType: "platform", targetId: platform.id, metadata: { code: platform.code } });
+      return ok(res, platform);
+    } catch (error) { return fail(res, error); }
+  });
+
+  router.get("/platform-backfill-candidates", platformRead, (_req, res) => ok(res, listJobs().filter((job) => !job.platformId)));
+
+  router.post("/jobs/:id/platform-backfill", platformWrite, (req, res) => {
+    try {
+      const input = platformBackfillSchema.parse(req.body);
+      const platform = getPlatform(input.platformId);
+      if (!platform) throw new Error("平台不存在");
+      const job = bindJobPlatform(req.params.id, platform.id);
+      auditRequest(req, {
+        action: "task.platform_backfill",
+        targetType: "job",
+        targetId: job.id,
+        metadata: { platformId: platform.id, platformCode: platform.code, reason: input.reason },
+      });
+      return ok(res, job);
+    } catch (error) { return fail(res, error); }
+  });
 
   router.post("/users", usersWrite, (req, res) => {
     try {

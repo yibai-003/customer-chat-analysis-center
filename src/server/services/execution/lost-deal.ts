@@ -23,8 +23,8 @@ interface LostDealSource {
 
 const lostDealDefinition: StructuredFieldDefinition<LostDealSource, LostDealAttribution> = {
   key: "未成交归因",
-  prepare({ field, dependencies, sourceFields }) {
-    const candidates = loadLostDealKnowledgeCandidates(field);
+  prepare({ field, configVersion, dependencies, sourceFields }) {
+    const candidates = loadLostDealKnowledgeCandidates(field, configVersion.knowledgeSnapshot);
     if (!candidates.customerReasons.length || !candidates.serviceReasons.length) {
       throw new Error("未成交原因知识库尚未初始化或没有启用条目");
     }
@@ -52,8 +52,14 @@ const lostDealDefinition: StructuredFieldDefinition<LostDealSource, LostDealAttr
     ? { status: "needs_review", errorMessage: "归因证据不足或置信度偏低，请人工复核" }
     : { status: "completed" },
   evidence: (attribution) => attribution.evidence.join("\n"),
-  persist({ recordId, fieldId, parsed, knowledgeSyncEnabled }) {
-    replaceLostDealReasonLinks(recordId, fieldId, parsed, knowledgeSyncEnabled);
+  persist({ recordId, fieldId, parsed, knowledgeSyncEnabled, configVersion }) {
+    replaceLostDealReasonLinks(
+      recordId,
+      fieldId,
+      parsed,
+      knowledgeSyncEnabled,
+      configVersion,
+    );
   },
 };
 

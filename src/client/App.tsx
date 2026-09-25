@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { BotanicalArt, ArtworkCredits } from "./components/BotanicalArt";
 import type { AnalysisField, AnalysisSection, RecordDetail } from "../shared/types";
+import { alignReceptionIssueValues } from "../shared/reception-quality-results";
 import { AnalysisProgress } from "./components/AnalysisProgress";
 import { AnalysisRunDialog } from "./components/AnalysisRunDialog";
 import { JobList } from "./components/JobList";
@@ -15,6 +16,8 @@ import { SectionConfigDialog } from "./components/SectionConfigDialog";
 import { UserManagementDialog } from "./components/admin/UserManagementDialog";
 import { AuditLogDialog } from "./components/admin/AuditLogDialog";
 import { BackupManagementDialog } from "./components/admin/BackupManagementDialog";
+import { PlatformManagementDialog } from "./components/admin/PlatformManagementDialog";
+import { SectionVersionManagementDialog } from "./components/admin/SectionVersionManagementDialog";
 import { useWorkspaceController } from "./hooks/useWorkspaceController";
 import { useRecordSelection } from "./hooks/useRecordSelection";
 import { KnowledgeSyncStatus } from "./components/KnowledgeSyncStatus";
@@ -120,6 +123,7 @@ function Workspace({ session }: { session: CurrentSession }) {
     pageSize,
     selected,
     sections,
+    platforms,
     activeFields,
     activeSection,
     setActiveSection,
@@ -171,6 +175,7 @@ function Workspace({ session }: { session: CurrentSession }) {
     editSelectedRecord,
   } = useWorkspaceController({ canManageConfig: can("config:manage") });
   const selection = useRecordSelection({ jobId: job?.id, sectionId: currentSection?.id, filter });
+  const clearSelection = selection.clear;
   const detailDrawerOpen = isDetailDrawerViewport && detailOpen && Boolean(selected);
   useEffect(() => {
     const media = window.matchMedia?.("(max-width: 1199px)");
@@ -279,8 +284,8 @@ function Workspace({ session }: { session: CurrentSession }) {
     };
   }, [topMenu]);
   useEffect(() => {
-    if (targetedSummary && targetedSummary.skipped > 0) selection.clear();
-  }, [targetedSummary]);
+    if (targetedSummary && targetedSummary.skipped > 0) clearSelection();
+  }, [clearSelection, targetedSummary]);
   useEffect(() => subscribeAccessDenied((message) => {
     setDialog(null);
     setKnowledgeSection(null);
@@ -289,7 +294,7 @@ function Workspace({ session }: { session: CurrentSession }) {
     setPendingImportFile(null);
     setSelectingImportFile(null);
     setNotice(message);
-  }), []);
+  }), [setAnalysisCapacity, setDialog, setImportPreview, setKnowledgeSection, setNotice, setPendingImportFile, setSelectingImportFile]);
   if (knowledgeSection && can("config:manage")) {
     return <KnowledgeWorkspace
       section={knowledgeSection}
@@ -304,7 +309,7 @@ function Workspace({ session }: { session: CurrentSession }) {
         <div className="top-actions">
           <button type="button" className="button light task-action-tertiary" aria-label="刷新进度" disabled={!job || refreshing || busy || taskActionBusy || Boolean(importJobId)} onClick={() => void refreshProgress()}>{refreshing ? "刷新中..." : "刷新进度"}</button>
           {can("task:import") && <label className="button primary task-action-primary">＋ 导入 Excel<input hidden type="file" accept=".xlsx" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) importFile(file); }} /></label>}
-          {can("task:export") && <button type="button" className="button export task-action-secondary" aria-label="导出结果" disabled={!job || !currentSection} onClick={() => job && currentSection && (window.location.href = `/api/jobs/${job.id}/export?sections=${currentSection.id}`)}>导出结果 ↗</button>}
+          {can("task:export") && <button type="button" className="button export task-action-secondary" aria-label="导出结果" disabled={!job || !currentSection} onClick={() => job && currentSection && (window.location.href = `/api/jobs/${job.id}/export`)}>导出结果 ↗</button>}
           <div className="top-menu-cluster" ref={topMenuRef}>
             {hasManagementAccess && <div className="top-menu">
               <button
@@ -319,6 +324,8 @@ function Workspace({ session }: { session: CurrentSession }) {
               </button>
               {topMenu === "management" && <div className="top-menu-panel" role="menu" aria-label="管理操作">
                 {can("config:manage") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("section"); }}>板块配置</button>}
+                {can("config:manage") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("versions"); }}>配置版本</button>}
+                {can("config:manage") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("platforms"); }}>平台字典</button>}
                 {can("config:manage") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("model"); }}>模型配置</button>}
                 {can("user:manage") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("users"); }}>账号管理</button>}
                 {can("audit:view") && <button type="button" role="menuitem" onClick={() => { closeTopMenu(false); setDialog("audit"); }}>审计日志</button>}
@@ -428,6 +435,8 @@ function Workspace({ session }: { session: CurrentSession }) {
 
       {dialog === "model" && <ModelConfigDialog models={models} close={() => setDialog(null)} saved={() => { setDialog(null); refresh(); }} />}
       {dialog === "section" && <SectionConfigDialog sections={sections} close={() => setDialog(null)} saved={() => { setDialog(null); refresh(); }} />}
+      {dialog === "versions" && <SectionVersionManagementDialog sections={sections} close={() => setDialog(null)} saved={() => { void refresh(); }} />}
+      {dialog === "platforms" && <PlatformManagementDialog close={() => { setDialog(null); void refresh(); }} />}
       {dialog === "users" && <UserManagementDialog close={() => setDialog(null)} />}
       {dialog === "audit" && <AuditLogDialog close={() => setDialog(null)} />}
       {dialog === "backups" && <BackupManagementDialog close={() => setDialog(null)} />}
@@ -442,8 +451,8 @@ function Workspace({ session }: { session: CurrentSession }) {
         })}
       />}
       {previewImage && <ImagePreviewDialog {...previewImage} onClose={closePreviewImage} />}
-      {selectingImportFile && <ImportSectionDialog file={selectingImportFile} sections={sections} busy={busy} error={notice} onCancel={() => setSelectingImportFile(null)} onConfirm={(sectionId) => void previewImport(selectingImportFile, sectionId)} />}
-      {importPreview && pendingImportFile && <ImportPreviewDialog preview={importPreview} busy={busy} onCancel={() => { const file = pendingImportFile; setImportPreview(null); setPendingImportFile(null); setSelectingImportFile(file); }} onConfirm={async () => { const file = pendingImportFile; const sectionId = importPreview.sectionId; if (!sectionId) return; setImportPreview(null); setPendingImportFile(null); await commitImport(file, sectionId); }} />}
+      {selectingImportFile && <ImportSectionDialog file={selectingImportFile} sections={sections} platforms={platforms} busy={busy} error={notice} onCancel={() => setSelectingImportFile(null)} onConfirm={(sectionId, platformId) => void previewImport(selectingImportFile, sectionId, platformId)} />}
+      {importPreview && pendingImportFile && <ImportPreviewDialog preview={importPreview} busy={busy} onCancel={() => { const file = pendingImportFile; setImportPreview(null); setPendingImportFile(null); setSelectingImportFile(file); }} onConfirm={async () => { const file = pendingImportFile; const sectionId = importPreview.sectionId; const platformId = importPreview.platformId; if (!sectionId || !platformId) return; setImportPreview(null); setPendingImportFile(null); await commitImport(file, sectionId, platformId); }} />}
       {importJobId && <ImportProgressDialog importJobId={importJobId} onCompleted={handleImportCompleted} onClose={() => setImportJobId(null)} />}
     </div>
   );
@@ -455,16 +464,92 @@ export function formatFieldResult(value: unknown) {
   return String(value);
 }
 
+const receptionResultFields: AnalysisField[] = [
+  ["会话开始时间", "string"],
+  ["会话ID", "string"],
+  ["对话轮数", "number"],
+  ["等级", "string"],
+  ["合计扣分", "number"],
+  ["优化建议", "string"],
+  ["是否待人工复核", "string"],
+  ["维度", "string"],
+  ["问题", "string"],
+  ["扣分", "string"],
+  ["是否D级", "string"],
+  ["聊天原文", "string"],
+  ["证据说明", "string"],
+  ["判定理由", "string"],
+].map(([key, type], index) => ({
+  id: `reception-result-${key}`,
+  sectionId: "reception",
+  key,
+  label: key,
+  type: type as AnalysisField["type"],
+  prompt: "",
+  required: false,
+  imageEnabled: false,
+  dependsOn: ["统一质检分析"],
+  sortOrder: index + 2,
+  isEnabled: true,
+  executionType: "reception_quality_derive",
+  exportEnabled: true,
+}));
+
+function receptionResultValues(value: unknown, conversationId: string | null) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const quality = value as Record<string, unknown>;
+  const aligned = alignReceptionIssueValues(quality);
+  return {
+    会话开始时间: typeof quality.conversationStartTime === "string" ? quality.conversationStartTime : "",
+    会话ID: conversationId ?? "",
+    对话轮数: typeof quality.conversationRoundCount === "number" ? quality.conversationRoundCount : 0,
+    等级: typeof quality.grade === "string" ? quality.grade : "",
+    合计扣分: typeof quality.totalDeduction === "number" ? quality.totalDeduction : 0,
+    优化建议: typeof quality.suggestion === "string" ? quality.suggestion : "",
+    是否待人工复核: quality.reviewRequired === true || aligned.hasMismatch ? "是" : "否",
+    维度: aligned.dimensions.join("/"),
+    问题: aligned.labels.join("/"),
+    扣分: aligned.deductions.join("/"),
+    是否D级: aligned.labels.length ? quality.hasDLevelIssue === true ? "是" : "否" : "",
+    聊天原文: aligned.chatQuotes.join("/"),
+    证据说明: aligned.evidenceExplanations.join("/"),
+    判定理由: aligned.reasons.join("/"),
+  };
+}
+
 export function Detail({ record, section, fields, setRecord, onAnalyze, onRetry, onSave, busy, canAnalyze = true, canReview = true, onPreviewImage = () => undefined, onClose }: { record: RecordDetail; section?: AnalysisSection; fields: AnalysisField[]; setRecord: (r: RecordDetail) => void; onAnalyze: () => void; onRetry: (fieldKey: string) => void; onSave: () => void; busy: boolean; canAnalyze?: boolean; canReview?: boolean; onPreviewImage?: (src: string, alt: string, trigger: HTMLButtonElement) => void; onClose?: () => void }) {
   const run = section && record.analysisRuns.find((item) => item.sectionId === section.id);
   const fieldRuns = section ? record.fieldRuns.filter((item) => item.sectionId === section.id) : [];
   const latestFieldRuns = fieldRuns.filter((item, index) => (
     fieldRuns.findIndex((candidate) => candidate.fieldId === item.fieldId) === index
   ));
-  const displayFields: AnalysisField[] = (fields.length ? fields : (section?.outputSchema ?? []).map((field, index) => ({ ...field, id: field.key, sectionId: section?.id ?? "", prompt: section?.prompt ?? "", required: Boolean(field.required), imageEnabled: section?.imageEnabled !== false, dependsOn: [], sortOrder: index, isEnabled: true, exportEnabled: true }))).filter((field) => field.exportEnabled !== false);
+  const configuredFields: AnalysisField[] = record.configFields?.length
+    ? record.configFields
+    : fields.length
+      ? fields
+      : (section?.outputSchema ?? []).map((field, index) => ({ ...field, id: field.key, sectionId: section?.id ?? "", prompt: section?.prompt ?? "", required: Boolean(field.required), imageEnabled: section?.imageEnabled !== false, dependsOn: [], sortOrder: index, isEnabled: true, exportEnabled: true }));
   const attributionRun = latestFieldRuns.find((item) => item.fieldKey === "未成交归因" && (item.status === "completed" || item.status === "needs_review"));
   const attributionValue = attributionRun?.result?.["未成交归因"];
-  const runtimeResult = latestFieldRuns.length ? Object.assign({}, ...latestFieldRuns.slice().reverse().filter((item) => item.status === "completed" || item.status === "needs_review").map((item) => item.result)) : run?.result ?? {};
+  const runtimeResults = latestFieldRuns.reduceRight<Record<string, unknown>[]>((results, item) => {
+    if (item.status === "completed" || item.status === "needs_review") results.push(item.result);
+    return results;
+  }, []);
+  const runtimeResult = latestFieldRuns.length ? Object.assign({}, ...runtimeResults) : run?.result ?? {};
+  const qualityRun = latestFieldRuns.find((item) =>
+    item.fieldKey === "统一质检分析" && (item.status === "completed" || item.status === "needs_review"));
+  const receptionValues = section?.id === "reception"
+    ? receptionResultValues(runtimeResult["统一质检分析"], record.conversationId)
+    : {};
+  const configuredResults = configuredFields.filter((field) => field.exportEnabled !== false);
+  const displayFields = configuredResults.length
+    ? configuredResults
+    : section?.id === "reception"
+      ? receptionResultFields
+      : configuredResults;
+  const internalFields = section?.id === "reception"
+    ? configuredFields.filter((field) => field.exportEnabled === false)
+    : [];
+  const displayRuntimeResult = { ...runtimeResult, ...receptionValues };
   const currentReview = section ? record.sectionReviews?.[section.id] : undefined;
   const result = Object.fromEntries(displayFields.map((field) => [
     field.key,
@@ -472,7 +557,7 @@ export function Detail({ record, section, fields, setRecord, onAnalyze, onRetry,
       ? currentReview.humanResult[field.key]
       : !currentReview && record.humanResult && field.key in record.humanResult
         ? record.humanResult[field.key]
-      : runtimeResult[field.key],
+      : displayRuntimeResult[field.key],
   ]));
   const change = (key: string, value: string) => {
     const nextResult = { ...result, [key]: value };
@@ -511,10 +596,27 @@ export function Detail({ record, section, fields, setRecord, onAnalyze, onRetry,
     </div>
     <div className="detail-block detail-results">
       <h3>字段解析结果 <span>{fieldRuns.length ? `· ${fieldRuns.length} 次字段运行` : run ? `· ${run.createdAt.slice(11, 16)}` : ""}</span></h3>
+      {internalFields.length > 0 && <details className="detail-sources detail-chain" open={internalFields.some((field) => {
+        const fieldRun = latestFieldRuns.find((item) => item.fieldKey === field.key);
+        return fieldRun?.status === "failed" || fieldRun?.status === "skipped";
+      })}>
+        <summary>内部解析链路 <span>{internalFields.length} 个阶段 · 展开查看</span></summary>
+        <div className="source-fields-grid">{internalFields.map((field) => {
+          const fieldRun = latestFieldRuns.find((item) => item.fieldKey === field.key);
+          const retryable = fieldRun && ["failed", "needs_review", "skipped"].includes(fieldRun.status);
+          return <div className="source-field" key={field.key}>
+            <span>{field.label}</span>
+            <strong className={`field-status ${fieldRun?.status ?? "pending"}`}>{labels[fieldRun?.status ?? "pending"] ?? "待解析"}</strong>
+            {fieldRun?.errorMessage && <small className="form-error" role="alert">{fieldRun.errorMessage}</small>}
+            {canAnalyze && retryable && <button type="button" className="field-retry" disabled={busy} onClick={() => onRetry(field.key)}>重试</button>}
+          </div>;
+        })}</div>
+      </details>}
       {Boolean(attributionValue) && <StructuredResultView config={lostDealResultView} value={attributionValue} />}
       <div className="result-fields-grid">{displayFields.map((field) => {
-        const fieldRun = fieldRuns.find((item) => item.fieldKey === field.key);
-        const retryable = fieldRun && ["failed", "needs_review", "skipped"].includes(fieldRun.status);
+        const synthetic = field.id.startsWith("reception-result-");
+        const fieldRun = latestFieldRuns.find((item) => item.fieldKey === field.key) ?? (synthetic ? qualityRun : undefined);
+        const retryable = !synthetic && fieldRun && ["failed", "needs_review", "skipped"].includes(fieldRun.status);
         const value = formatFieldResult(result[field.key]);
         const wide = field.type === "object" || value.length > 160 || field.imageEnabled;
         return <label className={`result-field${wide ? " result-field--wide" : ""}`} key={field.key}>

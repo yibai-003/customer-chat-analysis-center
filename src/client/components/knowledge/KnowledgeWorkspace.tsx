@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 import type { AnalysisSection, KnowledgeBase } from "../../../shared/types";
 import { knowledgeApi } from "../../api/knowledge-api";
@@ -34,7 +34,7 @@ export function KnowledgeWorkspace({
   const [notice, setNotice] = useState("");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
-  const loadBases = async (preferredId?: string) => {
+  const loadBases = useCallback(async (preferredId?: string) => {
     setLoading(true);
     setError("");
     try {
@@ -49,13 +49,13 @@ export function KnowledgeWorkspace({
     } finally {
       setLoading(false);
     }
-  };
+  }, [apiClient, section.id]);
 
   useEffect(() => {
     setTab("content");
     setSelectedId(undefined);
     void loadBases();
-  }, [section.id]);
+  }, [loadBases]);
 
   const selectedBase = bases.find((base) => base.id === selectedId);
   const selectBase = (base: KnowledgeBase) => {

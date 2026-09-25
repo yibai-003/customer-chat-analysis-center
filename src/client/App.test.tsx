@@ -78,6 +78,128 @@ describe("field result formatting", () => {
     expect(formatFieldResult({ 问题现象: "未说明" })).toBe('{\n  "问题现象": "未说明"\n}');
   });
 
+  it("shows reception V4 quality output as modern result fields without extra AI calls", async () => {
+    const recordDetail = detail({ ...record("reception-v4", 2), conversationId: "JD20260923ABC123" });
+    recordDetail.configFields = [
+      { id: "facts", sectionId: "reception", key: "截图内容总结", label: "截图内容总结", type: "object", prompt: "", required: true, imageEnabled: true, dependsOn: [], sortOrder: 0, isEnabled: true, executionType: "reception_screenshot_facts", exportEnabled: false },
+      { id: "quality", sectionId: "reception", key: "统一质检分析", label: "统一质检分析", type: "object", prompt: "", required: true, imageEnabled: false, dependsOn: ["截图内容总结"], sortOrder: 1, isEnabled: true, executionType: "reception_quality_analysis", exportEnabled: false },
+    ];
+    recordDetail.fieldRuns = [
+      {
+        id: "quality-run",
+        recordId: recordDetail.id,
+        fieldId: "quality",
+        sectionId: "reception",
+        fieldKey: "统一质检分析",
+        status: "completed",
+        result: {
+          统一质检分析: {
+            preSaleIssues: [{
+              name: "答非所问",
+              dimension: "问题解决",
+              deduction: 5,
+              chatQuotes: ["客服：请看/链接", "客服：请看/链接"],
+              evidenceExplanation: "回复未解决客户问题",
+              reason: "命中/答非所问规则",
+            }],
+            afterSaleIssues: [{
+              name: "漏回复",
+              dimension: "响应时效",
+              deduction: 1,
+              chatQuotes: ["客服没有回应"],
+              evidenceExplanation: "售后诉求未获回应",
+              reason: "命中漏回复规则",
+            }],
+            labels: ["答非所问", "漏回复"],
+            dimensions: ["问题解决", "响应时效"],
+            deductions: [5, 1],
+            totalDeduction: 6,
+            grade: "B",
+            suggestion: "直接回应客户问题",
+            hasDLevelIssue: false,
+            reviewRequired: false,
+            conversationStartTime: "2026-07-16 10:00:00",
+            conversationRoundCount: 3,
+          },
+        },
+        dependencies: { 截图内容总结: {} },
+        createdAt: "2026-09-23T05:00:00.000Z",
+      },
+      {
+        id: "facts-run",
+        recordId: recordDetail.id,
+        fieldId: "facts",
+        sectionId: "reception",
+        fieldKey: "截图内容总结",
+        status: "completed",
+        result: { 截图内容总结: { secret: "不得展示的内部原始值" } },
+        dependencies: {},
+        createdAt: "2026-09-23T04:59:00.000Z",
+      },
+    ];
+
+    await act(async () => root.render(<Detail record={recordDetail} section={section}
+      fields={[]} setRecord={vi.fn()} onAnalyze={vi.fn()} onRetry={vi.fn()} onSave={vi.fn()} busy={false} />));
+
+    const fieldValue = (label: string) => Array.from(host.querySelectorAll<HTMLLabelElement>(".result-field"))
+      .find((item) => item.querySelector("span")?.firstChild?.textContent?.trim() === label)
+      ?.querySelector<HTMLTextAreaElement>("textarea")?.value;
+    expect(host.textContent).toContain("内部解析链路");
+    expect(host.querySelector<HTMLDetailsElement>(".detail-chain")?.open).toBe(false);
+    expect(host.textContent).not.toContain("不得展示的内部原始值");
+    expect(fieldValue("会话ID")).toBe("JD20260923ABC123");
+    expect(fieldValue("问题")).toBe("答非所问/漏回复");
+    expect(fieldValue("维度")).toBe("问题解决/响应时效");
+    expect(fieldValue("扣分")).toBe("5/1");
+    expect(fieldValue("合计扣分")).toBe("6");
+    expect(fieldValue("聊天原文")).toBe("客服：请看／链接；客服：请看／链接/客服没有回应");
+    expect(fieldValue("证据说明")).toBe("回复未解决客户问题/售后诉求未获回应");
+    expect(fieldValue("判定理由")).toBe("命中／答非所问规则/命中漏回复规则");
+  });
+
+  it("shows hidden reception chain failures so parsing errors can be diagnosed", async () => {
+    const recordDetail = detail(record("reception-failed", 2, "failed"));
+    recordDetail.configFields = [
+      { id: "facts", sectionId: "reception", key: "截图内容总结", label: "截图内容总结", type: "object", prompt: "", required: true, imageEnabled: true, dependsOn: [], sortOrder: 0, isEnabled: true, executionType: "reception_screenshot_facts", exportEnabled: false },
+      { id: "quality", sectionId: "reception", key: "统一质检分析", label: "统一质检分析", type: "object", prompt: "", required: true, imageEnabled: false, dependsOn: ["截图内容总结"], sortOrder: 1, isEnabled: true, executionType: "reception_quality_analysis", exportEnabled: false },
+    ];
+    recordDetail.fieldRuns = [
+      {
+        id: "quality-run",
+        recordId: recordDetail.id,
+        fieldId: "quality",
+        sectionId: "reception",
+        fieldKey: "统一质检分析",
+        status: "skipped",
+        result: {},
+        dependencies: {},
+        errorMessage: "依赖字段解析失败或已跳过",
+        createdAt: "2026-09-23T05:00:01.000Z",
+      },
+      {
+        id: "facts-run",
+        recordId: recordDetail.id,
+        fieldId: "facts",
+        sectionId: "reception",
+        fieldKey: "截图内容总结",
+        status: "failed",
+        result: {},
+        dependencies: {},
+        errorMessage: "当前批次付费 Token 预算为零",
+        createdAt: "2026-09-23T05:00:00.000Z",
+      },
+    ];
+
+    await act(async () => root.render(<Detail record={recordDetail} section={section}
+      fields={[]} setRecord={vi.fn()} onAnalyze={vi.fn()} onRetry={vi.fn()} onSave={vi.fn()} busy={false} />));
+
+    expect(host.textContent).toContain("当前批次付费 Token 预算为零");
+    expect(host.textContent).toContain("依赖字段解析失败或已跳过");
+    expect(host.querySelector<HTMLDetailsElement>(".detail-chain")?.open).toBe(true);
+    expect(host.textContent).toContain("会话ID");
+    expect(host.textContent).toContain("判定理由");
+  });
+
   it("renders lost-deal attribution evidence without exposing the internal field as an editable output", async () => {
     const recordDetail = detail(record("page-1", 1));
     recordDetail.fieldRuns = [
@@ -191,6 +313,8 @@ const section: AnalysisSection = {
   outputSchema: [],
   sortOrder: 1,
   isEnabled: true,
+  currentVersionId: "section-version-reception-v1",
+  currentVersionNumber: 1,
 };
 
 const jobs: Job[] = [
@@ -254,6 +378,8 @@ function record(id: string, rowNumber: number, status: RecordSummary["status"] =
     imageUrl: `/api/records/${id}/image`,
     status,
     reviewStatus: "pending",
+    conversationId: null,
+    conversationIdAssignedAt: null,
   };
 }
 
@@ -335,6 +461,7 @@ function defaultResponse(url: string): Response {
     section,
   ]);
   if (url === "/api/model-configs") return jsonResponse([]);
+  if (url === "/api/platforms") return jsonResponse([{ id: "platform-1", name: "测试平台", code: "TEST", isEnabled: true, createdAt: "", updatedAt: "" }]);
   if (url === "/api/system/analysis-capacity") return jsonResponse(capacity);
   if (url.endsWith("/fields")) return jsonResponse([]);
   if (url === "/api/jobs/job-1") return jsonResponse(jobs[0]);
@@ -434,9 +561,9 @@ describe("explicit import section and manual refresh", () => {
   };
   it("uses the explicitly chosen section for both preview and upload, even with another task open", async () => {
     const refund = { ...section, id: "refund", name: "退款分析" };
-    responseFor = (url, init) => {
+    responseFor = (url, _init) => {
       if (url === "/api/sections") return jsonResponse([section, refund]);
-      if (url === "/api/jobs/import-preview") return jsonResponse({ originalFilename: "new.xlsx", sectionId: "refund", sectionName: "退款分析", sheetCount: 1, imageCount: 1, missingHeaders: [], sheets: [] });
+      if (url === "/api/jobs/import-preview") return jsonResponse({ originalFilename: "new.xlsx", sectionId: "refund", sectionName: "退款分析", sectionConfigVersionId: "refund-v1", sectionVersionNumber: 1, platformId: "platform-1", platformCode: "TEST", platformName: "测试平台", platformConflicts: [], sheetCount: 1, imageCount: 1, missingHeaders: [], sheets: [] });
       if (url === "/api/jobs/import") return jsonResponse({ id: "import-1" });
       if (url === "/api/import-jobs/import-1") return jsonResponse({ id: "import-1", status: "processing", filename: "new.xlsx", totalImages: 1, processedImages: 0 });
       return defaultResponse(url);
@@ -451,12 +578,15 @@ describe("explicit import section and manual refresh", () => {
     expect(select.value).toBe("");
     expect([...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "下一步：预览文件")?.disabled).toBe(true);
     await act(async () => { select.value = "refund"; select.dispatchEvent(new Event("change", { bubbles: true })); });
+    const platformSelect = host.querySelector<HTMLSelectElement>('[aria-label="文件所属平台"]')!;
+    await act(async () => { platformSelect.value = "platform-1"; platformSelect.dispatchEvent(new Event("change", { bubbles: true })); });
     await clickText("下一步：预览文件");
     expect(host.textContent).toContain("当前解析板块：退款分析");
     await clickText("确认导入 →");
     for (const url of ["/api/jobs/import-preview", "/api/jobs/import"]) {
       const body = requestOptions.find((r) => r.url === url)?.init?.body as FormData;
       expect(body.get("sectionId")).toBe("refund");
+      expect(body.get("platformId")).toBe("platform-1");
     }
     // A second import must start with a fresh, explicit choice.
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
@@ -669,6 +799,8 @@ describe("workbench topbar menus", () => {
 
     await act(async () => host.querySelector<HTMLButtonElement>('[aria-label="打开管理菜单"]')!.click());
     expect(host.textContent).toContain("板块配置");
+    expect(host.textContent).toContain("配置版本");
+    expect(host.textContent).toContain("平台字典");
     expect(host.textContent).toContain("模型配置");
     expect(host.querySelector('[role="menu"]')).toBeTruthy();
 

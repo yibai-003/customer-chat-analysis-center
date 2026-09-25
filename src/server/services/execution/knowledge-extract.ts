@@ -5,7 +5,7 @@ import { registerFieldExecutionHandler } from "./registry";
 
 registerFieldExecutionHandler({
   type: "knowledge_extract",
-  async run({ recordId, record, field, context }) {
+  async run({ recordId, record, field, configVersion, context }) {
     const dependencies = dependencyValues(field, record.sourceFields, context);
     const started = Date.now();
     const matchFieldKey = field.matchFieldKey!;
@@ -14,6 +14,7 @@ registerFieldExecutionHandler({
         recordId,
         sectionId: field.sectionId,
         matchFieldKey,
+        matchFieldId: configVersion.fieldsSnapshot.find((candidate) => candidate.key === matchFieldKey)?.id,
         matchValue: typeof context[matchFieldKey] === "string"
           ? context[matchFieldKey] as string
           : "",

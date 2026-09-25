@@ -3,8 +3,12 @@ import { cancelAnalysis } from "../services/analysis-cancellation";
 import crypto from "node:crypto";
 import { sectionInput, parseConfiguration } from "../security/configuration-input";
 import { db } from "./client";
-import type { AnalysisSection, ImportJob, Job, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ModelConfig, ImportJobStatus, RecordStatus } from "../../shared/types";
+import type { AnalysisSection, ImportJob, Job, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ImportJobStatus, RecordStatus, Platform } from "../../shared/types";
 import { listFieldRuns } from "../services/field-run-service";
+import {
+  ensureConversationId,
+  type ConversationIdDependencies,
+} from "../services/conversation-id-service";
 
 const now = () => new Date().toISOString();
 const json = (value: unknown) => JSON.stringify(value ?? {});
@@ -16,6 +20,10 @@ function mapImportJob(row: any): ImportJob {
     jobId: row.job_id ?? null,
     sectionId: row.section_id ?? null,
     sectionName: row.section_name ?? null,
+    sectionConfigVersionId: row.section_config_version_id ?? null,
+    platformId: row.platform_id ?? null,
+    platformCode: row.platform_code ?? null,
+    platformName: row.platform_name ?? null,
     status: row.status,
     totalImages: row.total_images ?? 0,
     processedImages: row.processed_images ?? 0,
@@ -31,13 +39,117 @@ function mapImportJob(row: any): ImportJob {
 }
 
 export function listSections(): AnalysisSection[] {
-  return (db.prepare("SELECT * FROM analysis_sections ORDER BY sort_order").all() as any[]).map((row) => ({
+  return (db.prepare(`SELECT sections.*,
+      current_versions.id AS current_version_id,
+      current_versions.version_number AS current_version_number
+    FROM analysis_sections sections
+    LEFT JOIN analysis_section_versions current_versions
+      ON current_versions.section_id = sections.id AND current_versions.is_current = 1
+    ORDER BY sections.sort_order`).all() as any[]).map((row) => ({
     id: row.id, parentId: row.parent_id, name: row.name, prompt: row.prompt,
     outputSchema: JSON.parse(row.output_schema_json), sourceFields: JSON.parse(row.source_fields_json || "[]"), sortOrder: row.sort_order, isEnabled: Boolean(row.is_enabled),
     imageEnabled: row.image_enabled === undefined ? true : Boolean(row.image_enabled),
+    currentVersionId: row.current_version_id ?? null,
+    currentVersionNumber: row.current_version_number ?? null,
   }));
 }
 export function getSection(id: string) { return listSections().find((section) => section.id === id); }
+
+function normalizePlatformCode(code: string) {
+  const normalized = code.trim().toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9_-]{0,59}$/.test(normalized)) throw new Error("平台代码必须为 1-60 位字母、数字、下划线或短横线");
+  return normalized;
+}
+
+function normalizePlatformName(name: string) {
+  const normalized = name.trim();
+  if (!normalized || normalized.length > 120) throw new Error("平台名称长度必须为 1-120 个字符");
+  return normalized;
+}
+
+function mapPlatform(row: any): Platform {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code,
+    isEnabled: Boolean(row.is_enabled),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function listPlatforms(includeDisabled = true): Platform[] {
+  const where = includeDisabled ? "" : "WHERE is_enabled = 1";
+  return (db.prepare(`SELECT * FROM platforms ${where} ORDER BY is_enabled DESC, name, code`).all() as any[]).map(mapPlatform);
+}
+
+export function getPlatform(id: string): Platform | undefined {
+  const row = db.prepare("SELECT * FROM platforms WHERE id = ?").get(id) as any;
+  return row ? mapPlatform(row) : undefined;
+}
+
+function resolvePlatform(id: string, requireEnabled = false): Platform {
+  const platform = getPlatform(id);
+  if (!platform) throw new Error("平台不存在");
+  if (requireEnabled && !platform.isEnabled) throw new Error("平台已停用，不能用于新任务");
+  return platform;
+}
+
+export function createPlatform(input: { name: string; code: string; id?: string }): Platform {
+  const id = input.id ?? crypto.randomUUID();
+  const name = normalizePlatformName(input.name);
+  const code = normalizePlatformCode(input.code);
+  try {
+    db.prepare("INSERT INTO platforms (id,name,code,is_enabled,created_at,updated_at) VALUES (?,?,?,1,?,?)")
+      .run(id, name, code, now(), now());
+  } catch (error) {
+    if (String(error).includes("UNIQUE constraint failed")) throw new Error("平台代码已存在", { cause: error });
+    throw error;
+  }
+  return getPlatform(id)!;
+}
+
+export function updatePlatform(id: string, input: { name?: string; code?: string }): Platform {
+  const current = resolvePlatform(id);
+  const name = input.name === undefined ? current.name : normalizePlatformName(input.name);
+  const code = input.code === undefined ? current.code : normalizePlatformCode(input.code);
+  if (code !== current.code) {
+    const used = db.prepare(`SELECT 1 FROM jobs WHERE platform_id = ?
+      UNION ALL SELECT 1 FROM import_jobs WHERE platform_id = ? LIMIT 1`).get(id, id);
+    if (used) throw new Error("平台已被任务使用，代码不可修改");
+  }
+  try {
+    db.prepare("UPDATE platforms SET name = ?, code = ?, updated_at = ? WHERE id = ?").run(name, code, now(), id);
+  } catch (error) {
+    if (String(error).includes("UNIQUE constraint failed")) throw new Error("平台代码已存在", { cause: error });
+    throw error;
+  }
+  return getPlatform(id)!;
+}
+
+export function disablePlatform(id: string): Platform {
+  resolvePlatform(id);
+  db.prepare("UPDATE platforms SET is_enabled = 0, updated_at = ? WHERE id = ?").run(now(), id);
+  return getPlatform(id)!;
+}
+
+export function restorePlatform(id: string): Platform {
+  resolvePlatform(id);
+  db.prepare("UPDATE platforms SET is_enabled = 1, updated_at = ? WHERE id = ?").run(now(), id);
+  return getPlatform(id)!;
+}
+
+function currentSectionVersionId(sectionId: string) {
+  return (db.prepare(`SELECT id FROM analysis_section_versions
+    WHERE section_id = ? AND status = 'published' AND is_current = 1`).get(sectionId) as { id: string } | undefined)?.id;
+}
+
+export type PlatformBinding = Pick<Platform, "id" | "name" | "code">;
+
+function enabledPlatformBinding(platform: PlatformBinding): Platform {
+  const resolved = resolvePlatform(platform.id, true);
+  return resolved;
+}
 export function mergeSectionSourceFields(sectionId: string, headers: string[]) {
   const section = getSection(sectionId);
   if (!section) return;
@@ -70,22 +182,71 @@ export function mergeSectionSourceFields(sectionId: string, headers: string[]) {
     .run(id, input.parentId ?? null, input.name, input.prompt, json(input.outputSchema ?? []), json(input.sourceFields ?? []), input.sortOrder ?? 0, enabled ? 1 : 0, input.imageEnabled === false ? 0 : 1, timestamp, timestamp);
   return getSection(id);
 }
-export function deleteSection(id: string) { db.prepare("DELETE FROM analysis_sections WHERE id = ?").run(id); }
+export function deleteSection(id: string) {
+  const version = db.prepare("SELECT 1 FROM analysis_section_versions WHERE section_id = ? LIMIT 1").get(id);
+  if (version) throw new Error("存在配置版本的板块不能删除");
+  db.prepare("DELETE FROM analysis_sections WHERE id = ?").run(id);
+}
 
-export function createJob(filename: string, sourcePath: string, section?: { id: string; name: string }): Job {
+export function createJob(
+  filename: string,
+  sourcePath: string,
+  section?: { id: string; name: string },
+  platform?: PlatformBinding,
+  sectionConfigVersionId?: string,
+): Job {
   const id = crypto.randomUUID(), timestamp = now();
-  db.prepare(`INSERT INTO jobs (id,original_filename,source_path,section_id,section_name,status,total_records,completed_records,failed_records,created_at,updated_at)
-    VALUES (?,?,?,?,?,'ready',0,0,0,?,?)`).run(id, filename, sourcePath, section?.id ?? null, section?.name ?? null, timestamp, timestamp);
+  const versionId = section ? sectionConfigVersionId ?? currentSectionVersionId(section.id) : null;
+  if (section && !versionId) throw new Error("解析板块没有当前启用的已发布配置版本");
+  if (section && sectionConfigVersionId) {
+    const version = db.prepare("SELECT section_id FROM analysis_section_versions WHERE id = ?").get(sectionConfigVersionId) as { section_id: string } | undefined;
+    if (!version || version.section_id !== section.id) throw new Error("解析板块配置版本不匹配");
+  }
+  const resolvedPlatform = platform ? enabledPlatformBinding(platform) : undefined;
+  db.prepare(`INSERT INTO jobs
+    (id,original_filename,source_path,section_id,section_name,section_config_version_id,platform_id,platform_code,platform_name,status,total_records,completed_records,failed_records,created_at,updated_at)
+    VALUES (?,?,?,?,?,?,?,?,?, 'ready',0,0,0,?,?)`).run(
+    id,
+    filename,
+    sourcePath,
+    section?.id ?? null,
+    section?.name ?? null,
+    versionId,
+    resolvedPlatform?.id ?? null,
+    resolvedPlatform?.code ?? null,
+    resolvedPlatform?.name ?? null,
+    timestamp,
+    timestamp,
+  );
   return getJob(id)!;
 }
-export function createImportJob(input: { filename: string; sourcePath: string; totalImages?: number; totalRecords?: number; jobId?: string; sectionId?: string; sectionName?: string }): ImportJob {
+export function createImportJob(input: {
+  filename: string;
+  sourcePath: string;
+  totalImages?: number;
+  totalRecords?: number;
+  jobId?: string;
+  sectionId?: string;
+  sectionName?: string;
+  sectionConfigVersionId?: string;
+  platform?: PlatformBinding;
+}): ImportJob {
   const id = crypto.randomUUID();
   const timestamp = now();
+  const versionId = input.sectionId ? input.sectionConfigVersionId ?? currentSectionVersionId(input.sectionId) : null;
+  if (input.sectionId && !versionId) throw new Error("解析板块没有当前启用的已发布配置版本");
+  if (input.sectionId && input.sectionConfigVersionId) {
+    const version = db.prepare("SELECT section_id FROM analysis_section_versions WHERE id = ?").get(input.sectionConfigVersionId) as { section_id: string } | undefined;
+    if (!version || version.section_id !== input.sectionId) throw new Error("解析板块配置版本不匹配");
+  }
+  const resolvedPlatform = input.platform ? enabledPlatformBinding(input.platform) : undefined;
   db.prepare(`INSERT INTO import_jobs
-    (id, filename, source_path, job_id, section_id, section_name, status, total_images, total_records, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`).run(
+    (id, filename, source_path, job_id, section_id, section_name, section_config_version_id, platform_id, platform_code, platform_name, status, total_images, total_records, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?, ?, ?)`).run(
     id, input.filename, input.sourcePath, input.jobId ?? null,
     input.sectionId ?? null, input.sectionName ?? null,
+    versionId,
+    resolvedPlatform?.id ?? null, resolvedPlatform?.code ?? null, resolvedPlatform?.name ?? null,
     input.totalImages ?? 0, input.totalRecords ?? 0, timestamp, timestamp,
   );
   return getImportJob(id)!;
@@ -98,14 +259,19 @@ export function claimImportJob(id: string): boolean {
   const result = db.prepare("UPDATE import_jobs SET status = 'processing', updated_at = ? WHERE id = ? AND status = 'queued'").run(now(), id);
   return result.changes === 1;
 }
-export function updateImportJob(id: string, input: Partial<Pick<ImportJob, "status" | "jobId" | "sectionId" | "sectionName" | "sourcePath" | "totalImages" | "processedImages" | "failedImages" | "totalRecords" | "processedRecords" | "currentSheet" | "currentRow" | "errorMessage">>) {
+export function updateImportJob(id: string, input: Partial<Pick<ImportJob, "status" | "jobId" | "sectionId" | "sectionName" | "sectionConfigVersionId" | "platformId" | "platformCode" | "platformName" | "sourcePath" | "totalImages" | "processedImages" | "failedImages" | "totalRecords" | "processedRecords" | "currentSheet" | "currentRow" | "errorMessage">>) {
   const current = getImportJob(id);
   if (!current) throw new Error("导入任务不存在");
+  for (const key of ["sectionId", "sectionName", "sectionConfigVersionId", "platformId", "platformCode", "platformName"] as const) {
+    if (input[key] !== undefined && current[key] !== null && input[key] !== current[key]) {
+      throw new Error("导入任务绑定信息不可修改");
+    }
+  }
   const next = { ...current, ...input };
-  db.prepare(`UPDATE import_jobs SET source_path = ?, job_id = ?, section_id = ?, section_name = ?, status = ?, total_images = ?, processed_images = ?,
+  db.prepare(`UPDATE import_jobs SET source_path = ?, job_id = ?, section_id = ?, section_name = ?, section_config_version_id = ?, platform_id = ?, platform_code = ?, platform_name = ?, status = ?, total_images = ?, processed_images = ?,
     failed_images = ?, total_records = ?, processed_records = ?, current_sheet = ?, current_row = ?,
     error_message = ?, updated_at = ? WHERE id = ?`).run(
-    next.sourcePath, next.jobId, next.sectionId, next.sectionName, next.status, next.totalImages, next.processedImages, next.failedImages,
+    next.sourcePath, next.jobId, next.sectionId, next.sectionName, next.sectionConfigVersionId, next.platformId, next.platformCode, next.platformName, next.status, next.totalImages, next.processedImages, next.failedImages,
     next.totalRecords, next.processedRecords, next.currentSheet, next.currentRow, next.errorMessage, now(), id,
   );
   return getImportJob(id)!;
@@ -116,7 +282,16 @@ export function listImportJobs(status?: ImportJobStatus) {
 }
 function liveJobCounts(jobId: string, sectionId: string | null) {
   const p = getAnalysisProgressBaseline(jobId, sectionId ?? "");
-  const fieldCount = db.prepare("SELECT COUNT(*) n FROM analysis_fields WHERE section_id=? AND is_enabled=1").get(sectionId ?? "").n as number;
+  const version = db.prepare(`
+    SELECT v.fields_snapshot_json
+    FROM jobs j
+    JOIN analysis_section_versions v ON v.id = j.section_config_version_id
+    WHERE j.id = ?
+  `).get(jobId) as { fields_snapshot_json: string } | undefined;
+  const fieldCount = version
+    ? (JSON.parse(version.fields_snapshot_json || "[]") as Array<{ isEnabled?: boolean }>)
+      .filter((field) => field.isEnabled !== false).length
+    : db.prepare("SELECT COUNT(*) n FROM analysis_fields WHERE section_id=? AND is_enabled=1").get(sectionId ?? "").n as number;
   return { totalRecords: p.total, completedRecords: p.completed, failedRecords: p.failed,
     totalFields: p.total * fieldCount,
     pendingRecords: p.pending, processingRecords: p.processing, needsReviewRecords: p.needsReview,
@@ -125,13 +300,54 @@ function liveJobCounts(jobId: string, sectionId: string | null) {
 }
 export function getJob(id: string): Job | undefined {
   const row = db.prepare("SELECT * FROM jobs WHERE id = ?").get(id) as any;
-  return row && { id: row.id, originalFilename: row.original_filename, sectionId: row.section_id ?? null, sectionName: row.section_name ?? null, status: row.status, createdAt: row.created_at, cancelRequested: Boolean(row.cancel_requested), ...liveJobCounts(row.id, row.section_id) };
+  return row && {
+    id: row.id,
+    originalFilename: row.original_filename,
+    sectionId: row.section_id ?? null,
+    sectionName: row.section_name ?? null,
+    sectionConfigVersionId: row.section_config_version_id ?? null,
+    platformId: row.platform_id ?? null,
+    platformCode: row.platform_code ?? null,
+    platformName: row.platform_name ?? null,
+    status: row.status,
+    createdAt: row.created_at,
+    cancelRequested: Boolean(row.cancel_requested),
+    ...liveJobCounts(row.id, row.section_id),
+  };
 }
 export function deleteJob(id: string) {
   const result = db.prepare("DELETE FROM jobs WHERE id = ?").run(id);
   if (!result.changes) throw new Error("任务不存在");
 }
-export function listJobs() { return (db.prepare("SELECT * FROM jobs ORDER BY created_at DESC").all() as any[]).map((row) => ({ id: row.id, originalFilename: row.original_filename, sectionId: row.section_id ?? null, sectionName: row.section_name ?? null, status: row.status, createdAt: row.created_at, cancelRequested: Boolean(row.cancel_requested), ...liveJobCounts(row.id, row.section_id) })); }
+export function listJobs() {
+  return (db.prepare("SELECT * FROM jobs ORDER BY created_at DESC").all() as any[]).map((row) => ({
+    id: row.id,
+    originalFilename: row.original_filename,
+    sectionId: row.section_id ?? null,
+    sectionName: row.section_name ?? null,
+    sectionConfigVersionId: row.section_config_version_id ?? null,
+    platformId: row.platform_id ?? null,
+    platformCode: row.platform_code ?? null,
+    platformName: row.platform_name ?? null,
+    status: row.status,
+    createdAt: row.created_at,
+    cancelRequested: Boolean(row.cancel_requested),
+    ...liveJobCounts(row.id, row.section_id),
+  }));
+}
+
+export function bindJobPlatform(jobId: string, platformId: string): Job {
+  const job = getJob(jobId);
+  if (!job) throw new Error("任务不存在");
+  if (job.platformId) throw new Error("任务平台已绑定，不能重复补录");
+  const platform = resolvePlatform(platformId);
+  db.prepare(`UPDATE jobs
+    SET platform_id = ?, platform_code = ?, platform_name = ?, updated_at = ?
+    WHERE id = ? AND platform_id IS NULL`).run(platform.id, platform.code, platform.name, now(), jobId);
+  const updated = getJob(jobId);
+  if (!updated?.platformId) throw new Error("任务平台绑定失败");
+  return updated;
+}
 export function countActiveJobRuns(): number {
   return (db.prepare("SELECT COUNT(*) AS count FROM jobs WHERE run_token IS NOT NULL").get() as { count: number }).count;
 }
@@ -158,7 +374,26 @@ export function touchJobRun(jobId: string, token: string) {
 }
 export function updateJobSection(jobId: string, section: { id: string; name: string }) {
   assertRunOwnership(jobId);
-  db.prepare("UPDATE jobs SET section_id = ?, section_name = ?, updated_at = ? WHERE id = ?").run(section.id, section.name, now(), jobId);
+  const current = db.prepare(`
+    SELECT section_id, section_config_version_id
+    FROM jobs WHERE id = ?
+  `).get(jobId) as { section_id: string | null; section_config_version_id: string | null } | undefined;
+  if (!current) throw new Error("任务不存在");
+  if (current.section_id && current.section_id !== section.id) {
+    throw new Error("任务已绑定其他解析板块");
+  }
+  if (current.section_config_version_id) return;
+  const versionId = (db.prepare(`
+    SELECT id FROM analysis_section_versions
+    WHERE section_id = ? AND status = 'published' AND is_current = 1
+  `).get(section.id) as { id: string } | undefined)?.id;
+  if (!versionId) throw new Error("解析板块没有当前启用的已发布配置版本");
+  const result = db.prepare(`UPDATE jobs
+    SET section_id = ?, section_name = ?, section_config_version_id = ?, updated_at = ?
+    WHERE id = ? AND section_config_version_id IS NULL
+      AND (section_id IS NULL OR section_id = ?)`)
+    .run(section.id, section.name, versionId, now(), jobId, section.id);
+  if (result.changes !== 1) throw new Error("任务配置版本绑定失败");
 }
 export function updateJobSourcePath(jobId: string, sourcePath: string) {
   db.prepare("UPDATE jobs SET source_path = ?, updated_at = ? WHERE id = ?").run(sourcePath, now(), jobId);
@@ -234,7 +469,17 @@ export function addRecords(jobId: string, records: Array<{ sheetName: string; ro
   transaction();
 }
 function mapRecord(row: any): RecordSummary {
-  return { id: row.id, rowNumber: row.row_number, sheetName: row.sheet_name, sourceFields: JSON.parse(row.source_fields_json), imageUrl: `/api/records/${row.id}/image`, status: row.status, reviewStatus: row.review_status };
+  return {
+    id: row.id,
+    rowNumber: row.row_number,
+    sheetName: row.sheet_name,
+    sourceFields: JSON.parse(row.source_fields_json),
+    imageUrl: `/api/records/${row.id}/image`,
+    status: row.status,
+    reviewStatus: row.review_status,
+    conversationId: row.conversation_id ?? null,
+    conversationIdAssignedAt: row.conversation_id_assigned_at ?? null,
+  };
 }
 export function listRecords(jobId: string): RecordSummary[] { return (db.prepare("SELECT * FROM records WHERE job_id = ? ORDER BY row_number").all(jobId) as any[]).map(mapRecord); }
 export function listBatchRecordIds(
@@ -281,16 +526,27 @@ export function getAnalysisProgressBaseline(jobId: string, sectionId: string) {
       failed: number;
       needs_review: number;
     };
-  const fieldCounts = db.prepare(`WITH latest_runs AS (
+  const fieldCounts = db.prepare(`WITH bound_fields AS (
+      SELECT json_extract(field.value, '$.id') AS field_id
+      FROM jobs j
+      JOIN analysis_section_versions v ON v.id = j.section_config_version_id
+      JOIN json_each(v.fields_snapshot_json) field
+      WHERE j.id = ?
+        AND v.section_id = ?
+        AND COALESCE(json_extract(field.value, '$.isEnabled'), 1) = 1
+    ),
+    latest_runs AS (
       SELECT afr.status,
         ROW_NUMBER() OVER (
-          PARTITION BY afr.record_id, afr.field_id
+          PARTITION BY afr.record_id,
+            COALESCE(json_extract(afr.field_snapshot_json, '$.id'), afr.field_id)
           ORDER BY afr.created_at DESC, afr.rowid DESC
         ) AS rank
       FROM analysis_field_runs afr
       JOIN records r ON r.id = afr.record_id
-      JOIN analysis_fields f ON f.id = afr.field_id
-      WHERE r.job_id = ? AND f.section_id = ? AND f.is_enabled = 1
+      JOIN bound_fields bf
+        ON bf.field_id = COALESCE(json_extract(afr.field_snapshot_json, '$.id'), afr.field_id)
+      WHERE r.job_id = ?
     )
     SELECT
       COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
@@ -298,7 +554,7 @@ export function getAnalysisProgressBaseline(jobId: string, sectionId: string) {
       COALESCE(SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped,
       COALESCE(SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END), 0) AS needs_review
     FROM latest_runs
-    WHERE rank = 1`).get(jobId, sectionId) as {
+    WHERE rank = 1`).get(jobId, sectionId, jobId) as {
       completed: number;
       failed: number;
       skipped: number;
@@ -345,6 +601,16 @@ export function listRecordsPage(jobId: string, query: RecordPageQuery = {}): Rec
 export function getRecord(id: string): RecordDetail | undefined {
   const row = db.prepare("SELECT * FROM records WHERE id = ?").get(id) as any;
   if (!row) return;
+  const version = db.prepare(`
+    SELECT analysis_section_versions.fields_snapshot_json
+    FROM jobs
+    LEFT JOIN analysis_section_versions
+      ON analysis_section_versions.id = jobs.section_config_version_id
+    WHERE jobs.id = ?
+  `).get(row.job_id) as { fields_snapshot_json: string | null } | undefined;
+  const configFields = version?.fields_snapshot_json
+    ? JSON.parse(version.fields_snapshot_json)
+    : undefined;
   const runs = (db.prepare("SELECT * FROM analysis_runs WHERE record_id = ? ORDER BY created_at DESC").all(id) as any[]).map((run) => ({
     id: run.id, recordId: run.record_id, sectionId: run.section_id, status: run.status,
     result: JSON.parse(run.model_result_json), rawResponse: run.raw_response ?? undefined,
@@ -358,9 +624,13 @@ export function getRecord(id: string): RecordDetail | undefined {
       reviewNote: review.review_note ?? "",
     },
   ]));
-  return { ...mapRecord(row), jobId: row.job_id, imagePath: row.image_path, humanResult: row.human_result_json ? JSON.parse(row.human_result_json) : null, reviewNote: row.review_note, sectionReviews, analysisRuns: runs, fieldRuns: listFieldRuns(id) };
+  return { ...mapRecord(row), jobId: row.job_id, imagePath: row.image_path, configFields, humanResult: row.human_result_json ? JSON.parse(row.human_result_json) : null, reviewNote: row.review_note, sectionReviews, analysisRuns: runs, fieldRuns: listFieldRuns(id) };
 }
-export function updateRecord(id: string, input: { sectionId?: string; humanResult?: Record<string, unknown>; reviewStatus?: string; reviewNote?: string; status?: string }) {
+export function updateRecord(
+  id: string,
+  input: { sectionId?: string; humanResult?: Record<string, unknown>; reviewStatus?: string; reviewNote?: string; status?: string },
+  conversationIdDependencies?: ConversationIdDependencies,
+) {
   return db.transaction(() => {
   assertRecordOwnership(id);
   const row = getRecord(id);
@@ -377,12 +647,18 @@ export function updateRecord(id: string, input: { sectionId?: string; humanResul
       .run(id, input.sectionId, input.humanResult ? json(input.humanResult) : null, input.reviewStatus ?? "pending", input.reviewNote ?? "", now());
   }
   if (!input.sectionId) {
+    if (input.status === "completed" || input.status === "needs_review") {
+      ensureConversationId(db, id, conversationIdDependencies);
+    }
     db.prepare(`UPDATE records SET human_result_json = COALESCE(?, human_result_json), review_status = COALESCE(?, review_status),
       review_note = COALESCE(?, review_note), status = COALESCE(?, status), updated_at = ? WHERE id = ?`)
       .run(input.humanResult ? json(input.humanResult) : null, input.reviewStatus ?? null, input.reviewNote ?? null, input.status ?? null, now(), id);
   } else {
     const job = getJob(row.jobId);
     if (job?.sectionId === input.sectionId) {
+      if (input.status === "completed" || input.status === "needs_review") {
+        ensureConversationId(db, id, conversationIdDependencies);
+      }
       db.prepare("UPDATE records SET status = COALESCE(?, status), review_status = COALESCE(?, review_status), updated_at = ? WHERE id = ?")
         .run(input.status ?? null, input.reviewStatus ?? null, now(), id);
       db.prepare(`UPDATE jobs SET

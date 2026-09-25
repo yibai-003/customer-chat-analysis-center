@@ -2,15 +2,19 @@ import fs from "node:fs/promises";
 import { assertAnalysisActive } from "./analysis-cancellation";
 import { withModelBudget } from "../ai/model-budget";
 import { withSingleAnalysisRun } from "./single-analysis-run";
-import { assertJobSection, getRecord, getSection, updateJobSection, updateRecord } from "../db/repositories";
-import { listFields } from "./field-config-service";
-import { createFieldRun, getFieldResultContext } from "./field-run-service";
+import { assertJobSection, getRecord, updateRecord } from "../db/repositories";
+import { createFieldRun, getFieldResultContextForFields } from "./field-run-service";
 import { captureHotTopicQuestions } from "./knowledge/hot-topic-service";
 import { isHotTopicField } from "../../shared/hot-topic";
 import { dependencyValues } from "./execution/support";
 import { executeFieldGraph, fieldExecutionHandler, type FieldExecutionOutput } from "./execution";
-import { DEFAULT_EXECUTION_TYPE, type AnalysisField, type AnalysisFieldRun } from "../../shared/types";
+import {
+  type AnalysisField,
+  type AnalysisFieldRun,
+  type SectionConfigVersion,
+} from "../../shared/types";
 import type { FieldExecutionState } from "./execution";
+import { getJobSectionConfigVersion } from "./section-config-version-service";
 
 export { executeFieldGraph } from "./execution";
 export type { FieldExecutionState } from "./execution";
@@ -28,11 +32,20 @@ async function runField(
   sectionName: string,
   record: NonNullable<ReturnType<typeof getRecord>>,
   field: AnalysisField,
+  configVersion: SectionConfigVersion,
   context: Record<string, unknown>,
   image: Buffer | null,
 ): Promise<FieldExecutionOutput> {
   assertAnalysisActive();
-  return withModelBudget(() => runFieldWithinBudget(recordId, sectionName, record, field, context, image));
+  return withModelBudget(() => runFieldWithinBudget(
+    recordId,
+    sectionName,
+    record,
+    field,
+    configVersion,
+    context,
+    image,
+  ));
 }
 
 async function runFieldWithinBudget(
@@ -40,15 +53,21 @@ async function runFieldWithinBudget(
   sectionName: string,
   record: NonNullable<ReturnType<typeof getRecord>>,
   field: AnalysisField,
+  configVersion: SectionConfigVersion,
   context: Record<string, unknown>,
   image: Buffer | null,
 ): Promise<FieldExecutionOutput> {
   if (isHotTopicField(field) && field.knowledgeSyncEnabled) {
-    const run = await captureHotTopicQuestions({ recordId, field, dependencies: dependencyValues(field, record.sourceFields, context) });
+    const run = await captureHotTopicQuestions({
+      recordId,
+      field,
+      configVersion,
+      dependencies: dependencyValues(field, record.sourceFields, context),
+    });
     return { result: run.result, status: run.status === "completed" ? "completed" as const : run.status === "failed" ? "failed" as const : "needs_review" as const, errorMessage: run.errorMessage, run };
   }
   const handler = fieldExecutionHandler(field.executionType);
-  return handler.run({ recordId, sectionName, record, field, context, image });
+  return handler.run({ recordId, sectionName, record, field, configVersion, context, image });
 }
 
 export async function analyzeRecordFields(recordId: string, sectionId: string): Promise<FieldBatchProgress> {
@@ -109,16 +128,17 @@ function createSkippedRuns(
 }
 
 function requiresImage(fields: AnalysisField[]) {
-  return fields.some((field) => (field.executionType ?? DEFAULT_EXECUTION_TYPE) === DEFAULT_EXECUTION_TYPE && field.imageEnabled);
+  return fields.some((field) => field.imageEnabled);
 }
 
 async function analyzeRecordFieldsWithinRun(recordId: string, sectionId: string): Promise<FieldBatchProgress> {
   const record = getRecord(recordId);
-  const section = getSection(sectionId);
-  if (!record || !section) throw new Error("记录或解析板块不存在");
-  assertJobSection(record.jobId, section.id);
-  updateJobSection(record.jobId, { id: section.id, name: section.name });
-  const fields = listFields(sectionId).filter((field) => field.isEnabled);
+  if (!record) throw new Error("记录不存在");
+  assertJobSection(record.jobId, sectionId);
+  const version = getJobSectionConfigVersion(record.jobId);
+  if (!version || version.sectionId !== sectionId) throw new Error("任务未绑定有效的配置版本");
+  const section = version.sectionSnapshot;
+  const fields = version.fieldsSnapshot.filter((field) => field.isEnabled);
   const latestRuns = latestRunsByField(record, sectionId);
   const rerunKeys = record.status !== "completed" && latestRuns.size > 0
     ? descendantKeys(fields, new Set(fields
@@ -133,7 +153,7 @@ async function analyzeRecordFieldsWithinRun(recordId: string, sectionId: string)
   const image = requiresImage(fieldsToRun) ? await fs.readFile(record.imagePath) : null;
   updateRecord(recordId, { status: "processing" });
   const rerunStates = await executeFieldGraph(fieldsToRun, async (field, context) => {
-    const run = await runField(recordId, section.name, record, field, context, image);
+    const run = await runField(recordId, section.name, record, field, version, context, image);
     if (run.status === "failed") throw new Error(run.errorMessage);
     return { result: run.result, status: run.status, errorMessage: run.errorMessage };
   }, section.sourceFields ?? [], initialContext, fields);
@@ -159,21 +179,26 @@ export async function analyzeField(recordId: string, sectionId: string, fieldKey
 
 async function analyzeFieldWithinRun(recordId: string, sectionId: string, fieldKey: string): Promise<AnalysisFieldRun> {
   const record = getRecord(recordId);
-  const section = getSection(sectionId);
-  const fields = listFields(sectionId).filter((item) => item.isEnabled);
+  if (!record) throw new Error("记录不存在");
+  assertJobSection(record.jobId, sectionId);
+  const version = getJobSectionConfigVersion(record.jobId);
+  if (!version || version.sectionId !== sectionId) throw new Error("任务未绑定有效的配置版本");
+  const section = version.sectionSnapshot;
+  const fields = version.fieldsSnapshot.filter((item) => item.isEnabled);
   const field = fields.find((item) => item.key === fieldKey);
-  if (!record || !section || !field) throw new Error("记录、板块或字段不存在");
-  assertJobSection(record.jobId, section.id);
-  updateJobSection(record.jobId, { id: section.id, name: section.name });
+  if (!field) throw new Error("配置版本中不存在该字段");
   const keysToRun = descendantKeys(fields, new Set([field.key]));
   const fieldsToRun = fields.filter((item) => keysToRun.has(item.key));
   const image = requiresImage(fieldsToRun) ? await fs.readFile(record.imagePath) : null;
   const reusableKeys = fields.filter((item) => !keysToRun.has(item.key)).map((item) => item.key);
-  const context = getFieldResultContext(recordId, reusableKeys, sectionId);
+  const context = getFieldResultContextForFields(
+    recordId,
+    fields.filter((item) => reusableKeys.includes(item.key)),
+  );
   const missing = field.dependsOn.filter((key) => context[key] === undefined && record.sourceFields[key] === undefined);
   if (missing.length) throw new Error(`依赖字段未完成：${missing.join(", ")}`);
   const executedStates = await executeFieldGraph(fieldsToRun, async (item, currentContext) => {
-    const run = await runField(recordId, section.name, record, item, currentContext, image);
+    const run = await runField(recordId, section.name, record, item, version, currentContext, image);
     if (run.status === "failed") throw new Error(run.errorMessage);
     return { result: run.result, status: run.status, errorMessage: run.errorMessage };
   }, section.sourceFields ?? [], context, fields);

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import type { AnalysisSection, Job, ModelConfig } from "../../shared/types";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { AnalysisSection, Job, ModelConfig, Platform } from "../../shared/types";
 import { api } from "../api";
 import { useAnalysisPolling } from "./useAnalysisPolling";
 import { EMPTY_RECORD_PAGE, EMPTY_RECORD_QUERY, type RecordQueryIdentity, type useRecordWorkspace } from "./useRecordWorkspace";
@@ -20,6 +20,7 @@ export function useJobSelection({ setNotice, records }: {
   const [job, setJob] = useState<Job | null>(null);
   const [sections, setSections] = useState<AnalysisSection[]>([]);
   const [models, setModels] = useState<ModelConfig[]>([]);
+  const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [busy, setBusy] = useState(false);
   const [taskActionBusy, setTaskActionBusy] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,7 +59,6 @@ export function useJobSelection({ setNotice, records }: {
     commitJobSummary: next => commitJobSummary(next),
     refreshCurrentRecordPage,
   });
-
   const cancelForegroundOperations = () => {
     operationIdRef.current += 1;
     busyOperationIdRef.current = null;
@@ -137,8 +137,11 @@ export function useJobSelection({ setNotice, records }: {
     };
     const requestId = beginListRequest(query);
     try {
-      const [nextJobs, nextSections, nextModels] = await Promise.all([
-        api<Job[]>("/api/jobs", { signal: request.signal }), api<AnalysisSection[]>("/api/sections", { signal: request.signal }), api<ModelConfig[]>("/api/model-configs", { signal: request.signal }),
+      const [nextJobs, nextSections, nextModels, nextPlatforms] = await Promise.all([
+        api<Job[]>("/api/jobs", { signal: request.signal }),
+        api<AnalysisSection[]>("/api/sections", { signal: request.signal }),
+        api<ModelConfig[]>("/api/model-configs", { signal: request.signal }),
+        api<Platform[]>("/api/platforms", { signal: request.signal }),
       ]);
       if (!isLatestListRequest(requestId, query)) return false;
       const target = nextJobs.find((item) => item.id === jobId)
@@ -151,6 +154,7 @@ export function useJobSelection({ setNotice, records }: {
         setJobs(nextJobs);
         setSections(nextSections);
         setModels(nextModels);
+        setPlatforms(nextPlatforms);
         setActiveJob(null);
         const emptyPage = { ...EMPTY_RECORD_PAGE, pageSize: query.pageSize };
         commitRecordPage(query, emptyPage);
@@ -173,6 +177,7 @@ export function useJobSelection({ setNotice, records }: {
       setJobs(nextJobs);
       setSections(nextSections);
       setModels(nextModels);
+      setPlatforms(nextPlatforms);
       setActiveJob(freshJob);
       commitRecordPage(pageResult.query, pageResult.recordPage);
       const currentSelected = selectedRef.current;
@@ -194,6 +199,20 @@ export function useJobSelection({ setNotice, records }: {
       return false;
     }
   };
+  const refreshRef = useRef(refresh);
+  const cancelAnalysisPollRef = useRef(cancelAnalysisPoll);
+  const setNoticeRef = useRef(setNotice);
+  const invalidateRequestsRef = useRef(() => {
+    listRequestIdRef.current += 1;
+    detailRequestIdRef.current += 1;
+  });
+  // These refs back long-lived async cleanup callbacks and must track each render.
+  // oxlint-disable-next-line react-hooks/exhaustive-deps
+  useLayoutEffect(() => {
+    refreshRef.current = refresh;
+    cancelAnalysisPollRef.current = cancelAnalysisPoll;
+    setNoticeRef.current = setNotice;
+  });
 
   const navigateToJob = async (jobId: string) => {
     if (jobId === activeJobIdRef.current && pendingNavigationRef.current === null) {
@@ -220,15 +239,16 @@ export function useJobSelection({ setNotice, records }: {
 
   useEffect(() => {
     mountedRef.current = true;
-    refresh().catch((error) => {
-      if (mountedRef.current) setNotice(error.message);
+    const cancelOnUnmount = cancelAnalysisPollRef.current;
+    const invalidateRequests = invalidateRequestsRef.current;
+    refreshRef.current().catch((error) => {
+      if (mountedRef.current) setNoticeRef.current(error.message);
     });
     return () => {
       mountedRef.current = false;
       refreshAbortRef.current?.abort();
-      cancelAnalysisPoll();
-      listRequestIdRef.current += 1;
-      detailRequestIdRef.current += 1;
+      cancelOnUnmount();
+      invalidateRequests();
       operationIdRef.current += 1;
     };
   }, []);
@@ -276,6 +296,7 @@ export function useJobSelection({ setNotice, records }: {
     job,
     sections,
     models,
+    platforms,
     busy,
     taskActionBusy,
     refreshing,

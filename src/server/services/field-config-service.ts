@@ -63,6 +63,12 @@ export function listFields(sectionId: string): AnalysisField[] {
   return (db.prepare("SELECT * FROM analysis_fields WHERE section_id = ? ORDER BY sort_order, key").all(sectionId) as any[]).map(mapField);
 }
 
+export function listEnabledFields(sectionId: string): AnalysisField[] {
+  return (db.prepare(
+    "SELECT * FROM analysis_fields WHERE section_id = ? AND is_enabled = 1 ORDER BY sort_order, key",
+  ).all(sectionId) as any[]).map(mapField);
+}
+
 export function getField(id: string): AnalysisField | undefined {
   const row = db.prepare("SELECT * FROM analysis_fields WHERE id = ?").get(id) as any;
   return row ? mapField(row) : undefined;
@@ -131,7 +137,7 @@ export function topologicalFields(fields: AnalysisFieldLike[], sourceFields: str
     visited.add(key);
     result.push(byKey.get(key)!);
   };
-  [...fields].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).forEach((field) => visit(field.key));
+  fields.toSorted((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).forEach((field) => visit(field.key));
   return result;
 }
 
