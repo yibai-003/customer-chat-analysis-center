@@ -413,8 +413,7 @@ body[data-ui-theme="atelier"] .job-filters input {
   grid-column: 1 / -1;
 }
 
-body[data-ui-theme="atelier"] .job-filters input,
-body[data-ui-theme="atelier"] .job-filters select {
+body[data-ui-theme="atelier"] .job-filters input {
   height: 36px;
   padding-inline: 8px;
   font-size: 12px;
@@ -654,21 +653,9 @@ body[data-ui-theme="atelier"] .content-header p {
   line-height: 1.6;
 }
 
-body[data-ui-theme="atelier"] .content-actions select {
-  min-height: 40px;
-  font-size: 12px;
-}
-
 body[data-ui-theme="atelier"] .content-actions {
   flex: 0 1 auto;
   align-items: center;
-}
-
-body[data-ui-theme="atelier"] .content-actions select {
-  border: 1px solid var(--atelier-line);
-  background: var(--atelier-panel);
-  color: var(--atelier-ink);
-  box-shadow: none;
 }
 
 body[data-ui-theme="atelier"] .notice {
@@ -1386,11 +1373,7 @@ body[data-ui-theme="atelier"] .signin-canvas-footer {
   }
 }
 
-body[data-ui-theme="atelier"] button:focus-visible,
-body[data-ui-theme="atelier"] input:focus-visible,
-body[data-ui-theme="atelier"] textarea:focus-visible,
-body[data-ui-theme="atelier"] select:focus-visible,
-body[data-ui-theme="atelier"] label.button:focus-within {
+body[data-ui-theme="atelier"] button:focus-visible, body[data-ui-theme="atelier"] input:focus-visible, body[data-ui-theme="atelier"] textarea:focus-visible, body[data-ui-theme="atelier"] label.button:focus-within {
   outline: 3px solid var(--atelier-orange);
   outline-offset: 3px;
 }
@@ -1588,11 +1571,6 @@ body[data-ui-theme="atelier"] .detail-drawer-backdrop {
     display: flex;
     flex-wrap: wrap;
     gap: 7px;
-  }
-
-  body[data-ui-theme="atelier"] .content-actions select {
-    flex: 1 1 100%;
-    min-width: 0;
   }
 
   body[data-ui-theme="atelier"] .content-actions .button {
