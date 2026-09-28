@@ -10,7 +10,8 @@ import type {
   ModelPurpose,
   ModelRouteResult,
 } from "../../shared/types";
-import { initDb } from "../db/client";
+import { cpus } from "node:os";
+import { initDb, db } from "../db/client";
 import {
   createPlatform,
   getJob,
@@ -369,6 +370,20 @@ async function assertOoxmlPackage(file: string) {
   expect([...entries].some((entry) => entry.startsWith("xl/media/"))).toBe(true);
 }
 
+function percentile(values: number[], fraction: number) {
+  if (!values.length) return null;
+  const sorted = values.toSorted((left, right) => left - right);
+  return sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)];
+}
+
+function timingSummary(values: number[]) {
+  return {
+    samples: values.length,
+    p50Ms: percentile(values, 0.5),
+    p95Ms: percentile(values, 0.95),
+  };
+}
+
 describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }, () => {
   let workspace = "";
   let originalCurrentVersionId = "";
@@ -466,10 +481,12 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
           : response("text", qualityFor(order, options.recordId));
       },
     );
+    const analysisStartedAt = performance.now();
     const firstProgress = await analyzeJob(taskOne.id, "reception", {
       concurrency: 1,
       batchSize: 5,
     });
+    const analysisWallMs = Math.round(performance.now() - analysisStartedAt);
     expect(firstProgress).toMatchObject({
       total: 4,
       completed: 3,
@@ -478,6 +495,80 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
     });
 
     const firstRecords = listRecords(taskOne.id);
+    const recordIds = firstRecords.map((record) => record.id);
+    const placeholders = recordIds.map(() => "?").join(",");
+    const timingRuns = db.prepare(`SELECT status, duration_ms, field_snapshot_json, model_config_snapshot_json
+      FROM analysis_field_runs WHERE record_id IN (${placeholders})`)
+      .all(...recordIds) as Array<{
+        status: string;
+        duration_ms: number | null;
+        field_snapshot_json: string;
+        model_config_snapshot_json: string;
+      }>;
+    const stageSamples = new Map<string, {
+      fieldElapsedMs: number[];
+      nonModelElapsedMs: number[];
+      modelAttemptElapsedMs: number[];
+      modelAttempts: number;
+      failedAttempts: number;
+      rateLimits: number;
+      timeouts: number;
+    }>();
+    for (const run of timingRuns) {
+      const field = JSON.parse(run.field_snapshot_json) as { executionType?: string };
+      const snapshot = JSON.parse(run.model_config_snapshot_json) as {
+        attempts?: Array<{ durationMs?: number; status?: string; errorCode?: string }>;
+      };
+      const stage = field.executionType ?? "unknown";
+      const sample = stageSamples.get(stage) ?? {
+        fieldElapsedMs: [],
+        nonModelElapsedMs: [],
+        modelAttemptElapsedMs: [],
+        modelAttempts: 0,
+        failedAttempts: 0,
+        rateLimits: 0,
+        timeouts: 0,
+      };
+      const attempts = snapshot.attempts ?? [];
+      const attemptDuration = attempts.reduce((total, attempt) => total + (attempt.durationMs ?? 0), 0);
+      if (run.duration_ms !== null) {
+        sample.fieldElapsedMs.push(run.duration_ms);
+        sample.nonModelElapsedMs.push(Math.max(0, run.duration_ms - attemptDuration));
+      }
+      sample.modelAttemptElapsedMs.push(...attempts.flatMap((attempt) =>
+        attempt.durationMs === undefined ? [] : [attempt.durationMs]));
+      sample.modelAttempts += attempts.length;
+      sample.failedAttempts += attempts.filter((attempt) => attempt.status === "failed").length;
+      sample.rateLimits += attempts.filter((attempt) => attempt.errorCode === "rate_limit").length;
+      sample.timeouts += attempts.filter((attempt) => attempt.errorCode === "timeout").length;
+      stageSamples.set(stage, sample);
+    }
+    const performanceBaseline = {
+      sampleSource: sampleProvenance,
+      modelCallsStubbed: true,
+      modelTimingRepresentsProviderLatency: false,
+      environment: {
+        node: process.version,
+        platform: process.platform,
+        cpuCount: cpus().length,
+      },
+      concurrency: 1,
+      recordCount: firstRecords.length,
+      analysisWallMs,
+      throughputRecordsPerSecond: analysisWallMs > 0
+        ? Number((firstRecords.length * 1000 / analysisWallMs).toFixed(2))
+        : null,
+      stages: Object.fromEntries([...stageSamples].map(([stage, sample]) => [stage, {
+        fieldElapsed: timingSummary(sample.fieldElapsedMs),
+        estimatedNonModelElapsed: timingSummary(sample.nonModelElapsedMs),
+        modelAttempts: sample.modelAttempts,
+        modelAttemptElapsed: timingSummary(sample.modelAttemptElapsedMs),
+        failedAttempts: sample.failedAttempts,
+        rateLimits: sample.rateLimits,
+        timeouts: sample.timeouts,
+      }])),
+      note: "合成接待 XLSX；模型调用由测试桩即时返回；字段耗时和模型尝试耗时仅代表本地自动化基线。",
+    };
     const byOrder = new Map(firstRecords.map((record) => [
       record.sourceFields["订单号"],
       record,
@@ -662,6 +753,7 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
         taskTwo: { id: taskTwo.id, versionId: historicalVersion.id },
       },
       sampleConversationIds: idsBeforeRetry,
+      performanceBaseline,
       exports: [exportedArtifactPath],
       exportArtifacts: [{
         path: exportedArtifactPath,
@@ -693,6 +785,14 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
       officialReleaseEligible: false,
       officialReleaseBlocker: "必须附加 Excel 与 WPS 人工打开证据后运行正式发布门禁",
     };
+    expect((report as Record<string, unknown>).performanceBaseline).toMatchObject({
+      sampleSource: sampleProvenance,
+      modelCallsStubbed: true,
+      modelTimingRepresentsProviderLatency: false,
+      concurrency: 1,
+      recordCount: 4,
+      stages: expect.any(Object),
+    });
     await fs.writeFile(
       path.join(workspace, "automated-acceptance.json"),
       `${JSON.stringify(report, null, 2)}\n`,
