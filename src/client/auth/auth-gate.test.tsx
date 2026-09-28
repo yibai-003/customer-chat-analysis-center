@@ -154,8 +154,8 @@ describe("authentication gate", () => {
     expect(canvas?.querySelector(".signin-analysis-sheet")).toBeNull();
     expect(canvas?.querySelector(".signin-canvas-note")).toBeNull();
     expect(canvas?.querySelectorAll(".signin-ripple-pass-through")).toHaveLength(3);
-    expect(canvas?.querySelectorAll(".signin-canvas-stage > .botanical-art")).toHaveLength(1);
-    expect(canvas?.querySelectorAll(".signin-canvas-stage > .botanical-art img")).toHaveLength(1);
+    expect(canvas?.querySelectorAll(".signin-canvas-stage > .signin-dandelion-canvas")).toHaveLength(1);
+    expect(canvas?.querySelector(".signin-canvas-stage > .botanical-art")).toBeNull();
     expect(host.textContent).toContain("进入客服解析工作台");
     expect(host.textContent).toContain("仅限内部局域网已授权用户使用");
   });

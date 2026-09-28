@@ -1,4 +1,4 @@
-import { BotanicalArt } from "./BotanicalArt";
+import { DandelionCanvas } from "./DandelionCanvas";
 import { WaterRippleCanvas } from "./WaterRippleCanvas";
 
 const workflowStages = [
@@ -33,7 +33,7 @@ export function LoginAnalysisCanvas() {
             </div>
           ))}
         </div>
-        <BotanicalArt variant="single-specimen" />
+        <DandelionCanvas />
       </div>
 
       <footer className="signin-canvas-footer signin-ripple-pass-through">

@@ -1,0 +1,2524 @@
+/*
+ * Workbench B theme
+ *
+ * This file is intentionally loaded after the existing visual layers. It
+ * changes presentation only, so feature state, API contracts, and dialogs
+ * remain owned by their existing modules.
+ */
+body[data-ui-theme="atelier"] .app:not(.signin-app),
+body[data-ui-theme="atelier"] .knowledge-workspace {
+  --workbench-page: #f3f6f8;
+  --workbench-panel: #ffffff;
+  --workbench-panel-muted: #f7fafc;
+  --workbench-panel-tint: #edf3f7;
+  --workbench-ink: #263847;
+  --workbench-ink-soft: #536b7b;
+  --workbench-muted: #718594;
+  --workbench-faint: #8b9ca8;
+  --workbench-line: #d8e2e9;
+  --workbench-line-strong: #b9cbd7;
+  --workbench-blue: #769bb7;
+  --workbench-blue-strong: #557f9e;
+  --workbench-blue-soft: #e8f1f7;
+  --workbench-green: #6e987f;
+  --workbench-green-soft: #eaf4ee;
+  --workbench-amber: #b98243;
+  --workbench-amber-soft: #fbf3e7;
+  --workbench-danger: #a25d5b;
+  --workbench-danger-soft: #f9eceb;
+  --workbench-shadow: rgba(50, 76, 94, 0.12);
+  --workbench-radius: 6px;
+  --workbench-radius-small: 4px;
+  --workbench-font-body: "Segoe UI", "Microsoft YaHei", sans-serif;
+  --workbench-font-mono: "Cascadia Mono", Consolas, "Microsoft YaHei", monospace;
+  --workbench-control-height: 36px;
+  --workbench-scrollbar-thumb: #b7c9d5;
+  --workbench-scrollbar-thumb-hover: #769bb7;
+  color: var(--workbench-ink);
+  font-family: var(--workbench-font-body);
+  font-synthesis: none;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) *,
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) *::before,
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) *::after {
+  border-radius: 4px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) {
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .topbar {
+  min-height: 72px;
+  height: auto;
+  padding: 12px 28px;
+  border-bottom: 1px solid var(--workbench-line-strong);
+  background: var(--workbench-panel);
+  box-shadow: 0 2px 10px var(--workbench-shadow);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .brand {
+  gap: 11px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .brand-mark {
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--workbench-blue-strong);
+  background: var(--workbench-ink);
+  color: #d6e7f1;
+  box-shadow: none;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .brand strong {
+  color: var(--workbench-ink);
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .brand small,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header small,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-head small {
+  color: var(--workbench-muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  letter-spacing: 0.08em;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace {
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title b {
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job {
+  border: 1px solid transparent;
+  border-left: 3px solid transparent;
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job.active {
+  border-color: var(--workbench-line);
+  border-left-color: var(--workbench-blue);
+  background: var(--workbench-panel);
+  box-shadow: 0 2px 6px var(--workbench-shadow);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job strong {
+  color: var(--workbench-ink);
+  font-size: 14px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job small {
+  color: var(--workbench-muted);
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job .job-usage {
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .xls {
+  border: 1px solid var(--workbench-line-strong);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-group > button {
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-group > button:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-group > button.active {
+  background: var(--workbench-panel);
+  color: var(--workbench-blue-strong);
+  border-left-color: var(--workbench-blue);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-group > button.active span,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .server-state i {
+  background: var(--workbench-green);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content {
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header {
+  border-bottom-color: var(--workbench-line-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header h1,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-head h2,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .blank h2 {
+  color: var(--workbench-ink);
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header p,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-empty,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .blank p {
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions select,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .form-grid input,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-editor textarea,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-field textarea,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .config-item,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .knowledge-tab {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .modal {
+  border-color: var(--workbench-line);
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail figure {
+  border-color: var(--workbench-line);
+  color: var(--workbench-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .button,
+  input,
+  textarea,
+  select,
+  .modal,
+  .config-item,
+  .detail figure,
+  .knowledge-tab
+) {
+  border-radius: 4px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button {
+  border-width: 1px;
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button:hover {
+  transform: none;
+  border-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button.primary {
+  border-color: var(--workbench-blue-strong);
+  background: var(--workbench-blue-strong);
+  color: #fff;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button.dark,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button.export {
+  border-color: var(--workbench-ink);
+  background: var(--workbench-ink);
+  color: #fff;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button.light,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button.ghost {
+  background: var(--workbench-panel-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .model-console-message {
+  border-left-color: var(--workbench-green);
+  background: var(--workbench-green-soft);
+  color: #4e725e;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-list,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .list-head,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail {
+  border-color: var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .list-head {
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record {
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record:hover {
+  background: var(--workbench-panel);
+  box-shadow: inset 3px 0 var(--workbench-blue);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-main strong,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-empty h2,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-block h3 {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-main small,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .review,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .view {
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-tags em {
+  border: 1px solid var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-main img {
+  border-color: var(--workbench-line-strong);
+  image-rendering: auto;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail {
+  border-left-color: var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail figure {
+  background: var(--workbench-panel-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .modal > header,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-block {
+  border-bottom-color: var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .model-console-tabs,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .provider-list,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .model-table-scroll,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .reception-rule-catalog,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .admin-reset-panel,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .restore-panel,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .restore-result {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-console-tabs button,
+  .model-console-command,
+  .provider-actions button,
+  .provider-form-actions button,
+  .model-pool-table button,
+  .model-pool-settings button,
+  .pool-bulk-bar button,
+  .record-bulk-bar button,
+  .job-control-bar button
+) {
+  border: 1px solid var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-console-tabs button.active,
+  .model-console-command.primary,
+  .model-purpose-tabs button.active
+) {
+  border-color: var(--workbench-blue-strong);
+  background: var(--workbench-blue-strong);
+  color: #fff;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-console-panel input,
+  .model-console-panel select,
+  .provider-form input,
+  .model-pool-settings input,
+  .usage-filters select,
+  .model-pool-table input,
+  .model-pool-table select,
+  .audit-filters input,
+  .audit-filters select,
+  .admin-user-identity input,
+  .admin-user-role select,
+  .restore-panel input
+) {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-console-panel input:focus,
+  .model-console-panel select:focus,
+  .provider-form input:focus,
+  .model-pool-settings input:focus,
+  .usage-filters select:focus,
+  .model-pool-table input:focus,
+  .model-pool-table select:focus,
+  .audit-filters input:focus,
+  .audit-filters select:focus,
+  .admin-user-identity input:focus,
+  .admin-user-role select:focus,
+  .restore-panel input:focus
+) {
+  border-color: var(--workbench-blue);
+  box-shadow: 0 0 0 3px var(--workbench-blue-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-pool-table th,
+  .model-usage-table th,
+  .provider-form,
+  .model-pool-settings,
+  .search-results-head,
+  .audit-event,
+  .admin-user-row,
+  .backup-row,
+  .restore-panel,
+  .restore-result
+) {
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-pool-table td,
+  .model-usage-table td,
+  .provider-row,
+  .admin-user-row,
+  .audit-event,
+  .backup-row
+) {
+  border-color: var(--workbench-line);
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-status.ready,
+  .usage-event.success,
+  .quota-meter.normal,
+  .admin-role.operator,
+  .admin-user-state.enabled
+) {
+  color: var(--workbench-green);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-status.warning,
+  .usage-event.cooldown,
+  .quota-meter.warning
+) {
+  color: var(--workbench-amber);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-status.danger,
+  .usage-event.failure,
+  .usage-event.quota_exhausted,
+  .admin-user-state.disabled
+) {
+  color: var(--workbench-danger);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace {
+  --knowledge-tabs-row-height: 54px;
+  --knowledge-selector-height: 44px;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-topbar,
+  .knowledge-tabs,
+  .knowledge-main,
+  .knowledge-sticky-actions
+) {
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-main {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-table-scroll {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-topbar {
+  min-height: 72px;
+  padding: 12px 28px;
+  border-bottom: 1px solid var(--workbench-line-strong);
+  box-shadow: 0 2px 10px var(--workbench-shadow);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-brand h1,
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-band-head h2,
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-sticky-actions strong {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs {
+  padding: 0 28px;
+  border-bottom: 1px solid var(--workbench-line);
+  background: var(--workbench-panel-tint);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button {
+  border-color: var(--workbench-line);
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button.active {
+  border-bottom-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-base-row,
+  .knowledge-item-table,
+  .knowledge-candidate,
+  .knowledge-empty,
+  .knowledge-import-modal .modal,
+  .knowledge-base-switch,
+  .knowledge-sticky-actions
+) {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-base-row.head,
+  .knowledge-item-table th,
+  .knowledge-base-switch
+) {
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-base-name,
+  .knowledge-row-actions button,
+  .knowledge-batch-bar button,
+  .knowledge-pagination button
+) {
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-row-actions button:hover,
+  .knowledge-batch-bar button:hover,
+  .knowledge-pagination button:hover:not(:disabled)
+) {
+  border-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-base-switch select,
+  .knowledge-item-tools input,
+  .knowledge-item-tools select,
+  .search-test-actions input,
+  .knowledge-import-top input,
+  .column-map-row select,
+  .knowledge-item-editor textarea,
+  .search-test-input textarea
+) {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-row.selected {
+  box-shadow: inset 4px 0 var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-batch-bar {
+  border-left-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-state.enabled {
+  border-left-color: var(--workbench-green);
+  color: var(--workbench-green);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-state.disabled {
+  border-left-color: var(--workbench-amber);
+  background: var(--workbench-amber-soft);
+  color: var(--workbench-amber);
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) :is(
+  button,
+  input,
+  textarea,
+  select
+):focus-visible {
+  outline: 3px solid var(--workbench-blue-soft);
+  outline-offset: 2px;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) :is(
+  .backdrop,
+  .image-preview-backdrop
+) {
+  background: rgba(38, 56, 71, 0.42);
+}
+
+@media (max-width: 1050px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .content {
+    padding: 30px 24px 50px;
+  }
+}
+
+@media (max-width: 700px) {
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs {
+    padding: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Keep the task rail continuous instead of stacking nested cards. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-groups {
+  margin: 8px 0 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent {
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading {
+  display: grid;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .app .section-usage {
+  padding-right: 4px;
+  color: var(--workbench-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-usage {
+  padding-right: 4px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-actions {
+  align-self: start;
+  padding-top: 2px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group:last-child {
+  border-bottom-color: transparent;
+}
+
+@media (max-width: 700px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent + .job-section-parent {
+    margin-top: 6px;
+  }
+}
+
+/* Final task-rail pass: taxonomy, board, task, and system states read as one rail. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title-actions > b {
+  color: var(--workbench-blue-strong);
+  font-family: var(--workbench-font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-results strong {
+  color: var(--workbench-ink-soft);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child > i {
+  flex: 0 0 6px;
+}
+
+/* Keep board metadata readable when the sidebar is narrow. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading {
+  grid-template-rows: auto auto;
+  align-items: center;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading .section-usage {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  padding: 0 8px 7px 13px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading .section-knowledge {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+@media (max-width: 700px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading {
+    grid-template-rows: auto;
+    min-height: 42px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading .section-knowledge {
+    grid-row: auto;
+  }
+}
+
+/* Close the remaining legacy olive and paper colors inside the workbench. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-compact {
+  border: 1px solid var(--workbench-line-strong);
+  border-left: 3px solid var(--workbench-blue);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-status,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-heading span,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-stats {
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-heading strong,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-heading b,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-stats strong {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-track {
+  border-color: var(--workbench-line-strong);
+  background: var(--workbench-panel-tint);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-track i {
+  background: var(--workbench-blue);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-complete-label {
+  color: var(--workbench-green);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .notice,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-target,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-bulk-bar {
+  border-color: var(--workbench-line);
+  border-left-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-results {
+  border-color: var(--workbench-line);
+  border-left-color: var(--workbench-blue);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-bar {
+  border-color: var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar button,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-bar button {
+  border-color: var(--workbench-line);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-bulk-bar button {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar button:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-bar button:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-bulk-bar button:hover {
+  border-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-list {
+  border-top-color: var(--workbench-line-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .list-head {
+  border-bottom-color: var(--workbench-line);
+  background: var(--workbench-panel-tint);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record {
+  border-top-color: var(--workbench-line);
+  background: var(--workbench-panel);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record.active {
+  background: var(--workbench-blue-soft);
+  box-shadow: inset 3px 0 var(--workbench-blue);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-tags em {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status.completed,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .review.confirmed {
+  color: var(--workbench-green);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status.processing {
+  color: var(--workbench-amber);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status.failed,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status.needs_review,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .review.needs_review {
+  color: var(--workbench-danger);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status.completed i {
+  background: var(--workbench-green);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status.processing i {
+  background: var(--workbench-amber);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status.failed i,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status.needs_review i {
+  background: var(--workbench-danger);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace > .detail {
+  border-left-color: var(--workbench-line-strong);
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace > .detail::before,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace > .detail::after {
+  display: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-sources,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-fields-grid > .result-field {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-sources summary,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-results h3,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .source-field strong {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-sources summary span,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .source-field span,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-field > span {
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-fields-grid .result-field textarea,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-context .source-field {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-fields-grid .result-field textarea:focus,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-field textarea:focus,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .form-grid input:focus,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-editor textarea:focus {
+  border-color: var(--workbench-blue);
+  box-shadow: 0 0 0 3px var(--workbench-blue-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .botanical-art__paper {
+  background: var(--workbench-panel-tint);
+  border-color: var(--workbench-line);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .botanical-art__scrap,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .botanical-art__tape {
+  background: var(--workbench-blue-soft);
+  opacity: 0.45;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .botanical-art__leaf {
+  filter: grayscale(1);
+  opacity: 0.38;
+}
+
+/* Final workbench audit: typography, controls, scroll containers, and status rails. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  button,
+  input,
+  textarea,
+  select,
+  label.button
+) {
+  font-family: var(--workbench-font-body);
+  font-synthesis: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .button,
+  .job-bulk-bar button,
+  .job-control-bar button,
+  .record-bulk-bar button,
+  .pool-bulk-bar button,
+  .model-console-command,
+  .provider-actions button,
+  .provider-form-actions button,
+  .model-pool-table button,
+  .model-pool-settings button,
+  .knowledge-row-actions button,
+  .knowledge-batch-bar button,
+  .knowledge-pagination button
+) {
+  min-height: var(--workbench-control-height);
+  border-radius: 4px;
+  line-height: 1.3;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* Keep critical control geometry explicit for older selector engines too. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button {
+  min-height: 36px;
+  border-radius: 4px !important;
+  line-height: 1.3;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) select,
+body[data-ui-theme="atelier"] .app:not(.signin-app) input:not([type="checkbox"]):not([type="radio"]),
+body[data-ui-theme="atelier"] .app:not(.signin-app) textarea {
+  min-height: 36px;
+  border-radius: 4px !important;
+  line-height: 1.3;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select
+) {
+  min-height: var(--workbench-control-height);
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  input[type="checkbox"],
+  input[type="radio"]
+) {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  button,
+  input,
+  textarea,
+  select
+):disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+body[data-ui-theme="atelier"] :is(
+  .app:not(.signin-app),
+  .knowledge-workspace,
+  .app:not(.signin-app) *,
+  .knowledge-workspace *
+) {
+  scrollbar-color: var(--workbench-scrollbar-thumb) transparent;
+  scrollbar-width: thin;
+}
+
+body[data-ui-theme="atelier"] :is(
+  .app:not(.signin-app),
+  .knowledge-workspace,
+  .app:not(.signin-app) *,
+  .knowledge-workspace *
+)::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+body[data-ui-theme="atelier"] :is(
+  .app:not(.signin-app),
+  .knowledge-workspace,
+  .app:not(.signin-app) *,
+  .knowledge-workspace *
+)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+body[data-ui-theme="atelier"] :is(
+  .app:not(.signin-app),
+  .knowledge-workspace,
+  .app:not(.signin-app) *,
+  .knowledge-workspace *
+)::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 5px;
+  background: var(--workbench-scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+body[data-ui-theme="atelier"] :is(
+  .app:not(.signin-app),
+  .knowledge-workspace,
+  .app:not(.signin-app) *,
+  .knowledge-workspace *
+)::-webkit-scrollbar-thumb:hover {
+  background: var(--workbench-scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+body[data-ui-theme="atelier"] :is(
+  .app:not(.signin-app),
+  .knowledge-workspace
+) :is(button, input, textarea, select):focus-visible {
+  outline: 2px solid var(--workbench-blue);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--workbench-blue-soft);
+}
+
+/* Keep the three workbench columns readable at desktop widths. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace {
+  grid-template-columns: var(--sidebar-width, 240px) minmax(0, 1fr) clamp(360px, 27vw, 440px);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content {
+  min-width: 0;
+  padding: clamp(24px, 3vw, 36px) clamp(18px, 3vw, 38px) 52px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header {
+  gap: 18px;
+  padding-bottom: 18px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header h1 {
+  max-width: min(100%, 820px);
+  font-size: clamp(24px, 2.15vw, 32px);
+  line-height: 1.2;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header p {
+  max-width: 78ch;
+  font-size: 12px;
+  line-height: 1.65;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions {
+  gap: 8px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions select {
+  min-height: var(--workbench-control-height);
+  padding: 0 10px;
+}
+
+/* The sidebar is a navigation rail, not a second card grid. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar {
+  min-width: 0;
+  padding: 16px 10px 12px;
+  border-right: 1px solid var(--workbench-line);
+  background: var(--workbench-panel-tint);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-scroll {
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title-actions {
+  gap: 5px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-toggle {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  border: 1px solid var(--workbench-line-strong);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  font-size: 15px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-toggle:hover {
+  border-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-system-status {
+  flex: 0 0 auto;
+  padding-top: 8px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-system-status .knowledge-sync-status {
+  padding: 0 0 2px !important;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-botanical {
+  flex: 0 0 auto;
+  margin: 0 0 4px;
+  padding-top: 10px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-botanical .botanical-art {
+  width: min(170px, 100%);
+  height: 112px;
+  margin: 0 auto;
+  opacity: 0.68;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .server-state {
+  flex: 0 0 auto;
+}
+
+/* Record list typography and density stay consistent with the task rail. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .list-head {
+  min-height: 40px;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.3;
+  letter-spacing: 0.05em;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record {
+  min-height: 66px;
+  padding: 11px 12px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-main strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-main small,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-tags em,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .status,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .review,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .view {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-main img {
+  width: 44px;
+  height: 38px;
+  border: 1px solid var(--workbench-line-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-tags {
+  gap: 5px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-tags em {
+  padding: 4px 6px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-bulk-bar {
+  min-height: 40px;
+  padding: 7px 12px;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-bulk-bar button {
+  min-height: 30px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+/* Details use the same neutral canvas and a stable readable form scale. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail {
+  min-width: 0;
+  border-left: 1px solid var(--workbench-line-strong);
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-shell,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-scroll {
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-scroll {
+  padding: 22px 16px 30px;
+  scrollbar-gutter: stable;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-head {
+  margin-bottom: 16px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-head h2 {
+  max-width: 100%;
+  margin-top: 5px;
+  font-size: 18px;
+  line-height: 1.3;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-head-actions {
+  gap: 7px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-close {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  border: 1px solid var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  font-size: 18px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-context {
+  gap: 14px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-sources {
+  padding: 10px;
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-sources summary {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-sources summary span {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-context .source-field {
+  padding: 6px 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-context .source-field span,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-field > span {
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-context .source-field strong,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-fields-grid .result-field textarea {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-results h3 {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-fields-grid {
+  gap: 10px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .result-fields-grid > .result-field {
+  padding: 10px;
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-actions {
+  gap: 8px;
+  padding: 10px 14px;
+  border-top-color: var(--workbench-line);
+  background: var(--workbench-panel);
+}
+
+/* Close old olive surfaces in management dialogs and operational tables. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .modal,
+  .config-item,
+  .field-editor,
+  .knowledge-field-settings,
+  .prompt-workbench,
+  .provider-form,
+  .model-pool-settings,
+  .admin-reset-panel,
+  .restore-panel,
+  .restore-result,
+  .reception-rule-catalog,
+  .audit-event,
+  .backup-row
+) {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .modal > header,
+  .schema-toolbar,
+  .platform-backfill-form,
+  .admin-create-form,
+  .audit-filters,
+  .backup-toolbar,
+  .reception-rule-catalog-header
+) {
+  border-color: var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .config-item,
+  .provider-row,
+  .admin-user-row,
+  .backup-row,
+  .audit-event,
+  .restore-panel,
+  .restore-result
+) {
+  background: var(--workbench-panel-tint);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .modal header h2,
+  .model-console-section-head h3,
+  .reception-rule-catalog-header h3,
+  .admin-reset-panel h3,
+  .admin-create-form h3,
+  .restore-panel h3,
+  .restore-result h3
+) {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .modal header p,
+  .model-console-section-head p,
+  .provider-form label,
+  .model-pool-settings label,
+  .usage-filters label,
+  .admin-reset-fields label,
+  .audit-filters label,
+  .restore-panel label
+) {
+  color: var(--workbench-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .modal header button,
+  .modal-close,
+  .detail-close
+) {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .modal header button,
+  .modal-close,
+  .detail-close
+):hover {
+  border-color: var(--workbench-line);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-console-panel input,
+  .model-console-panel select,
+  .provider-form input,
+  .model-pool-settings input,
+  .usage-filters select,
+  .model-pool-table input,
+  .model-pool-table select,
+  .audit-filters input,
+  .audit-filters select,
+  .admin-user-identity input,
+  .admin-user-role select,
+  .restore-panel input,
+  .schema-editor input,
+  .schema-editor select,
+  .field-editor input,
+  .field-editor select,
+  .field-editor textarea,
+  .prompt-field textarea,
+  .prompt-large-editor,
+  .reception-rule-table input:not([type="checkbox"]),
+  .reception-rule-table textarea
+) {
+  min-height: 34px;
+  border: 1px solid var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  font-size: 12px;
+  line-height: 1.5;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-pool-table,
+  .model-usage-table,
+  .reception-rule-table
+) {
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-pool-table th,
+  .model-usage-table th,
+  .reception-rule-table th
+) {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-pool-table td,
+  .model-usage-table td,
+  .reception-rule-table td
+) {
+  border-color: var(--workbench-line);
+  color: var(--workbench-ink-soft);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-console-tabs,
+  .model-purpose-tabs
+) {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel-tint);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-console-tabs button,
+  .model-purpose-tabs button
+) {
+  min-height: 36px;
+  border-color: var(--workbench-line);
+  background: transparent;
+  color: var(--workbench-muted);
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-console-tabs button:hover,
+  .model-purpose-tabs button:hover
+) {
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-console-tabs button.active,
+  .model-purpose-tabs button.active,
+  .execution-type-switch button.active,
+  .prompt-mode-switch button.active
+) {
+  border-color: var(--workbench-blue-strong);
+  background: var(--workbench-blue-strong);
+  color: #fff;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-status.ready,
+  .usage-event.success,
+  .quota-meter.normal,
+  .admin-role.operator,
+  .admin-user-state.enabled,
+  .field-status.completed
+) {
+  color: var(--workbench-green);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-status.warning,
+  .usage-event.cooldown,
+  .quota-meter.warning,
+  .field-status.skipped
+) {
+  color: var(--workbench-amber);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-status.danger,
+  .usage-event.failure,
+  .usage-event.quota_exhausted,
+  .admin-user-state.disabled,
+  .field-status.failed,
+  .field-status.needs_review,
+  .danger-text,
+  .danger-button
+) {
+  color: var(--workbench-danger);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .danger-button {
+  border-color: var(--workbench-danger);
+  background: var(--workbench-danger);
+  color: #fff;
+}
+
+/* Knowledge pages follow the same scale and scroll behavior. */
+body[data-ui-theme="atelier"] .knowledge-workspace {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  button,
+  input,
+  textarea,
+  select
+) {
+  font-family: var(--workbench-font-body);
+  font-synthesis: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-tab,
+  .knowledge-row-actions button,
+  .knowledge-batch-bar button,
+  .knowledge-pagination button
+) {
+  min-height: var(--workbench-control-height);
+  border-radius: var(--workbench-radius-small);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select
+) {
+  min-height: var(--workbench-control-height);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-brand h1,
+  .knowledge-band-head h2
+) {
+  font-size: clamp(22px, 2vw, 30px);
+  line-height: 1.2;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-base-row,
+  .knowledge-item-table,
+  .knowledge-candidate,
+  .knowledge-empty,
+  .knowledge-sticky-actions
+) {
+  border-radius: var(--workbench-radius-small);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-item-table th,
+  .knowledge-item-table td
+) {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+@media (max-width: 1199px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace {
+    grid-template-columns: var(--sidebar-width, 220px) minmax(0, 1fr);
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail {
+    border-left: 0;
+    box-shadow: -10px 0 24px rgba(50, 76, 94, 0.12);
+  }
+}
+
+@media (max-width: 700px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .topbar {
+    min-height: 64px;
+    padding: 10px 14px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .brand {
+    gap: 8px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .brand-mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .brand strong {
+    font-size: 14px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .brand small {
+    font-size: 8px;
+    letter-spacing: 0.1em;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .top-actions {
+    gap: 5px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .top-actions .button {
+    min-height: 32px;
+    padding-inline: 9px;
+    font-size: 11px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar {
+    display: flex;
+    flex-direction: column;
+    max-height: min(38dvh, 300px);
+    padding: 12px 10px;
+    overflow: hidden;
+    border-right: 0;
+    border-bottom: 1px solid var(--workbench-line-strong);
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title.section-title {
+    margin-top: 16px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .content {
+    padding: 22px 14px 36px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header h1 {
+    font-size: clamp(22px, 7vw, 28px);
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions select {
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-scroll {
+    padding: 20px 14px 28px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-context {
+    grid-template-columns: 100px minmax(0, 1fr);
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .result-fields-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-topbar {
+    min-height: 64px;
+    padding: 10px 14px;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-main {
+    padding: 18px 12px;
+  }
+}
+
+/* Finish the B treatment for overlays and controls that live outside the main grid. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content::before,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .brand-mark::after {
+  content: none;
+  display: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .top-menu-cluster {
+  border-left-color: var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .top-menu-panel {
+  min-width: 176px;
+  padding: 6px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-panel);
+  box-shadow: 0 12px 28px var(--workbench-shadow);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .top-menu-panel[role="menu"] button {
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--workbench-radius-small);
+  background: transparent;
+  color: var(--workbench-ink-soft);
+  font-family: var(--workbench-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: left;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .top-menu-panel[role="menu"] button:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .top-menu-panel[role="menu"] button:focus-visible {
+  outline: 0;
+  border-color: var(--workbench-line);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .top-menu-trigger[aria-expanded="true"],
+body[data-ui-theme="atelier"] .app:not(.signin-app) .user-menu .user-chip[aria-expanded="true"] {
+  border-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .user-menu .user-chip {
+  min-height: 36px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .user-menu-summary {
+  border-bottom-color: var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .user-menu-summary strong {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .user-menu-summary span,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .user-menu-caret {
+  color: var(--workbench-muted);
+}
+
+/* Board headers and task rows use different surfaces so the rail reads as a hierarchy. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent-label {
+  display: flex;
+  align-items: center;
+  border-top: 1px solid var(--workbench-line-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group {
+  overflow: hidden;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading {
+  border-bottom: 1px solid var(--workbench-line-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child:focus-visible {
+  border-left-color: var(--workbench-blue-strong);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child > span {
+  background: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child b {
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-knowledge {
+  border-color: var(--workbench-line-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-knowledge:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-knowledge:focus-visible {
+  border-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job:hover {
+  border-left-color: var(--workbench-line-strong);
+  background: var(--workbench-panel-muted);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job.active {
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-empty {
+  border-top: 1px solid var(--workbench-line);
+}
+
+/* Image preview keeps the same neutral shell as every other workbench dialog. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-backdrop {
+  background: rgba(38, 56, 71, 0.56);
+  backdrop-filter: blur(2px);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-panel {
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-panel);
+  box-shadow: 0 16px 48px rgba(38, 56, 71, 0.24);
+  color: var(--workbench-ink);
+  font-family: var(--workbench-font-body);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-header {
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--workbench-line);
+  background: var(--workbench-panel-tint);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-header small {
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 9px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-header strong {
+  color: var(--workbench-ink);
+  font-size: 13px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-header button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-header button:hover {
+  border-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-stage {
+  padding: 24px;
+  background: var(--workbench-panel-muted);
+  background-image: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-controls {
+  padding: 10px 12px;
+  border-top: 1px solid var(--workbench-line);
+  background: var(--workbench-panel-tint);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-controls button {
+  min-width: 34px;
+  height: 32px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  box-shadow: none;
+  font-family: var(--workbench-font-body);
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-controls button:hover:not(:disabled) {
+  border-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-controls output {
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 12px;
+}
+
+/* Configuration and editor dialogs no longer inherit the legacy paper/pixel surfaces. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .modal {
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-panel);
+  box-shadow: 0 16px 48px rgba(38, 56, 71, 0.2);
+  font-family: var(--workbench-font-body);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .modal > header {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .modal header h2 {
+  color: var(--workbench-ink);
+  font-family: var(--workbench-font-body);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .modal header p {
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-editor {
+  grid-template-columns: 150px minmax(0, 1fr);
+  gap: 20px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-pick {
+  gap: 4px;
+  padding-right: 12px;
+  border-right: 1px solid var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-pick button {
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--workbench-radius-small);
+  background: transparent;
+  color: var(--workbench-ink-soft);
+  font-family: var(--workbench-font-body);
+  font-size: 12px;
+  text-align: left;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-pick button:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-pick button.active {
+  border-color: var(--workbench-line);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .schema-toolbar {
+  min-height: 40px;
+  margin-top: 0;
+  padding: 0 0 9px;
+  border-bottom: 1px solid var(--workbench-line);
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .schema-toolbar button,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .dependency-toggle,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-expand {
+  min-height: 30px;
+  padding: 5px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--workbench-radius-small);
+  background: transparent;
+  color: var(--workbench-blue-strong);
+  font-family: var(--workbench-font-body);
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .schema-toolbar button:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .dependency-toggle:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-expand:hover {
+  border-color: var(--workbench-line);
+  background: var(--workbench-blue-soft);
+  text-decoration: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--workbench-line);
+  border-left: 3px solid var(--workbench-blue);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor-head {
+  margin-bottom: 12px;
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor-head > b {
+  color: var(--workbench-blue-strong);
+  font-family: var(--workbench-font-mono);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor-head strong {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor label,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-field-head > span,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-label {
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor :is(input, select, textarea),
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-field textarea,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .dependency-select label {
+  border-color: var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .knowledge-field-settings {
+  border-color: var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  color: var(--workbench-ink);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor :is(input, select, textarea):focus,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-field textarea:focus {
+  border-color: var(--workbench-blue);
+  box-shadow: 0 0 0 3px var(--workbench-blue-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .execution-type-switch {
+  gap: 4px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .execution-type-switch button {
+  min-height: 34px;
+  padding: 7px 8px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel-muted);
+  color: var(--workbench-ink-soft);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .execution-type-switch button + button {
+  border-left: 1px solid var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .execution-type-switch button.active {
+  border-color: var(--workbench-blue-strong);
+  background: var(--workbench-blue-strong);
+  color: #fff;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-mode-label {
+  color: var(--workbench-blue-strong);
+  font-family: var(--workbench-font-mono);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .knowledge-field-settings {
+  border-width: 1px;
+  background: var(--workbench-panel-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-workbench,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .markdown-preview {
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel-muted);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-mode-switch {
+  border-bottom: 1px solid var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-mode-switch button {
+  min-height: 36px;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--workbench-muted);
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-mode-switch button.active {
+  border-bottom-color: var(--workbench-blue-strong);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-large-editor {
+  min-height: 300px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: none;
+  font-family: var(--workbench-font-mono);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .schema-field {
+  border-bottom: 1px solid var(--workbench-line);
+}
+
+/* Pagination is a compact utility row, not a legacy green footer. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-list {
+  background: transparent;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager {
+  min-height: 48px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--workbench-line-strong);
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-body);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager label {
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager select {
+  min-height: 30px;
+  height: 30px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  font-family: var(--workbench-font-body);
+  font-size: 11px;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager output {
+  color: var(--workbench-ink-soft);
+  font-family: var(--workbench-font-mono);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager button {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  box-shadow: none;
+  font-family: var(--workbench-font-body);
+  font-size: 18px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager button:hover:not(:disabled) {
+  border-color: var(--workbench-blue);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-blue-strong);
+}
+
+@media (max-width: 700px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .section-editor {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .section-pick {
+    padding-right: 0;
+    padding-bottom: 10px;
+    border-right: 0;
+    border-bottom: 1px solid var(--workbench-line);
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-stage {
+    padding: 12px;
+  }
+}
+
+/* Keep the task rail overrides last so legacy component rules cannot split the hierarchy. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title {
+  min-height: 36px;
+  margin: 0;
+  padding: 0 8px 8px;
+  border-bottom: 1px solid var(--workbench-line);
+  color: var(--workbench-ink-soft);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title.section-title {
+  margin-top: 18px;
+  padding-top: 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-filters {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  padding: 10px 0 8px;
+  border-bottom: 1px solid var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-filters input {
+  grid-column: 1 / -1;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-filters :is(input, select) {
+  min-width: 0;
+  height: 36px;
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 40px;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar label {
+  min-height: 26px;
+  color: var(--workbench-ink-soft);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar button,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-bar button {
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-blue-strong);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-bar {
+  margin-top: 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-results {
+  margin-top: 6px;
+  padding: 7px 8px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-results {
+  display: grid;
+  gap: 3px;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent-label {
+  min-height: 30px;
+  margin-top: 14px;
+  padding: 9px 8px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--workbench-line);
+  background: transparent;
+  color: var(--workbench-ink-soft);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.2;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent + .job-section-parent {
+  margin-top: 12px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group {
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--workbench-line);
+  border-radius: 0;
+  background: transparent;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 42px;
+  gap: 5px;
+  padding: 0 5px 0 0;
+  border: 1px solid var(--workbench-line);
+  border-bottom-color: var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: #dce9f1;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child {
+  min-width: 0;
+  min-height: 42px;
+  overflow: hidden;
+  padding: 9px 6px 9px 10px;
+  border: 0;
+  border-left: 3px solid var(--workbench-blue-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--workbench-ink);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: nowrap;
+  text-align: left;
+  text-overflow: ellipsis;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child > span {
+  flex: 0 0 6px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child > b {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--workbench-blue-strong);
+  font-family: var(--workbench-font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-usage {
+  min-width: max-content;
+  padding: 0;
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .section-knowledge {
+  width: 30px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-blue-strong);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job {
+  min-height: 68px;
+  margin: 0;
+  padding: 9px 7px 9px 10px;
+  border: 0;
+  border-top: 1px solid var(--workbench-line);
+  border-left: 3px solid transparent;
+  border-radius: 0;
+  background: var(--workbench-panel);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-select {
+  min-width: 0;
+  gap: 9px;
+  padding: 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-select > span:last-child {
+  min-width: 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-select strong {
+  overflow: hidden;
+  color: var(--workbench-ink);
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-select small {
+  margin-top: 3px;
+  color: var(--workbench-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-usage {
+  color: var(--workbench-blue-strong);
+  font-family: var(--workbench-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job.active {
+  border-left-color: var(--workbench-blue-strong);
+  background: var(--workbench-blue-soft);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-empty {
+  min-height: 32px;
+  padding: 8px 10px 9px 28px;
+  border: 0;
+  background: transparent;
+  color: var(--workbench-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-system-status {
+  margin-top: 12px;
+  padding: 10px 8px 0;
+  border-top: 1px solid var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-system-status .knowledge-sync-status {
+  color: var(--workbench-muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-system-status .knowledge-sync-status .button {
+  width: 100%;
+  min-height: 30px;
+  margin-top: 7px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .server-state {
+  margin-top: 8px;
+  padding: 8px 8px 0;
+  border-top: 1px solid var(--workbench-line);
+  color: var(--workbench-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .server-state b {
+  color: var(--workbench-blue-strong);
+  font-family: var(--workbench-font-mono);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 700px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .section-usage {
+    display: none;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar span {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

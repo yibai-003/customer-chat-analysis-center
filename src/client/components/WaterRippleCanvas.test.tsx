@@ -6,7 +6,6 @@ import {
   MAX_RIPPLES,
   WaterRippleCanvas,
   appendRipple,
-  cappedPixelRatio,
 } from "./WaterRippleCanvas";
 import type { WaterRipple } from "./WaterRippleCanvas";
 
@@ -30,6 +29,21 @@ let host: HTMLDivElement;
 let root: Root;
 let context: CanvasContextStub;
 let animationFrames: FrameRequestCallback[];
+let canvasBounds: DOMRect;
+
+function createBounds(width: number, height: number): DOMRect {
+  return {
+    width,
+    height,
+    left: 20,
+    top: 30,
+    right: 20 + width,
+    bottom: 30 + height,
+    x: 20,
+    y: 30,
+    toJSON: () => ({}),
+  } as DOMRect;
+}
 
 beforeEach(() => {
   (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -37,6 +51,7 @@ beforeEach(() => {
   document.body.append(host);
   root = createRoot(host);
   animationFrames = [];
+  canvasBounds = createBounds(640, 480);
 
   const gradient = { addColorStop: vi.fn() } as unknown as CanvasGradient;
   context = {
@@ -56,17 +71,7 @@ beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(
     context as unknown as CanvasRenderingContext2D,
   );
-  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
-    width: 640,
-    height: 480,
-    left: 20,
-    top: 30,
-    right: 660,
-    bottom: 510,
-    x: 20,
-    y: 30,
-    toJSON: () => ({}),
-  });
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(() => canvasBounds);
   vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
     animationFrames.push(callback);
     return animationFrames.length;
@@ -82,17 +87,12 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("WaterRippleCanvas", () => {
-  it("caps rendering density to protect desktop performance", () => {
-    expect(cappedPixelRatio(1)).toBe(1);
-    expect(cappedPixelRatio(2)).toBe(1.5);
-    expect(cappedPixelRatio(4)).toBe(1.5);
-  });
-
   it("keeps only the newest three ripples", () => {
     let ripples: WaterRipple[] = [];
     for (let index = 0; index < MAX_RIPPLES + 2; index += 1) {
@@ -125,6 +125,38 @@ describe("WaterRippleCanvas", () => {
 
     expect(context.arc).toHaveBeenCalled();
     expect(context.stroke).toHaveBeenCalled();
+  });
+
+  it("does not create ripples without layout size and resumes after resize", async () => {
+    let ambientCallback: TimerHandler | undefined;
+    vi.spyOn(window, "setInterval").mockImplementation((handler) => {
+      ambientCallback = handler;
+      return 1 as unknown as ReturnType<typeof window.setInterval>;
+    });
+    canvasBounds = createBounds(0, 0);
+
+    await act(async () => root.render(<WaterRippleCanvas />));
+
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+
+    await act(async () => {
+      if (typeof ambientCallback === "function") ambientCallback();
+    });
+    expect(requestAnimationFrame).not.toHaveBeenCalled();
+
+    canvasBounds = createBounds(640, 480);
+    await act(async () => window.dispatchEvent(new Event("resize")));
+
+    expect(requestAnimationFrame).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels the active frame when the page becomes hidden", async () => {
+    await act(async () => root.render(<WaterRippleCanvas />));
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+
+    expect(cancelAnimationFrame).toHaveBeenCalledWith(1);
   });
 
   it("does not start animation when reduced motion is requested", async () => {

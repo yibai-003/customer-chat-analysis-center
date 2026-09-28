@@ -5,6 +5,7 @@ import "./styles.css";
 import "./components/botanical-art.css";
 import "./components/detail-layout.css";
 import "./atelier-theme.css";
+import "./workspace-theme.css";
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

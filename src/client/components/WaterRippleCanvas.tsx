@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
+import { syncCanvasViewport } from "./canvas-runtime";
 
 export const MAX_RIPPLES = 3;
 
-const MAX_PIXEL_RATIO = 1.5;
 const RIPPLE_LIFETIME_MS = 1_450;
 const FRAME_INTERVAL_MS = 1_000 / 40;
 const POINTER_INTERVAL_MS = 110;
@@ -15,10 +15,6 @@ export type WaterRipple = {
   strength: number;
   startedAt: number;
 };
-
-export function cappedPixelRatio(pixelRatio: number) {
-  return Math.min(Math.max(pixelRatio, 1), MAX_PIXEL_RATIO);
-}
 
 export function appendRipple(ripples: WaterRipple[], ripple: WaterRipple) {
   return [...ripples, ripple].slice(-MAX_RIPPLES);
@@ -43,8 +39,8 @@ function drawRipple(
   );
 
   gradient.addColorStop(0, "rgba(255, 255, 255, 0)");
-  gradient.addColorStop(0.58, `rgba(235, 242, 226, ${0.08 * alpha})`);
-  gradient.addColorStop(0.78, `rgba(105, 132, 112, ${0.16 * alpha})`);
+  gradient.addColorStop(0.58, `rgba(228, 239, 247, ${0.08 * alpha})`);
+  gradient.addColorStop(0.78, `rgba(91, 139, 177, ${0.16 * alpha})`);
   gradient.addColorStop(1, "rgba(255, 255, 255, 0)");
 
   context.beginPath();
@@ -58,7 +54,7 @@ function drawRipple(
     context.arc(ripple.x, ripple.y, Math.max(1, radius - ring * 12), 0, Math.PI * 2);
     context.strokeStyle = ring === 1
       ? `rgba(255, 255, 255, ${0.22 * alpha})`
-      : `rgba(82, 111, 95, ${0.2 * alpha})`;
+      : `rgba(77, 119, 151, ${0.2 * alpha})`;
     context.lineWidth = ring === 1 ? 1.25 : 0.8;
     context.globalAlpha = 1;
     context.stroke();
@@ -83,25 +79,32 @@ export function WaterRippleCanvas() {
     let lastFrameAt = 0;
     let lastPointerAt = 0;
     let lastPointer: { x: number; y: number } | null = null;
+    let renderable = false;
     let width = 0;
     let height = 0;
 
     const pageIsHidden = () => document.visibilityState === "hidden";
 
+    const cancelFrame = () => {
+      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      animationFrame = 0;
+    };
+
     const requestFrame = () => {
-      if (!animationFrame && !reducedMotion && !pageIsHidden()) {
+      if (renderable && !animationFrame && !reducedMotion && !pageIsHidden()) {
         animationFrame = window.requestAnimationFrame(drawFrame);
       }
     };
 
     const addRipple = (x: number, y: number, strength: number, startedAt = performance.now()) => {
+      if (!renderable) return;
       ripples = appendRipple(ripples, { x, y, strength, startedAt });
       requestFrame();
     };
 
     function drawFrame(timestamp: number) {
       animationFrame = 0;
-      if (reducedMotion || pageIsHidden()) return;
+      if (!renderable || reducedMotion || pageIsHidden()) return;
       if (timestamp - lastFrameAt < FRAME_INTERVAL_MS) {
         requestFrame();
         return;
@@ -115,13 +118,17 @@ export function WaterRippleCanvas() {
     }
 
     const resize = () => {
-      const bounds = canvas.getBoundingClientRect();
-      width = Math.max(1, bounds.width);
-      height = Math.max(1, bounds.height);
-      const pixelRatio = cappedPixelRatio(window.devicePixelRatio || 1);
-      canvas.width = Math.round(width * pixelRatio);
-      canvas.height = Math.round(height * pixelRatio);
-      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+      const viewport = syncCanvasViewport(canvas, context);
+      if (!viewport) {
+        renderable = false;
+        cancelFrame();
+        ripples = [];
+        return;
+      }
+
+      renderable = true;
+      width = viewport.width;
+      height = viewport.height;
       context.clearRect(0, 0, width, height);
       ripples = [];
       if (!reducedMotion && !pageIsHidden()) {
@@ -135,7 +142,7 @@ export function WaterRippleCanvas() {
     };
 
     const handlePointerMove = (event: PointerEvent) => {
-      if (reducedMotion || pageIsHidden()) return;
+      if (!renderable || reducedMotion || pageIsHidden()) return;
       const point = pointerCoordinates(event);
       const now = performance.now();
       const distance = lastPointer
@@ -148,30 +155,28 @@ export function WaterRippleCanvas() {
     };
 
     const handlePointerDown = (event: PointerEvent) => {
-      if (reducedMotion || pageIsHidden()) return;
+      if (!renderable || reducedMotion || pageIsHidden()) return;
       const point = pointerCoordinates(event);
       addRipple(point.x, point.y, 1.08);
     };
 
     const handleVisibilityChange = () => {
       if (pageIsHidden()) {
-        if (animationFrame) window.cancelAnimationFrame(animationFrame);
-        animationFrame = 0;
+        cancelFrame();
         ripples = [];
         context.clearRect(0, 0, width, height);
         return;
       }
-      addRipple(width * 0.66, height * 0.46, 0.66);
+      if (renderable) addRipple(width * 0.66, height * 0.46, 0.66);
     };
 
     const handleMotionPreference = (event: MediaQueryListEvent) => {
       reducedMotion = event.matches;
       if (reducedMotion) {
-        if (animationFrame) window.cancelAnimationFrame(animationFrame);
-        animationFrame = 0;
+        cancelFrame();
         ripples = [];
         context.clearRect(0, 0, width, height);
-      } else {
+      } else if (renderable) {
         addRipple(width * 0.66, height * 0.42, 0.66);
       }
     };
@@ -183,7 +188,7 @@ export function WaterRippleCanvas() {
     motionPreference.addEventListener("change", handleMotionPreference);
     resize();
     ambientTimer = window.setInterval(() => {
-      if (!reducedMotion && !pageIsHidden()) {
+      if (renderable && !reducedMotion && !pageIsHidden()) {
         addRipple(width * 0.7, height * 0.32, 0.48);
       }
     }, AMBIENT_INTERVAL_MS);
@@ -195,7 +200,7 @@ export function WaterRippleCanvas() {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       motionPreference.removeEventListener("change", handleMotionPreference);
       window.clearInterval(ambientTimer);
-      if (animationFrame) window.cancelAnimationFrame(animationFrame);
+      cancelFrame();
     };
   }, []);
 

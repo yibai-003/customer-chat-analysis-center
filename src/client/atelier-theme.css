@@ -276,7 +276,6 @@ body[data-ui-theme="atelier"] .sidebar-scroll {
 }
 
 body[data-ui-theme="atelier"] .sidebar-title {
-  color: var(--atelier-ink);
   font-size: 11px;
   letter-spacing: .12em;
 }
@@ -350,6 +349,107 @@ body[data-ui-theme="atelier"] .job.active {
   border-color: var(--atelier-line);
   border-left-color: var(--atelier-green-deep);
   box-shadow: inset 3px 0 0 rgba(111, 132, 70, .48);
+}
+
+body[data-ui-theme="atelier"] .job-select {
+  min-width: 0;
+}
+
+body[data-ui-theme="atelier"] .job-select > span:last-child {
+  min-width: 0;
+}
+
+body[data-ui-theme="atelier"] .job-select strong {
+  display: block;
+  overflow: hidden;
+  color: var(--atelier-ink);
+  font-size: 14px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .job-select small {
+  overflow: visible;
+  color: var(--atelier-ink-soft);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+body[data-ui-theme="atelier"] .job-select .job-usage {
+  color: var(--atelier-ink-faint);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-ui-theme="atelier"] .job-section-parent-label,
+body[data-ui-theme="atelier"] .job-section-empty {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+body[data-ui-theme="atelier"] .job-section-heading > button:first-child {
+  min-height: 40px;
+  font-size: 13px;
+}
+
+body[data-ui-theme="atelier"] .job-section-heading b {
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .section-usage {
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .job-filters {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 7px;
+}
+
+body[data-ui-theme="atelier"] .job-filters input {
+  grid-column: 1 / -1;
+}
+
+body[data-ui-theme="atelier"] .job-filters input,
+body[data-ui-theme="atelier"] .job-filters select {
+  height: 36px;
+  padding-inline: 8px;
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .job-bulk-bar {
+  min-height: 40px;
+  flex-wrap: wrap;
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .job-bulk-bar label {
+  min-height: 36px;
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .job-bulk-bar button,
+body[data-ui-theme="atelier"] .job-control-bar button {
+  min-height: 36px;
+  padding: 6px 9px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+body[data-ui-theme="atelier"] .job-control-bar,
+body[data-ui-theme="atelier"] .job-control-results {
+  gap: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+body[data-ui-theme="atelier"] .job-control-results strong {
+  font-size: 12px;
 }
 
 body[data-ui-theme="atelier"] .xls {
@@ -550,8 +650,13 @@ body[data-ui-theme="atelier"] .content-header h1 {
 
 body[data-ui-theme="atelier"] .content-header p {
   color: var(--atelier-ink-soft);
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
+}
+
+body[data-ui-theme="atelier"] .content-actions select {
+  min-height: 40px;
+  font-size: 12px;
 }
 
 body[data-ui-theme="atelier"] .content-actions {
@@ -601,7 +706,7 @@ body[data-ui-theme="atelier"] .analysis-progress-compact-stats {
   flex-wrap: wrap;
   gap: 7px 14px;
   color: var(--atelier-ink-soft);
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -622,8 +727,15 @@ body[data-ui-theme="atelier"] .list-head {
   background: var(--atelier-panel-soft);
   color: var(--atelier-ink-soft);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 11px;
   letter-spacing: .04em;
+}
+
+body[data-ui-theme="atelier"] .list-head {
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .analysis-progress-status {
+  font-size: 12px;
 }
 
 body[data-ui-theme="atelier"] .record {
@@ -660,6 +772,7 @@ body[data-ui-theme="atelier"] .record-main img {
   height: 40px;
   border: 2px solid var(--atelier-ink);
   background: var(--atelier-panel-soft);
+  image-rendering: auto;
   transition: transform .16s steps(2, end);
 }
 
@@ -668,20 +781,20 @@ body[data-ui-theme="atelier"] .record:hover .record-main img {
 }
 
 body[data-ui-theme="atelier"] .record-main strong {
-  font-size: 12px;
+  font-size: 14px;
 }
 
 body[data-ui-theme="atelier"] .record-main small,
 body[data-ui-theme="atelier"] .view {
   color: var(--atelier-ink-faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 body[data-ui-theme="atelier"] .field-tags em {
   border-color: var(--atelier-line);
   background: var(--atelier-panel-soft);
   color: var(--atelier-ink-soft);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 body[data-ui-theme="atelier"] .status,
@@ -917,19 +1030,12 @@ body[data-ui-theme="atelier"] .signin-app {
   place-items: center;
   min-height: 100dvh;
   padding: 32px;
-  overflow: hidden;
-  background: var(--atelier-paper);
 }
 
 body[data-ui-theme="atelier"] .signin-app::before {
   content: "";
   position: absolute;
   inset: 0;
-  background-image:
-    linear-gradient(rgba(92, 85, 74, .07) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(92, 85, 74, .07) 1px, transparent 1px);
-  background-size: 32px 32px;
-  mask-image: linear-gradient(to right, rgba(0, 0, 0, .45), transparent 56%);
   pointer-events: none;
 }
 
@@ -937,13 +1043,6 @@ body[data-ui-theme="atelier"] .signin-layout {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: minmax(560px, 1.16fr) minmax(430px, .84fr);
-  width: min(1360px, 100%);
-  min-height: min(820px, calc(100dvh - 64px));
-  max-height: 900px;
-  border: 1px solid var(--atelier-ink);
-  background: var(--atelier-panel);
-  box-shadow: 9px 9px 0 rgba(98, 93, 79, .28);
 }
 
 body[data-ui-theme="atelier"] .signin {
@@ -955,9 +1054,7 @@ body[data-ui-theme="atelier"] .signin {
   width: auto;
   min-width: 0;
   margin: 0;
-  padding: 48px 52px 34px;
   border: 0;
-  background: rgba(255, 253, 247, .98);
   box-shadow: none;
 }
 
@@ -975,8 +1072,6 @@ body[data-ui-theme="atelier"] .signin-mark {
   height: 48px;
   margin: 0;
   overflow: hidden;
-  background: var(--atelier-green);
-  box-shadow: 3px 3px 0 var(--atelier-shadow);
 }
 
 body[data-ui-theme="atelier"] .signin-mark .botanical-art {
@@ -987,29 +1082,16 @@ body[data-ui-theme="atelier"] .signin-mark .botanical-art {
 body[data-ui-theme="atelier"] .signin-mark b {
   position: relative;
   z-index: 1;
-  color: var(--atelier-ink);
-  font-family: Georgia, "Times New Roman", serif;
 }
 
 body[data-ui-theme="atelier"] .signin-brand h1 {
   margin: 0;
-  color: var(--atelier-ink);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 21px;
   letter-spacing: 0;
 }
 
 body[data-ui-theme="atelier"] .signin-brand p {
   margin-top: 5px;
-  font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 9px;
   letter-spacing: 0;
-}
-
-body[data-ui-theme="atelier"] .signin-brand p,
-body[data-ui-theme="atelier"] .signin-foot,
-body[data-ui-theme="atelier"] .signin-meta small {
-  color: var(--atelier-ink-faint);
 }
 
 body[data-ui-theme="atelier"] .signin-intro {
@@ -1020,20 +1102,13 @@ body[data-ui-theme="atelier"] .signin-intro {
 body[data-ui-theme="atelier"] .signin-intro > span {
   display: block;
   margin-bottom: 12px;
-  color: var(--atelier-green-deep);
   font-family: "Cascadia Mono", Consolas, monospace;
-  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0;
 }
 
 body[data-ui-theme="atelier"] .signin-intro h2 {
-  max-width: 360px;
   margin: 0;
-  color: var(--atelier-ink);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 34px;
-  line-height: 1.24;
   letter-spacing: 0;
   text-wrap: balance;
 }
@@ -1041,9 +1116,6 @@ body[data-ui-theme="atelier"] .signin-intro h2 {
 body[data-ui-theme="atelier"] .signin-intro p {
   max-width: 390px;
   margin: 14px 0 0;
-  color: var(--atelier-ink-faint);
-  font-size: 13px;
-  line-height: 1.8;
 }
 
 body[data-ui-theme="atelier"] .signin-form {
@@ -1051,8 +1123,6 @@ body[data-ui-theme="atelier"] .signin-form {
 }
 
 body[data-ui-theme="atelier"] .signin-field span {
-  color: var(--atelier-ink-soft);
-  font-size: 11px;
   letter-spacing: 0;
 }
 
@@ -1060,33 +1130,17 @@ body[data-ui-theme="atelier"] .signin-field input {
   height: 46px;
   padding: 0 13px;
   border-width: 1px;
-  border-color: var(--atelier-line);
-  background: var(--atelier-panel);
-  color: var(--atelier-ink);
-  font-size: 13px;
   transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
-}
-
-body[data-ui-theme="atelier"] .signin-field input::placeholder {
-  color: #9b9488;
-}
-
-body[data-ui-theme="atelier"] .signin-field input:focus {
-  border-color: var(--atelier-ink);
-  background: #fff;
-  box-shadow: 3px 3px 0 rgba(165, 189, 112, .78);
 }
 
 body[data-ui-theme="atelier"] .signin-submit {
   justify-content: space-between;
   width: 100%;
-  min-height: 48px;
   margin-top: 2px;
   padding-inline: 17px;
 }
 
 body[data-ui-theme="atelier"] .signin-submit i {
-  font-family: Georgia, "Times New Roman", serif;
   font-size: 20px;
   font-style: normal;
   line-height: 1;
@@ -1102,17 +1156,8 @@ body[data-ui-theme="atelier"] .signin-submit:disabled {
   opacity: .64;
 }
 
-body[data-ui-theme="atelier"] .signin-error {
-  border-left-color: var(--atelier-danger);
-  background: #f7e7df;
-  color: #824737;
-}
-
 body[data-ui-theme="atelier"] .signin-hint {
   margin: 0 0 18px;
-  border-left-color: var(--atelier-green-deep);
-  background: #edf3df;
-  color: #4d6038;
 }
 
 body[data-ui-theme="atelier"] .signin-meta {
@@ -1136,9 +1181,6 @@ body[data-ui-theme="atelier"] .signin-foot {
 body[data-ui-theme="atelier"] .signin-foot i {
   width: 7px;
   height: 7px;
-  border: 1px solid var(--atelier-ink);
-  background: var(--atelier-green);
-  box-shadow: 2px 0 0 rgba(98, 93, 79, .24);
 }
 
 body[data-ui-theme="atelier"] .signin-meta small {
@@ -1155,18 +1197,12 @@ body[data-ui-theme="atelier"] .signin-analysis-canvas {
   min-width: 0;
   overflow: hidden;
   isolation: isolate;
-  border-right: 1px solid var(--atelier-ink);
-  background: #e9eadf;
 }
 
 body[data-ui-theme="atelier"] .signin-canvas-grid {
   position: absolute;
   inset: 0;
   z-index: -2;
-  background-image:
-    linear-gradient(rgba(74, 82, 62, .1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(74, 82, 62, .1) 1px, transparent 1px);
-  background-size: 28px 28px;
 }
 
 body[data-ui-theme="atelier"] .signin-ripple-canvas {
@@ -1192,8 +1228,6 @@ body[data-ui-theme="atelier"] .signin-analysis-canvas::before {
   inset: 8% 6% 9% 8%;
   z-index: -1;
   border: 1px solid rgba(42, 38, 32, .28);
-  background: rgba(244, 240, 230, .56);
-  box-shadow: 5px 5px 0 rgba(98, 93, 79, .14);
 }
 
 body[data-ui-theme="atelier"] .signin-canvas-header,
@@ -1222,14 +1256,11 @@ body[data-ui-theme="atelier"] .signin-canvas-header strong {
 }
 
 body[data-ui-theme="atelier"] .signin-canvas-header small {
-  color: var(--atelier-ink-faint);
   font-size: 9px;
 }
 
 body[data-ui-theme="atelier"] .signin-canvas-header strong {
   margin-top: 6px;
-  color: var(--atelier-ink);
-  font-family: Georgia, "Times New Roman", serif;
   font-size: 19px;
   font-weight: 600;
 }
@@ -1238,7 +1269,6 @@ body[data-ui-theme="atelier"] .signin-canvas-status {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  color: var(--atelier-ink-soft);
   font-size: 9px;
   white-space: nowrap;
 }
@@ -1246,8 +1276,6 @@ body[data-ui-theme="atelier"] .signin-canvas-status {
 body[data-ui-theme="atelier"] .signin-canvas-status i {
   width: 7px;
   height: 7px;
-  border: 1px solid var(--atelier-ink);
-  background: var(--atelier-green);
   animation: signin-status-pulse 2.4s ease-in-out infinite;
 }
 
@@ -1255,6 +1283,17 @@ body[data-ui-theme="atelier"] .signin-canvas-stage {
   position: absolute;
   inset: 20% 8% 16% 10%;
   z-index: 1;
+}
+
+body[data-ui-theme="atelier"] .signin-dandelion-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  opacity: 1;
+  pointer-events: none;
 }
 
 body[data-ui-theme="atelier"] .signin-workflow {
@@ -1277,12 +1316,6 @@ body[data-ui-theme="atelier"] .signin-workflow::before {
   bottom: 24px;
   left: 19px;
   width: 1px;
-  background: linear-gradient(
-    to bottom,
-    rgba(42, 38, 32, .18),
-    rgba(111, 132, 70, .7) 48%,
-    rgba(42, 38, 32, .18)
-  );
 }
 
 body[data-ui-theme="atelier"] .signin-workflow-step {
@@ -1300,14 +1333,7 @@ body[data-ui-theme="atelier"] .signin-workflow-step > span {
   width: 39px;
   height: 39px;
   border: 1px solid var(--atelier-ink);
-  background: var(--atelier-panel);
-  color: var(--atelier-ink-soft);
   font: 10px "Cascadia Mono", Consolas, monospace;
-  box-shadow: 3px 3px 0 rgba(98, 93, 79, .1);
-}
-
-body[data-ui-theme="atelier"] .signin-workflow-step:nth-child(3) > span {
-  background: var(--atelier-green);
 }
 
 body[data-ui-theme="atelier"] .signin-workflow-step strong,
@@ -1317,34 +1343,18 @@ body[data-ui-theme="atelier"] .signin-workflow-step small {
 }
 
 body[data-ui-theme="atelier"] .signin-workflow-step strong {
-  color: var(--atelier-ink);
-  font-size: 17px;
   font-weight: 600;
 }
 
 body[data-ui-theme="atelier"] .signin-workflow-step small {
   margin-top: 5px;
-  color: var(--atelier-ink-faint);
   font: 9px "Cascadia Mono", Consolas, monospace;
-}
-
-body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art {
-  position: absolute;
-  right: -8%;
-  bottom: -12%;
-  z-index: 0;
-  width: min(64%, 430px);
-  height: 355px;
-  opacity: .7;
-  transform: rotate(3deg);
-  animation: signin-botanical-drift 7s ease-in-out infinite;
 }
 
 body[data-ui-theme="atelier"] .signin-canvas-footer {
   bottom: 11%;
   padding-top: 12px;
   border-top: 1px solid rgba(42, 38, 32, .34);
-  color: var(--atelier-ink-faint);
   font-size: 8px;
   letter-spacing: 0;
 }
@@ -1354,116 +1364,21 @@ body[data-ui-theme="atelier"] .signin-canvas-footer {
   50% { opacity: 1; }
 }
 
-@keyframes signin-botanical-drift {
-  0%, 100% { transform: translate3d(0, 0, 0) rotate(3deg); }
-  50% { transform: translate3d(-14px, -10px, 0) rotate(0deg); }
-}
-
-body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__paper {
-  animation: signin-botanical-paper 11s ease-in-out infinite;
-}
-
-body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__scrap {
-  animation: signin-botanical-scrap 8s ease-in-out infinite;
-}
-
-body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__tape {
-  animation: signin-botanical-tape 10s ease-in-out infinite;
-}
-
-@keyframes signin-botanical-paper {
-  0%, 100% { transform: translate3d(0, 0, 0) rotate(-9deg); }
-  50% { transform: translate3d(8px, -6px, 0) rotate(-6deg); }
-}
-
-@keyframes signin-botanical-scrap {
-  0%, 100% { transform: translate3d(0, 0, 0) rotate(5deg); }
-  50% { transform: translate3d(-9px, 5px, 0) rotate(2deg); }
-}
-
-@keyframes signin-botanical-tape {
-  0%, 100% { transform: translate3d(0, 0, 0) rotate(-13deg); }
-  50% { transform: translate3d(5px, -4px, 0) rotate(-9deg); }
-}
-
-@media (max-width: 1099px) {
-  body[data-ui-theme="atelier"] .signin-app {
-    min-height: calc(100dvh - 1px);
-    padding: 24px;
-  }
-
-  body[data-ui-theme="atelier"] .signin-layout {
-    display: block;
-    width: min(620px, 100%);
-    min-height: 0;
-  }
-
-  body[data-ui-theme="atelier"] .signin,
-  body[data-ui-theme="atelier"] .signin-analysis-canvas {
-    grid-column: auto;
-    grid-row: auto;
-  }
-
-  body[data-ui-theme="atelier"] .signin {
-    min-height: min(718px, calc(100dvh - 50px));
-    padding: 42px 48px 30px;
-  }
-
-  body[data-ui-theme="atelier"] .signin-analysis-canvas {
-    display: none;
-  }
-}
-
 @media (max-width: 620px) {
   body[data-ui-theme="atelier"] .signin-app {
-    padding: 0;
     overflow: auto;
-  }
-
-  body[data-ui-theme="atelier"] .signin-layout {
-    width: 100%;
-    min-height: 100dvh;
-    border: 0;
-    box-shadow: none;
-  }
-
-  body[data-ui-theme="atelier"] .signin {
-    min-height: 100dvh;
-    padding: 28px 22px 24px;
   }
 
   body[data-ui-theme="atelier"] .signin-intro {
     margin-bottom: 24px;
     padding-top: 38px;
   }
-
-  body[data-ui-theme="atelier"] .signin-intro h2 {
-    font-size: 29px;
-  }
-
-  body[data-ui-theme="atelier"] .signin-meta {
-    align-items: flex-start;
-    flex-direction: column;
-    gap: 8px;
-  }
 }
 
 @media (max-height: 760px) and (min-width: 1100px) {
-  body[data-ui-theme="atelier"] .signin-app {
-    padding: 18px;
-  }
-
-  body[data-ui-theme="atelier"] .signin-layout {
-    min-height: calc(100dvh - 36px);
-  }
 
   body[data-ui-theme="atelier"] .signin {
     padding: 32px 44px 25px;
-  }
-
-  body[data-ui-theme="atelier"] .signin-intro {
-    margin-bottom: 22px;
-    padding-top: 24px;
   }
 
   body[data-ui-theme="atelier"] .signin-meta {
@@ -1485,11 +1400,11 @@ body[data-ui-theme="atelier"] label.button:focus-within {
     display: none;
   }
 
-  body[data-ui-theme="atelier"] .signin-canvas-status i,
-  body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art,
-  body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__paper,
-  body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__scrap,
-  body[data-ui-theme="atelier"] .signin-canvas-stage > .botanical-art .botanical-art__tape {
+  body[data-ui-theme="atelier"] .signin-dandelion-canvas {
+    opacity: .4;
+  }
+
+  body[data-ui-theme="atelier"] .signin-canvas-status i {
     animation: none;
   }
 
@@ -1521,6 +1436,19 @@ body[data-ui-theme="atelier"] .detail-drawer-backdrop {
 @media (max-width: 1199px) {
   body[data-ui-theme="atelier"] .workspace {
     grid-template-columns: var(--sidebar-width, 208px) minmax(0, 1fr);
+  }
+
+  body[data-ui-theme="atelier"] .job-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  body[data-ui-theme="atelier"] .job-section-heading > button:first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  body[data-ui-theme="atelier"] .section-usage {
+    display: none;
   }
 
   body[data-ui-theme="atelier"] .content-header {
@@ -1622,10 +1550,96 @@ body[data-ui-theme="atelier"] .detail-drawer-backdrop {
   body[data-ui-theme="atelier"] .sidebar {
     border-right: 0;
     border-bottom: 2px solid var(--atelier-ink);
+    max-height: min(42dvh, 320px);
+    padding: 14px 12px;
+  }
+
+  body[data-ui-theme="atelier"] .sidebar-scroll {
+    max-height: 100%;
+  }
+
+  body[data-ui-theme="atelier"] .job-section-heading > button:first-child {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  body[data-ui-theme="atelier"] .section-usage {
+    display: none;
   }
 
   body[data-ui-theme="atelier"] .content {
     padding: 24px 15px 44px;
+  }
+
+  body[data-ui-theme="atelier"] .content-header {
+    gap: 14px;
+    padding-bottom: 16px;
+  }
+
+  body[data-ui-theme="atelier"] .content-header > .task-heading {
+    padding-right: 0;
+  }
+
+  body[data-ui-theme="atelier"] .task-heading > .botanical-art {
+    display: none;
+  }
+
+  body[data-ui-theme="atelier"] .content-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  body[data-ui-theme="atelier"] .content-actions select {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  body[data-ui-theme="atelier"] .content-actions .button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  body[data-ui-theme="atelier"] .record-list {
+    overflow: visible;
+  }
+
+  body[data-ui-theme="atelier"] .list-head {
+    display: none;
+  }
+
+  body[data-ui-theme="atelier"] .record,
+  body[data-ui-theme="atelier"] .record.record-without-selection {
+    grid-template-columns: 22px minmax(0, 1fr);
+    gap: 8px;
+    min-width: 0;
+    padding: 10px 8px;
+  }
+
+  body[data-ui-theme="atelier"] .record-select {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 7px 10px;
+    min-width: 0;
+    padding: 4px 0;
+  }
+
+  body[data-ui-theme="atelier"] .record-select .record-main,
+  body[data-ui-theme="atelier"] .record-select .field-tags {
+    grid-column: 1 / -1;
+  }
+
+  body[data-ui-theme="atelier"] .field-tags {
+    flex-wrap: wrap;
+  }
+
+  body[data-ui-theme="atelier"] .field-tags em {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+
+  body[data-ui-theme="atelier"] .record-select .view {
+    display: none;
   }
 
   body[data-ui-theme="atelier"] .detail {
@@ -1641,5 +1655,367 @@ body[data-ui-theme="atelier"] .detail-drawer-backdrop {
     transition-duration: .01ms !important;
     animation-duration: .01ms !important;
     animation-iteration-count: 1 !important;
+  }
+}
+
+/* Login page follows the pale blue-gray workspace direction. */
+body[data-ui-theme="atelier"] .signin-app {
+  --signin-page: #f2f6f9;
+  --signin-panel: #fff;
+  --signin-panel-tint: #f6f9fb;
+  --signin-ink: #243341;
+  --signin-muted: #718293;
+  --signin-line: #dce5ec;
+  --signin-blue: #668eae;
+  --signin-blue-deep: #456f91;
+  --signin-blue-soft: #eaf2f8;
+  --signin-green: #739986;
+  --signin-green-soft: #eaf2ee;
+  --signin-danger: #a84d4d;
+  --signin-shadow: 0 20px 60px rgba(51, 77, 96, .1);
+  overflow: auto;
+  color: var(--signin-ink);
+  background:
+    radial-gradient(circle at 6% 7%, rgba(191, 213, 229, .34), transparent 27%),
+    radial-gradient(circle at 95% 91%, rgba(205, 222, 215, .32), transparent 25%),
+    var(--signin-page);
+}
+
+body[data-ui-theme="atelier"] .signin-app::before {
+  opacity: .48;
+  background-image:
+    linear-gradient(rgba(92, 125, 147, .055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92, 125, 147, .055) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(145deg, #000 0%, transparent 84%);
+}
+
+body[data-ui-theme="atelier"] .signin-layout {
+  grid-template-columns: minmax(0, 1.13fr) minmax(390px, .87fr);
+  width: min(1240px, 100%);
+  min-height: min(760px, calc(100dvh - 64px));
+  max-height: none;
+  overflow: hidden;
+  border: 1px solid rgba(206, 219, 228, .9);
+  border-radius: 10px;
+  background: var(--signin-panel);
+  box-shadow: var(--signin-shadow);
+}
+
+body[data-ui-theme="atelier"] .signin {
+  padding: 44px clamp(34px, 5vw, 64px) 32px;
+  background: var(--signin-panel);
+}
+
+body[data-ui-theme="atelier"] .signin-mark {
+  border: 1px solid #d6e3eb;
+  border-radius: 8px;
+  background: var(--signin-blue-deep);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .signin-mark b {
+  color: #fff;
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+body[data-ui-theme="atelier"] .signin-brand h1,
+body[data-ui-theme="atelier"] .signin-intro h2 {
+  color: var(--signin-ink);
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+body[data-ui-theme="atelier"] .signin-brand h1 {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+body[data-ui-theme="atelier"] .signin-brand p {
+  color: var(--signin-muted);
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 9px;
+}
+
+body[data-ui-theme="atelier"] .signin-intro > span {
+  color: var(--signin-blue-deep);
+  font-size: 10px;
+}
+
+body[data-ui-theme="atelier"] .signin-intro h2 {
+  max-width: 390px;
+  font-size: 30px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+body[data-ui-theme="atelier"] .signin-intro p {
+  color: var(--signin-muted);
+  font-size: 13px;
+  line-height: 1.75;
+}
+
+body[data-ui-theme="atelier"] .signin-field span {
+  color: #4e6070;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+body[data-ui-theme="atelier"] .signin-field input {
+  min-height: 46px;
+  border-color: var(--signin-line);
+  border-radius: 6px;
+  background: #fbfcfd;
+  color: var(--signin-ink);
+  font-size: 13px;
+}
+
+body[data-ui-theme="atelier"] .signin-field input::placeholder {
+  color: #8a9aa7;
+}
+
+body[data-ui-theme="atelier"] .signin-field input:focus {
+  border-color: var(--signin-blue);
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(102, 142, 174, .14);
+}
+
+body[data-ui-theme="atelier"] .signin-submit,
+body[data-ui-theme="atelier"] .signin-submit.button.primary {
+  min-height: 48px;
+  border: 1px solid var(--signin-blue-deep);
+  border-radius: 6px;
+  background: var(--signin-blue-deep);
+  color: #fff;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .signin-submit:hover:not(:disabled) {
+  border-color: #365f7f;
+  background: #365f7f;
+  box-shadow: 0 5px 14px rgba(69, 111, 145, .16);
+}
+
+body[data-ui-theme="atelier"] .signin-submit i {
+  font-family: inherit;
+}
+
+body[data-ui-theme="atelier"] .signin-error {
+  border-left-color: var(--signin-danger);
+  border-radius: 4px;
+  background: #fbefef;
+  color: #873d3d;
+}
+
+body[data-ui-theme="atelier"] .signin-hint {
+  border-left-color: var(--signin-blue);
+  border-radius: 4px;
+  background: var(--signin-blue-soft);
+  color: #3d627e;
+}
+
+body[data-ui-theme="atelier"] .signin-meta {
+  border-top: 1px solid #edf1f4;
+}
+
+body[data-ui-theme="atelier"] .signin-foot,
+body[data-ui-theme="atelier"] .signin-meta small {
+  color: var(--signin-muted);
+}
+
+body[data-ui-theme="atelier"] .signin-foot i {
+  border: 0;
+  border-radius: 50%;
+  background: var(--signin-green);
+  box-shadow: 0 0 0 3px var(--signin-green-soft);
+}
+
+body[data-ui-theme="atelier"] .signin-analysis-canvas {
+  border-right: 1px solid var(--signin-line);
+  background:
+    linear-gradient(145deg, rgba(235, 243, 248, .94), rgba(226, 237, 242, .97)),
+    var(--signin-blue-soft);
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-grid {
+  background-image:
+    linear-gradient(rgba(92, 125, 147, .055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(92, 125, 147, .055) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(145deg, #000 0%, transparent 84%);
+}
+
+body[data-ui-theme="atelier"] .signin-analysis-canvas::before {
+  border-color: rgba(87, 128, 155, .14);
+  border-radius: 8px;
+  background: rgba(246, 250, 252, .55);
+  box-shadow: 0 12px 34px rgba(66, 99, 122, .07);
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-header {
+  border-bottom-color: rgba(87, 128, 155, .24);
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-header small,
+body[data-ui-theme="atelier"] .signin-canvas-footer {
+  color: #718293;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-header strong {
+  color: var(--signin-ink);
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-status {
+  color: #597769;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-status i {
+  border: 0;
+  border-radius: 50%;
+  background: #65a47f;
+}
+
+body[data-ui-theme="atelier"] .signin-workflow::before {
+  background: linear-gradient(
+    to bottom,
+    rgba(102, 142, 174, .16),
+    rgba(102, 142, 174, .56) 48%,
+    rgba(102, 142, 174, .16)
+  );
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step > span {
+  border-color: #c8d8e3;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .88);
+  color: var(--signin-blue-deep);
+  box-shadow: 0 2px 8px rgba(66, 99, 122, .08);
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step:nth-child(3) > span {
+  border-color: var(--signin-blue);
+  background: var(--signin-blue);
+  color: #fff;
+  box-shadow: 0 0 0 5px rgba(102, 142, 174, .13);
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step strong {
+  color: #31485a;
+  font-size: 15px;
+}
+
+body[data-ui-theme="atelier"] .signin-workflow-step small {
+  color: #81909e;
+}
+
+body[data-ui-theme="atelier"] .signin-canvas-footer {
+  border-top-color: rgba(87, 128, 155, .24);
+}
+
+body[data-ui-theme="atelier"] button:focus-visible,
+body[data-ui-theme="atelier"] input:focus-visible {
+  outline-color: var(--signin-blue);
+}
+
+@media (max-width: 1099px) {
+  body[data-ui-theme="atelier"] .signin-app {
+    min-height: 100dvh;
+    padding: 24px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 220px auto;
+    width: min(620px, 100%);
+    min-height: 0;
+  }
+
+  body[data-ui-theme="atelier"] .signin,
+  body[data-ui-theme="atelier"] .signin-analysis-canvas {
+    grid-column: 1;
+  }
+
+  body[data-ui-theme="atelier"] .signin-analysis-canvas {
+    display: block;
+    grid-row: 1;
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--signin-line);
+  }
+
+  body[data-ui-theme="atelier"] .signin {
+    grid-row: 2;
+    min-height: 0;
+    padding: 34px 44px 28px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-intro {
+    margin: 44px 0 24px;
+    padding-top: 0;
+  }
+
+  body[data-ui-theme="atelier"] .signin-meta {
+    padding-top: 24px;
+  }
+}
+
+@media (max-width: 620px) {
+  body[data-ui-theme="atelier"] .signin-app {
+    padding: 0;
+  }
+
+  body[data-ui-theme="atelier"] .signin-layout {
+    display: block;
+    width: 100%;
+    min-height: 100dvh;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  body[data-ui-theme="atelier"] .signin-analysis-canvas {
+    display: none;
+  }
+
+  body[data-ui-theme="atelier"] .signin {
+    min-height: 100dvh;
+    padding: 30px 24px 24px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-intro {
+    margin: 54px 0 25px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-intro h2 {
+    font-size: 27px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 9px;
+    padding-top: 20px;
+  }
+}
+
+@media (max-height: 760px) and (min-width: 1100px) {
+  body[data-ui-theme="atelier"] .signin-app {
+    padding: 18px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-layout {
+    min-height: calc(100dvh - 36px);
+  }
+
+  body[data-ui-theme="atelier"] .signin {
+    padding-top: 30px;
+    padding-bottom: 24px;
+  }
+
+  body[data-ui-theme="atelier"] .signin-intro {
+    margin-bottom: 22px;
+    padding-top: 24px;
   }
 }
