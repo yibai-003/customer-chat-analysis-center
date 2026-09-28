@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { ModelConfig, ModelPurpose, ModelUsageEvent } from "../../../shared/types";
+import { SelectMenu } from "../SelectMenu";
 
 type EventType = ModelUsageEvent["eventType"] | "";
 
@@ -69,27 +70,15 @@ export function UsageView({
       <div className="usage-filters">
         <label>
           用途筛选
-          <select value={purpose} onChange={(event) => setPurpose(event.target.value as ModelPurpose | "")}>
-            <option value="">全部用途</option>
-            <option value="vision">视觉</option>
-            <option value="text">文本</option>
-          </select>
+          <SelectMenu ariaLabel="用途筛选" value={purpose} onChange={(value) => setPurpose(value as ModelPurpose | "")} options={[{ value: "", label: "全部用途" }, { value: "vision", label: "视觉" }, { value: "text", label: "文本" }]} />
         </label>
         <label>
           模型筛选
-          <select value={modelConfigId} onChange={(event) => setModelConfigId(event.target.value)}>
-            <option value="">全部模型</option>
-            {models.map((model) => <option key={model.id} value={model.id}>{model.name}</option>)}
-          </select>
+          <SelectMenu ariaLabel="模型筛选" value={modelConfigId} onChange={setModelConfigId} options={[{ value: "", label: "全部模型" }, ...models.map((model) => ({ value: model.id, label: model.name }))]} />
         </label>
         <label>
           事件筛选
-          <select value={eventType} onChange={(event) => setEventType(event.target.value as EventType)}>
-            <option value="">全部事件</option>
-            {Object.entries(eventLabels).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
+          <SelectMenu ariaLabel="事件筛选" value={eventType} onChange={(value) => setEventType(value as EventType)} options={[{ value: "", label: "全部事件" }, ...Object.entries(eventLabels).map(([value, label]) => ({ value, label }))]} />
         </label>
       </div>
 

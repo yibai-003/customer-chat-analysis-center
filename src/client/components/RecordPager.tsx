@@ -1,3 +1,5 @@
+import { SelectMenu } from "./SelectMenu";
+
 interface RecordPagerProps {
   page: number;
   total: number;
@@ -24,16 +26,14 @@ export function RecordPager({
     <nav className="record-pager" aria-label="记录分页">
       <label>
         <span>每页</span>
-        <select
-          aria-label="每页记录数"
-          value={pageSize}
+        <SelectMenu
+          ariaLabel="每页记录数"
+          className="record-page-size-select"
+          value={String(pageSize)}
           disabled={!onPageSizeChange}
-          onChange={(event) => onPageSizeChange?.(Number(event.target.value))}
-        >
-          {PAGE_SIZE_OPTIONS.map((option) => (
-            <option key={option} value={option}>{option}</option>
-          ))}
-        </select>
+          options={PAGE_SIZE_OPTIONS.map((option) => ({ value: String(option), label: String(option) }))}
+          onChange={(value) => onPageSizeChange?.(Number(value))}
+        />
       </label>
       <output aria-live="polite">{start}-{end} / {total}</output>
       <button

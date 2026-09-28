@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { AnalysisSection, SectionConfigVersion } from "../../../shared/types";
 import { api } from "../../api";
 import { Modal } from "../Modal";
+import { SelectMenu } from "../SelectMenu";
 
 type ReceptionRule = {
   id: string;
@@ -140,16 +141,15 @@ export function SectionVersionManagementDialog({
     <div className="admin-create-form">
       <div className="form-grid">
         <label className="wide">分析板块
-          <select
-            aria-label="配置版本所属板块"
+          <SelectMenu
+            ariaLabel="配置版本所属板块"
             value={sectionId}
-            onChange={(event) => {
+            onChange={(value) => {
               setRuleVersion(null);
-              setSectionId(event.target.value);
+              setSectionId(value);
             }}
-          >
-            {availableSections.map((section) => <option value={section.id} key={section.id}>{section.name}</option>)}
-          </select>
+            options={availableSections.map((section) => ({ value: section.id, label: section.name }))}
+          />
         </label>
       </div>
       <div className="modal-actions">

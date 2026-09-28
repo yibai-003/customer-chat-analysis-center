@@ -60,10 +60,18 @@ function labeled<T extends HTMLElement>(label: string) {
   return host.querySelector<T>(`[aria-label="${label}"]`);
 }
 
-function setValue(element: HTMLInputElement | HTMLSelectElement, value: string) {
-  const prototype = element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-  Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, value);
-  element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+function setValue(element: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+async function chooseOption(label: string, value: string) {
+  const trigger = labeled<HTMLButtonElement>(label);
+  if (!trigger) throw new Error(`找不到下拉菜单：${label}`);
+  await act(async () => trigger.click());
+  const option = host.querySelector<HTMLButtonElement>(`[role="option"][data-value="${value}"]`);
+  if (!option) throw new Error(`找不到下拉选项：${value}`);
+  await act(async () => option.click());
 }
 
 function buttonByText(text: string) {
@@ -118,7 +126,7 @@ describe("audit log dialog", () => {
     handler = () => jsonResponse({ items: [denied], limit: 25, nextCursor: null } satisfies AuditEventPage);
 
     await act(async () => setValue(labeled<HTMLInputElement>("按动作筛选")!, "review.save"));
-    await act(async () => setValue(labeled<HTMLSelectElement>("按结果筛选")!, "failure"));
+    await chooseOption("按结果筛选", "failure");
     await act(async () => setValue(labeled<HTMLInputElement>("开始时间")!, "2026-09-17T00:00"));
     await act(async () => buttonByText("查询")!.click());
 

@@ -10,6 +10,7 @@ import type {
   KnowledgeImportPreviewResponse,
 } from "../../api/knowledge-api";
 import { Modal } from "../Modal";
+import { SelectMenu } from "../SelectMenu";
 
 const roles: Array<{ value: KnowledgeColumnRole; label: string }> = [
   { value: "result", label: "结果列" },
@@ -199,21 +200,21 @@ export function KnowledgeImportDialog({
               {role.label}
             </label>)}
           </div>
-          <select
-            aria-label={`${column.name} 父列约束`}
+          <SelectMenu
+            ariaLabel={`${column.name} 父列约束`}
             value={column.requiredParent ?? ""}
             disabled={confirming}
-            onChange={(event) => setColumns((current) => current.map((entry) => (
+            onChange={(value) => setColumns((current) => current.map((entry) => (
               entry.name === column.name
-                ? { ...entry, requiredParent: event.target.value || undefined }
+                ? { ...entry, requiredParent: value || undefined }
                 : entry
             )))}
-          >
-            <option value="">无父列约束</option>
-            {columns.filter((candidate) => candidate.name !== column.name).map((candidate) => (
-              <option key={candidate.name} value={candidate.name}>{candidate.name}</option>
-            ))}
-          </select>
+            options={[
+              { value: "", label: "无父列约束" },
+              ...columns.filter((candidate) => candidate.name !== column.name)
+                .map((candidate) => ({ value: candidate.name, label: candidate.name })),
+            ]}
+          />
         </div>)}
       </div>
       {preview.errors.length > 0 && <div className="import-errors">

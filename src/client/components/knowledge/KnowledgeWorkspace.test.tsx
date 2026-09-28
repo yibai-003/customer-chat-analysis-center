@@ -109,8 +109,10 @@ function namedButton(name: string): HTMLButtonElement {
   return button;
 }
 
-function namedControl(name: string): HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement {
-  const labelled = host.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+type TestControl = HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement;
+
+function namedControl(name: string): TestControl {
+  const labelled = host.querySelector<TestControl>(
     `[aria-label="${name}"]`,
   );
   if (labelled) return labelled;
@@ -118,8 +120,8 @@ function namedControl(name: string): HTMLInputElement | HTMLTextAreaElement | HT
     candidate.querySelector(":scope > span")?.textContent?.trim().startsWith(name)
     || candidate.childNodes[0]?.textContent?.trim() === name
   ));
-  const control = label?.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-    "input, textarea, select",
+  const control = label?.querySelector<TestControl>(
+    'input, textarea, button[aria-haspopup="listbox"]',
   );
   if (!control) throw new Error(`Control not found: ${name}\n${host.innerHTML}`);
   return control;
@@ -161,15 +163,20 @@ async function click(element: Element) {
 }
 
 async function change(
-  element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement,
+  element: TestControl,
   value: string,
 ) {
+  if (element instanceof HTMLButtonElement) {
+    await click(element);
+    const option = host.querySelector<HTMLButtonElement>(`[role="option"][data-value="${value}"]`);
+    if (!option) throw new Error(`Option not found: ${value}\n${host.innerHTML}`);
+    await click(option);
+    return;
+  }
   await act(async () => {
-    const prototype = element instanceof HTMLSelectElement
-      ? HTMLSelectElement.prototype
-      : element instanceof HTMLTextAreaElement
-        ? HTMLTextAreaElement.prototype
-        : HTMLInputElement.prototype;
+    const prototype = element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
     setter?.call(element, value);
     element.dispatchEvent(new Event("input", { bubbles: true }));
@@ -193,6 +200,15 @@ afterEach(async () => {
 });
 
 describe("knowledge workspace", () => {
+  it("uses the workbench visual shell without the old botanical decoration", async () => {
+    const api = createApi({ listBases: vi.fn().mockResolvedValue([]) });
+    await renderUi(<KnowledgeWorkspace section={section} onBack={vi.fn()} apiClient={api} />);
+    await waitFor(() => expect(exactText("当前板块还没有知识库")).toBeTruthy());
+
+    expect(host.querySelector(".botanical-art")).toBeNull();
+    expect(host.textContent).not.toContain("插画来源");
+  });
+
   it("opens the current section knowledge workspace from App and returns", async () => {
     const payloads: Record<string, unknown> = {
       "/api/auth/me": { user: { id: "admin-1", organizationId: "org-default", username: "admin", displayName: "测试管理员", role: "admin", isEnabled: true, createdAt: "2026-09-17T00:00:00.000Z", updatedAt: "2026-09-17T00:00:00.000Z" }, capabilities: ["task:view", "task:import", "task:analyze", "task:delete", "task:export", "review:save", "config:manage", "admin:manage", "audit:view"] },

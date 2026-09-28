@@ -83,16 +83,18 @@ async function waitFor(assertion: () => void, timeout = 2000) {
   throw lastError;
 }
 
-function control(name: string) {
-  const labelled = host.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+type TestControl = HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement;
+
+function control(name: string): TestControl {
+  const labelled = host.querySelector<TestControl>(
     `[aria-label="${name}"]`,
   );
   if (labelled) return labelled;
   const label = [...host.querySelectorAll("label")].find((candidate) => (
     candidate.textContent?.trim().startsWith(name)
   ));
-  const nested = label?.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
-    "input, textarea, select",
+  const nested = label?.querySelector<TestControl>(
+    'input, textarea, button[aria-haspopup="listbox"]',
   );
   if (!nested) throw new Error(`Control not found: ${name}\n${host.innerHTML}`);
   return nested;
@@ -114,13 +116,18 @@ async function click(element: Element) {
   });
 }
 
-async function change(element: HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement, value: string) {
+async function change(element: TestControl, value: string) {
+  if (element instanceof HTMLButtonElement) {
+    await click(element);
+    const option = host.querySelector<HTMLButtonElement>(`[role="option"][data-value="${value}"]`);
+    if (!option) throw new Error(`Option not found: ${value}\n${host.innerHTML}`);
+    await click(option);
+    return;
+  }
   await act(async () => {
-    const prototype = element instanceof HTMLSelectElement
-      ? HTMLSelectElement.prototype
-      : element instanceof HTMLTextAreaElement
-        ? HTMLTextAreaElement.prototype
-        : HTMLInputElement.prototype;
+    const prototype = element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
     Object.getOwnPropertyDescriptor(prototype, "value")?.set?.call(element, value);
     element.dispatchEvent(new Event("input", { bubbles: true }));
     element.dispatchEvent(new Event("change", { bubbles: true }));
@@ -206,7 +213,7 @@ describe("FieldConfigEditor knowledge modes", () => {
     />);
 
     await waitFor(() => expect(listBases).toHaveBeenCalledWith(section.id));
-    expect((control("知识库") as HTMLSelectElement).value).toBe(base.id);
+    expect((control("知识库") as HTMLButtonElement).value).toBe(base.id);
     expect((control("候选数") as HTMLInputElement).value).toBe("15");
     expect(control("字段提示词")).toBeTruthy();
     expect(button("显示选择")).toBeTruthy();
@@ -241,11 +248,13 @@ describe("FieldConfigEditor knowledge modes", () => {
       onRemove={vi.fn()}
     />);
 
-    await waitFor(() => expect((control("知识列") as HTMLSelectElement).value).toBe("三级原因"));
-    expect((control("匹配来源") as HTMLSelectElement).value).toBe(match.key);
-    expect([...((control("知识列") as HTMLSelectElement).options)].map((option) => option.value))
+    await waitFor(() => expect((control("知识列") as HTMLButtonElement).value).toBe("三级原因"));
+    expect((control("匹配来源") as HTMLButtonElement).value).toBe(match.key);
+    await click(control("知识列"));
+    expect([...host.querySelectorAll<HTMLElement>('[role="option"]')].map((option) => option.dataset.value))
       .toContain("说明");
-    expect((control("目标 Excel 字段") as HTMLSelectElement).value).toBe("最终原因");
+    await click(control("知识列"));
+    expect((control("目标 Excel 字段") as HTMLButtonElement).value).toBe("最终原因");
     const extractEditor = host.querySelectorAll(".field-editor")[1];
     expect(extractEditor.querySelector('[aria-label="字段提示词"]')).toBeNull();
     expect(extractEditor.querySelector('[aria-label="图片解析"]')).toBeNull();
@@ -385,7 +394,7 @@ describe("FieldConfigEditor knowledge modes", () => {
     await change(control("匹配来源"), matchTwo.key);
     currentFields = currentFields.map((current) => current.id === "extract" ? { ...current, matchFieldKey: matchTwo.key, knowledgeColumn: undefined } : current);
     await renderUi(<FieldConfigEditor fields={currentFields} sourceFields={section.sourceFields} onChange={onChange} onValidationChange={onValidationChange} onAdd={vi.fn()} onRemove={vi.fn()} />);
-    const knowledgeColumn = control("知识列") as HTMLSelectElement;
+    const knowledgeColumn = control("知识列") as HTMLButtonElement;
     expect(knowledgeColumn.disabled).toBe(false);
     await change(knowledgeColumn, "新列");
     currentFields = currentFields.map((current) => current.id === "extract" ? { ...current, knowledgeColumn: "新列" } : current);
@@ -403,10 +412,12 @@ describe("FieldConfigEditor knowledge modes", () => {
       .mockReturnValueOnce(second);
     const match = field({ executionType: "knowledge_match", knowledgeBaseId: base.id, exportEnabled: false, outputColumn: "" });
     await renderUi(<FieldConfigEditor fields={[match]} sourceFields={section.sourceFields} onChange={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} />);
-    await waitFor(() => expect((control("知识库") as HTMLSelectElement).value).toBe(base.id));
+    await waitFor(() => expect((control("知识库") as HTMLButtonElement).value).toBe(base.id));
     await renderUi(<FieldConfigEditor fields={[{ ...match, sectionId: "other-section" }]} sourceFields={section.sourceFields} onChange={vi.fn()} onAdd={vi.fn()} onRemove={vi.fn()} />);
     expect(host.textContent).toContain("正在加载知识库");
-    expect((control("知识库") as HTMLSelectElement).querySelector('option[value="base-1"]')).toBeNull();
+    await click(control("知识库"));
+    expect(host.querySelector('[role="option"][data-value="base-1"]')).toBeNull();
+    await click(control("知识库"));
     resolveSecond([]);
     await waitFor(() => expect(host.textContent).not.toContain("正在加载知识库"));
     expect(listBases).toHaveBeenCalledTimes(2);
@@ -469,7 +480,7 @@ describe("FieldConfigEditor knowledge modes", () => {
       section,
       { ...section, id: "logistics", name: "物流售后" },
     ]} close={vi.fn()} saved={vi.fn()} />);
-    await waitFor(() => expect((control("匹配来源") as HTMLSelectElement).value).toBe(matchOne.key));
+    await waitFor(() => expect((control("匹配来源") as HTMLButtonElement).value).toBe(matchOne.key));
     await change(control("匹配来源"), matchTwo.key);
     await waitFor(() => expect(host.querySelector(".form-error")?.textContent).toContain("当前匹配来源不包含原知识列"));
     await click(button("物流售后"));
@@ -491,7 +502,7 @@ describe("FieldConfigEditor knowledge modes", () => {
       { ...section, id: "after-sales", parentId: null, name: "售后分析" },
       section,
     ]} close={vi.fn()} saved={vi.fn()} />);
-    await waitFor(() => expect((control("匹配来源") as HTMLSelectElement).value).toBe(matchOne.key));
+    await waitFor(() => expect((control("匹配来源") as HTMLButtonElement).value).toBe(matchOne.key));
     await change(control("匹配来源"), matchTwo.key);
     await waitFor(() => expect(button("保存字段配置 →").disabled).toBe(true));
     const extractEditor = host.querySelectorAll(".field-editor")[2];

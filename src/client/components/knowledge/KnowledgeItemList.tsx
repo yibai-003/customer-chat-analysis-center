@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import type { KnowledgeBase, KnowledgeItem, KnowledgeItemPage } from "../../../shared/types";
 import type { KnowledgeApiClient } from "../../api/knowledge-api";
 import { ConfirmDialog } from "../ConfirmDialog";
+import { SelectMenu } from "../SelectMenu";
 import { KnowledgeItemEditor } from "./KnowledgeItemEditor";
 
 type EnabledFilter = "all" | "true" | "false";
@@ -219,19 +220,16 @@ export function KnowledgeItemList({
           disabled={mutationsLocked}
           onChange={(event) => { setSearch(event.target.value); setPageNumber(1); }}
         />
-        <select
-          aria-label="知识条目状态筛选"
+        <SelectMenu
+          ariaLabel="知识条目状态筛选"
           value={enabled}
           disabled={mutationsLocked}
-          onChange={(event) => {
-            setEnabled(event.target.value as EnabledFilter);
+          onChange={(value) => {
+            setEnabled(value as EnabledFilter);
             setPageNumber(1);
           }}
-        >
-          <option value="all">全部状态</option>
-          <option value="true">已启用</option>
-          <option value="false">已停用</option>
-        </select>
+          options={[{ value: "all", label: "全部状态" }, { value: "true", label: "已启用" }, { value: "false", label: "已停用" }]}
+        />
         <button
           className="button primary"
           disabled={mutationsLocked}

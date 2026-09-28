@@ -100,12 +100,11 @@ describe("RecordPager", () => {
     ));
 
     expect(host.textContent).toContain("51-80 / 80");
-    const select = host.querySelector<HTMLSelectElement>('select[aria-label="每页记录数"]');
-    if (!select) throw new Error("找不到每页记录数选择器");
-    act(() => {
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(select, "100");
-      select.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    const select = button("每页记录数");
+    act(() => select.click());
+    const option = host.querySelector<HTMLButtonElement>('[role="option"][data-value="100"]');
+    if (!option) throw new Error("找不到每页 100 条选项");
+    act(() => option.click());
 
     expect(onPageSizeChange).toHaveBeenCalledWith(100);
   });

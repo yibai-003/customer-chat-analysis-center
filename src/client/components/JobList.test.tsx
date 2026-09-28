@@ -162,14 +162,32 @@ describe("JobList batch task controls", () => {
     await render();
     await select("running");
 
-    const statusFilter = host.querySelector<HTMLSelectElement>("select[aria-label='按任务状态筛选']")!;
-    await act(async () => {
-      statusFilter.value = "paused";
-      statusFilter.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    const statusFilter = host.querySelector<HTMLButtonElement>("button[aria-label='按任务状态筛选']")!;
+    expect(statusFilter.getAttribute("aria-haspopup")).toBe("listbox");
+    await act(async () => statusFilter.click());
+    const pausedOption = [...host.querySelectorAll<HTMLElement>("[role='option']")]
+      .find((option) => option.textContent === "已暂停")!;
+    await act(async () => pausedOption.click());
 
     expect(host.textContent).toContain("未选择任务");
     expect(host.textContent).not.toContain("批量暂停");
+  });
+
+  it("opens the task status listbox and closes it with Escape", async () => {
+    await render();
+
+    const statusFilter = host.querySelector<HTMLButtonElement>("button[aria-label='按任务状态筛选']")!;
+    await act(async () => statusFilter.click());
+
+    expect(statusFilter.getAttribute("aria-expanded")).toBe("true");
+    expect(host.querySelector("[role='listbox'][aria-label='按任务状态筛选选项']")).not.toBeNull();
+    expect(host.querySelector("[role='option'][aria-selected='true']")?.textContent).toBe("全部状态");
+
+    await act(async () => {
+      statusFilter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    });
+
+    expect(statusFilter.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("uses the board filter as navigation and keeps task ownership visible", async () => {
@@ -189,11 +207,11 @@ describe("JobList batch task controls", () => {
     expect(host.textContent).not.toContain("ready.xlsx");
     expect(host.textContent).toContain("接待质检");
 
-    const sectionFilter = host.querySelector<HTMLSelectElement>("select[aria-label='按解析板块筛选']")!;
-    await act(async () => {
-      sectionFilter.value = "refund";
-      sectionFilter.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    const sectionFilter = host.querySelector<HTMLButtonElement>("button[aria-label='按解析板块筛选']")!;
+    await act(async () => sectionFilter.click());
+    const refundOption = [...host.querySelectorAll<HTMLElement>("[role='option']")]
+      .find((option) => option.textContent === "退款分析")!;
+    await act(async () => refundOption.click());
 
     expect(onSectionFilterChange).toHaveBeenCalledWith("refund");
   });
@@ -207,9 +225,30 @@ describe("JobList batch task controls", () => {
     expect(receptionGroup?.textContent).toContain("paused.xlsx");
     expect(receptionGroup?.textContent).not.toContain("ready.xlsx");
     expect(refundGroup?.textContent).toContain("ready.xlsx");
-    expect(receptionGroup?.textContent).toContain("消耗 2K · 6 次");
+    expect(receptionGroup?.textContent).toContain("2K · 6次");
     expect(receptionGroup?.textContent).toContain("有未知用量");
     expect(receptionGroup?.querySelector(".job-usage")?.textContent).toContain("消耗 1.5K Tokens");
+  });
+
+  it("shows exact task and board usage without navigating away", async () => {
+    await render();
+
+    const taskUsage = host.querySelector<HTMLButtonElement>('[aria-label="查看 running.xlsx 用量"]')!;
+    await act(async () => taskUsage.dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain("输入 Token1,200");
+    expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain("计费 Token1,500");
+    expect(onSelect).not.toHaveBeenCalled();
+
+    await act(async () => taskUsage.dispatchEvent(new FocusEvent("focusout", { bubbles: true })));
+    const boardUsage = host.querySelector<HTMLButtonElement>('[aria-label="查看接待质检板块用量"]')!;
+    await act(async () => boardUsage.dispatchEvent(new FocusEvent("focusin", { bubbles: true })));
+
+    const details = document.body.querySelector('[role="tooltip"]')?.textContent;
+    expect(details).toContain("输入 Token1,600");
+    expect(details).toContain("输出 Token400");
+    expect(details).toContain("计费 Token2,000");
+    expect(details).toContain("调用次数6");
+    expect(details).toContain("未知用量1 次");
   });
 
   it("keeps the full filename available when the task name is visually clipped", async () => {
