@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
 import { db, initDb } from "./client";
 import {
@@ -8,6 +8,9 @@ import {
   createJob,
   deleteJob,
   getJob,
+  getJobUsageSummary,
+  listJobs,
+  listSections,
   getRecord,
   addRecords,
   updateRecord,
@@ -85,6 +88,73 @@ describe("job repository", () => {
       platformCode: "BOUND",
       platformName: "绑定平台",
     });
+  });
+
+  it("aggregates model consumption for a task without double-counting unknown-usage events", () => {
+    const { job, record } = createConversationRecord(`USAGE${Date.now()}`);
+    const modelId = `usage-model-${job.id}`;
+    db.prepare(`INSERT INTO model_configs
+      (id,name,base_url,api_key_ciphertext,model,purpose,supports_vision,
+       temperature,max_tokens,is_default,is_enabled,created_at,updated_at)
+      VALUES (?,?,?,?,?,'vision',1,0.2,1500,0,1,?,?)`).run(
+      modelId,
+      "Usage aggregation test model",
+      "https://usage-test.example/v1",
+      "test-ciphertext",
+      "usage-test-model",
+      "2026-09-26T09:00:00.000Z",
+      "2026-09-26T09:00:00.000Z",
+    );
+    const insert = db.prepare(`INSERT INTO model_usage_events
+      (id,model_config_id,purpose,event_type,input_tokens,output_tokens,accounted_tokens,record_id,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?)`);
+    insert.run(`usage-success-${job.id}`, modelId, "vision", "success", 10, 5, 15, record.id, "2026-09-26T10:00:00.000Z");
+    insert.run(`usage-failure-${job.id}`, modelId, "vision", "failure", 2, 0, 2, record.id, "2026-09-26T10:01:00.000Z");
+    insert.run(`usage-unknown-${job.id}`, modelId, "vision", "usage_unknown", null, null, 20, record.id, "2026-09-26T10:02:00.000Z");
+
+    expect(getJobUsageSummary(job.id)).toEqual({
+      callCount: 2,
+      inputTokens: 12,
+      outputTokens: 5,
+      accountedTokens: 37,
+      unknownCallCount: 1,
+    });
+    expect(getJob(job.id)?.usageSummary).toEqual(getJobUsageSummary(job.id));
+    expect(listJobs().find((item) => item.id === job.id)?.usageSummary)
+      .toEqual(getJobUsageSummary(job.id));
+  });
+
+  it("loads all task summaries with a bounded number of database queries", () => {
+    createJob(`summary-one-${Date.now()}.xlsx`, "summary-one.xlsx");
+    createJob(`summary-two-${Date.now()}.xlsx`, "summary-two.xlsx");
+    const prepare = vi.spyOn(db, "prepare");
+
+    try {
+      expect(listJobs().length).toBeGreaterThanOrEqual(2);
+      expect(prepare.mock.calls.length).toBeLessThanOrEqual(4);
+    } finally {
+      prepare.mockRestore();
+    }
+  });
+
+  it("keeps legacy task field totals when no configuration version is recorded", () => {
+    const section = listSections().find((candidate) => candidate.parentId)!;
+    const job = createJob(
+      `legacy-summary-${Date.now()}.xlsx`,
+      "legacy-summary.xlsx",
+      { id: section.id, name: section.name },
+    );
+    addRecords(job.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 2,
+      anchor: {},
+      sourceFields: {},
+      imagePath: "legacy-summary.png",
+    }]);
+    db.prepare("UPDATE jobs SET section_config_version_id = NULL WHERE id = ?").run(job.id);
+
+    expect(listJobs().find((item) => item.id === job.id)?.totalFields)
+      .toBe(getJob(job.id)?.totalFields);
   });
 
   it("assigns a conversation ID only when a record enters a final analysis state", () => {
@@ -211,6 +281,7 @@ describe("job repository", () => {
     const initialPublished = publishSectionVersion(initialDraft.id);
     const first = createJob("version-1.xlsx", "version-1.xlsx", { id: sectionId, name: "任务版本绑定" });
     expect(first.sectionConfigVersionId).toBe(initialPublished.id);
+    expect(getJob(first.id)?.sectionConfigVersionNumber).toBe(initialPublished.versionNumber);
 
     const draft = createDraftVersion(sectionId);
     const published = publishSectionVersion(draft.id);
@@ -218,6 +289,7 @@ describe("job repository", () => {
 
     expect(published.isCurrent).toBe(true);
     expect(second.sectionConfigVersionId).toBe(published.id);
+    expect(getJob(second.id)?.sectionConfigVersionNumber).toBe(published.versionNumber);
     updateJobSection(first.id, { id: sectionId, name: "任务版本绑定" });
     expect(getJob(first.id)?.sectionConfigVersionId).toBe(first.sectionConfigVersionId);
   });

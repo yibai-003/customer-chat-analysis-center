@@ -124,8 +124,16 @@ function elementByText(text: string) {
   return [...host.querySelectorAll<HTMLElement>("button, label")].find((element) => element.textContent?.trim() === text);
 }
 
+function elementByTextPrefix(prefix: string) {
+  return [...host.querySelectorAll<HTMLElement>("button, label")].find((element) => element.textContent?.trim().startsWith(prefix));
+}
+
 function expectButtonVisible(text: string, visible: boolean) {
   expect(Boolean(elementByText(text)), text).toBe(visible);
+}
+
+function expectButtonPrefixVisible(prefix: string, visible: boolean) {
+  expect(Boolean(elementByTextPrefix(prefix)), prefix).toBe(visible);
 }
 
 async function renderWorkspace(role: UserRole) {
@@ -165,7 +173,7 @@ describe("capability gating in the workspace", () => {
   it("shows operators import, analysis and export controls but hides review and configuration", async () => {
     await renderWorkspace("operator");
     expectButtonVisible("＋ 导入 Excel", true);
-    expectButtonVisible("批量解析 →", true);
+    expectButtonPrefixVisible("批量解析全部待处理（", true);
     expectButtonVisible("导出结果 ↗", true);
     expectButtonVisible("板块配置", false);
     expectButtonVisible("配置版本", false);
@@ -187,7 +195,7 @@ describe("capability gating in the workspace", () => {
   it("shows reviewers review and export controls but hides import and analysis", async () => {
     await renderWorkspace("reviewer");
     expectButtonVisible("＋ 导入 Excel", false);
-    expectButtonVisible("批量解析 →", false);
+    expectButtonPrefixVisible("批量解析全部待处理（", false);
     expectButtonVisible("导出结果 ↗", true);
     expect(host.querySelector('input[aria-label^="选择记录"]')).toBeNull();
     expect(host.querySelector(".list-head")?.classList.contains("list-head-without-selection")).toBe(true);
@@ -204,7 +212,7 @@ describe("capability gating in the workspace", () => {
   it("keeps read-only users to viewing without import, analysis, export, review or configuration", async () => {
     await renderWorkspace("readonly");
     expectButtonVisible("＋ 导入 Excel", false);
-    expectButtonVisible("批量解析 →", false);
+    expectButtonPrefixVisible("批量解析全部待处理（", false);
     expectButtonVisible("导出结果 ↗", false);
     expectButtonVisible("板块配置", false);
     expectButtonVisible("配置版本", false);
@@ -231,7 +239,7 @@ describe("capability gating in the workspace", () => {
     expectButtonVisible("平台字典", true);
     expectButtonVisible("模型配置", true);
     expectButtonVisible("＋ 导入 Excel", false);
-    expectButtonVisible("批量解析 →", false);
+    expectButtonPrefixVisible("批量解析全部待处理（", false);
     expectButtonVisible("导出结果 ↗", false);
     expect(host.querySelector('[aria-label="打开接待分析知识库"]')).not.toBeNull();
     expectButtonVisible("账号管理", false);
@@ -253,7 +261,7 @@ describe("capability gating in the workspace", () => {
 
   it("clears privileged dialogs and reports an access error when the server denies an action", async () => {
     await renderWorkspace("operator");
-    await act(async () => elementByText("批量解析 →")!.click());
+    await act(async () => elementByTextPrefix("批量解析全部待处理（")!.click());
     await waitFor(() => expect(host.textContent).toContain("批量解析运行设置"));
 
     await act(async () => notifyAccessDenied("当前角色无权执行此操作"));

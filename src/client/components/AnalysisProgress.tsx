@@ -1,4 +1,5 @@
 import type { Job } from "../../shared/types";
+import { taskStatusMessage } from "../task-display";
 
 function percentage(value: number, total: number) {
   if (total <= 0) return 0;
@@ -58,6 +59,7 @@ export function AnalysisProgress({ job }: { job: Job }) {
 
   return (
     <section className="analysis-progress" aria-label="当前任务解析进度">
+      <strong className="analysis-progress-status">{taskStatusMessage(job.status)}</strong>
       <ProgressMetric label="记录进度" value={processedRecords} total={job.totalRecords} />
       <ProgressMetric label="字段进度" value={Math.min(job.totalFields, job.completedFields + job.failedFields + job.skippedFields + (job.needsReviewFields ?? 0))} total={job.totalFields} />
       <div className="analysis-progress-stats">

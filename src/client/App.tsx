@@ -31,6 +31,7 @@ import {
   structuredItems,
   type StructuredResultViewConfig,
 } from "./components/StructuredResultView";
+import { pendingRecordCount } from "./task-display";
 
 const roleLabels: Record<string, string> = {
   admin: "管理员",
@@ -105,6 +106,7 @@ function Workspace({ session }: { session: CurrentSession }) {
       : false
   ));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [taskSectionFilter, setTaskSectionFilter] = useState("all");
   const [topMenu, setTopMenu] = useState<"management" | "user" | null>(null);
   const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const detailPanelRef = useRef<HTMLElement | null>(null);
@@ -125,7 +127,6 @@ function Workspace({ session }: { session: CurrentSession }) {
     sections,
     platforms,
     activeFields,
-    activeSection,
     setActiveSection,
     models,
     dialog,
@@ -175,6 +176,7 @@ function Workspace({ session }: { session: CurrentSession }) {
     editSelectedRecord,
   } = useWorkspaceController({ canManageConfig: can("config:manage") });
   const selection = useRecordSelection({ jobId: job?.id, sectionId: currentSection?.id, filter });
+  const visibleSelectedCount = recordPage.items.filter((record) => selection.selectedIds.includes(record.id)).length;
   const clearSelection = selection.clear;
   const detailDrawerOpen = isDetailDrawerViewport && detailOpen && Boolean(selected);
   useEffect(() => {
@@ -373,9 +375,21 @@ function Workspace({ session }: { session: CurrentSession }) {
               </button>
             </div>
           </div>
-          {!jobs.length ? <div className="side-empty">导入 Excel 文件<br />建立解析任务</div> : <JobList jobs={jobs} sections={sections} selectedId={job?.id} canDelete={can("task:delete")} onSelect={(id) => void navigateToJob(id).catch((error) => setNotice(error instanceof Error ? error.message : "切换任务失败"))} onDeleted={handleJobsDeleted} />}
           <div className="sidebar-title section-title"><span>解析板块</span>{can("config:manage") && <button onClick={() => setDialog("section")}>管理</button>}</div>
-          <nav>{sections.filter((s) => !s.parentId).map((parent) => <div className="section-group" key={parent.id}><div className="parent">╰ {parent.name}</div>{sections.filter((s) => s.parentId === parent.id).map((child) => <div className={`section-entry ${activeSection === child.id ? "active" : ""}`} key={child.id}><button className="section-select" disabled={Boolean(job?.sectionId && job.sectionId !== child.id)} title={job?.sectionId && job.sectionId !== child.id ? "当前任务已绑定其他解析板块" : undefined} onClick={() => setActiveSection(child.id)}><span />{child.name}<i /></button>{can("config:manage") && <button className="section-knowledge" aria-label={`打开${child.name}知识库`} title="知识库" onClick={() => setKnowledgeSection(child)}>知</button>}</div>)}</div>)}</nav>
+          <JobList
+            jobs={jobs}
+            sections={sections}
+            sectionFilter={taskSectionFilter}
+            onSectionFilterChange={(sectionId) => { setTaskSectionFilter(sectionId); if (!job && sectionId !== "all") setActiveSection(sectionId); }}
+            onOpenKnowledge={can("config:manage") ? setKnowledgeSection : undefined}
+            selectedId={job?.id}
+            canDelete={can("task:delete")}
+            canControl={can("task:analyze")}
+            onSelect={(id) => void navigateToJob(id).catch((error) => setNotice(error instanceof Error ? error.message : "切换任务失败"))}
+            onDeleted={handleJobsDeleted}
+            onBatchControlComplete={() => void refresh()}
+          />
+          {!jobs.length && <div className="side-empty">导入 Excel 文件<br />建立解析任务</div>}
           </div>
           <div className="sidebar-system-status"><KnowledgeSyncStatus canRetry={can("config:manage")} /></div>
           <div className="sidebar-botanical"><BotanicalArt variant="specimen" /><ArtworkCredits /></div>
@@ -384,15 +398,19 @@ function Workspace({ session }: { session: CurrentSession }) {
 
         <section className="content" inert={detailDrawerOpen}>
           <div className="content-header">
-            <div className="task-heading"><BotanicalArt variant="specimen" /><small>解析队列</small><h1>{job?.originalFilename ?? "等待导入解析文件"}</h1><p>{job ? `共 ${job.totalRecords} 条记录，当前板块：${currentSection?.name}` : "导入包含聊天截图的 Excel，开始客服分析"}</p>{job && <AnalysisProgress job={job} />}</div>
-            {job && <div className="content-actions"><select aria-label="按记录状态筛选" value={filter} onChange={(e) => void changeFilter(e.target.value)}><option value="all">全部状态</option><option value="pending">待解析</option><option value="completed">已完成</option><option value="needs_review">需复核</option><option value="failed">失败</option></select>{can("task:analyze") && job.status === "processing" && <><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("pause")}>暂停</button><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("cancel")}>取消</button></>}{can("task:analyze") && job.status === "failed" && <button className="button light" disabled={taskActionBusy} onClick={() => taskAction("retry-failed")}>重试失败</button>}{can("task:analyze") && <button className="button dark" disabled={busy || taskActionBusy || job.status === "processing" || job.status === "cancelled"} onClick={() => void requestBatchAnalysis()}>{busy ? "解析中..." : job.status === "paused" ? "继续解析 →" : "批量解析 →"}</button>}</div>}
+            <div className="task-heading"><BotanicalArt variant="specimen" /><small>解析队列</small><h1>{job?.originalFilename ?? "等待导入解析文件"}</h1><p>{job ? `任务范围：整份 Excel · 共 ${job.totalRecords} 条记录 · 板块：${job.sectionName ?? currentSection?.name ?? "未指定板块"} · 平台：${job.platformName ?? "未指定平台"} · 配置版本：${job.sectionConfigVersionNumber ? `V${job.sectionConfigVersionNumber}` : "未记录"}` : "导入包含聊天截图的 Excel，开始客服分析"}</p>{job && <AnalysisProgress job={job} />}</div>
+            {job && <div className="content-actions"><select aria-label="按记录状态筛选" value={filter} onChange={(e) => void changeFilter(e.target.value)}><option value="all">全部状态</option><option value="pending">待解析</option><option value="completed">已完成</option><option value="needs_review">需复核</option><option value="failed">失败</option></select>{can("task:analyze") && job.status === "processing" && <><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("pause")}>暂停</button><button className="button light" disabled={taskActionBusy} onClick={() => taskAction("cancel")}>取消</button></>}{can("task:analyze") && job.status === "failed" && <button className="button light" disabled={taskActionBusy} onClick={() => taskAction("retry-failed")}>重试失败</button>}{can("task:analyze") && <button className="button dark" title="解析整份 Excel 中仍待处理的记录" disabled={busy || taskActionBusy || job.status === "processing" || job.status === "cancelled"} onClick={() => void requestBatchAnalysis()}>{busy ? "解析中..." : job.status === "paused" ? `继续解析剩余（${pendingRecordCount(job)}） →` : `批量解析全部待处理（${pendingRecordCount(job)}）`}</button>}</div>}
           </div>
           {notice && <div className="notice">{notice}</div>}
           {!job ? <div className="blank"><div className="upload-art"><b>XLSX</b><i>＋</i></div><h2>把聊天记录带进来</h2><p>支持带嵌入图片和辅助字段的 .xlsx 文件</p>{can("task:import") && <label className="button primary large">选择文件<input hidden type="file" accept=".xlsx" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ""; if (file) importFile(file); }} /></label>}</div> :
             <div className="record-list">
               <div className={`list-head ${can("task:analyze") ? "" : "list-head-without-selection"}`}>{can("task:analyze") && <label className="record-check"><input type="checkbox" aria-label="全选本页记录" checked={recordPage.items.length > 0 && recordPage.items.every((record) => selection.selectedIds.includes(record.id))} onChange={() => selection.togglePage(recordPage.items.map((record) => record.id))} /></label>}<span>记录</span><span>来源字段</span><span>解析状态</span><span>复核</span><span>操作</span></div>
               {can("task:analyze") && <div className="record-bulk-bar">
-                <span>{selection.selectedIds.length ? `已选择 ${selection.selectedIds.length} 条` : "未选择记录"}</span>
+                <span>{selection.selectedIds.length
+                  ? visibleSelectedCount === selection.selectedIds.length
+                    ? `已选择当前页 ${visibleSelectedCount} 条`
+                    : `已选择 ${selection.selectedIds.length} 条记录（当前页可见 ${visibleSelectedCount} 条）`
+                  : "未选择当前页记录"}</span>
                 <button type="button" disabled={!selection.selectedIds.length || busy || taskActionBusy || job.status === "processing" || job.status === "cancelled"} onClick={() => void requestBatchAnalysis(selection.selectedIds)}>解析已选</button>
                 {selection.selectedIds.length > 0 && <button type="button" disabled={busy} onClick={selection.clear}>清空选择</button>}
               </div>}

@@ -159,11 +159,13 @@ export interface Job {
   processingRecords?: number;
   needsReviewRecords?: number;
   needsReviewFields?: number;
+  usageSummary?: JobUsageSummary;
   id: string;
   originalFilename: string;
   sectionId: string | null;
   sectionName: string | null;
   sectionConfigVersionId?: string | null;
+  sectionConfigVersionNumber?: number | null;
   platformId?: string | null;
   platformCode?: string | null;
   platformName?: string | null;
@@ -177,6 +179,21 @@ export interface Job {
   skippedFields: number;
   createdAt: string;
   cancelRequested?: boolean;
+}
+
+export interface JobUsageSummary {
+  callCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  accountedTokens: number;
+  unknownCallCount: number;
+}
+
+export interface BatchJobControlResult {
+  jobId: string;
+  outcome: "success" | "skipped" | "failed";
+  status?: JobStatus;
+  reason?: string;
 }
 
 export interface WorkbookPreview {

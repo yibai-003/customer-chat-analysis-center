@@ -14,6 +14,7 @@ import { previewWorkbookStreaming } from "./services/streaming-xlsx-import-servi
 import { listJobs, getJob, listRecordsPage, getRecord, updateRecord, listSections, upsertSection, deleteSection, requestJobPause, requestJobCancel, createImportJob, getImportJob, updateImportJob, getPlatform, listPlatforms } from "./db/repositories";
 import { analyzeRecord } from "./services/analysis-service";
 import { analyzeJob, prepareTargetedRecordIds, retryFailedJob } from "./services/batch-analysis-service";
+import { controlJobsInBatch } from "./services/batch-task-control-service";
 import { exportJob } from "./services/excel-export-service";
 import { clearDefaultModel, createModelConfig, listModelConfigs, setDefaultModel, testModelConnection, testModelCapabilities, updateModelConfig, deleteModelConfig } from "./services/model-config-service";
 import { removeJob, removeJobs } from "./services/job-management-service";
@@ -323,6 +324,25 @@ export function createApp(dependencies: AppDependencies = {}) {
       const job = requestJobPause(req.params.id);
       auditRequest(req, { action: "task.pause", targetType: "job", targetId: req.params.id });
       return ok(res, job);
+    } catch (error) { return fail(res, error); }
+  });
+  app.post("/api/jobs/batch-control", canAnalyzeJob, async (req, res) => {
+    try {
+      const results = await controlJobsInBatch(req.body, {
+        startJob: (jobId, sectionId, options) => (
+          dependencies.analyzeJobRunner ?? analyzeJob
+        )(jobId, sectionId, options),
+      });
+      for (const result of results) {
+        auditRequest(req, {
+          action: req.body.action === "pause" ? "task.pause" : "task.start_analysis",
+          outcome: result.outcome === "failed" ? "failure" : "success",
+          targetType: "job",
+          targetId: result.jobId,
+          metadata: { batch: true, outcome: result.outcome, reason: result.reason ?? null },
+        });
+      }
+      return ok(res, results);
     } catch (error) { return fail(res, error); }
   });
   app.post("/api/jobs/:id/cancel", canCancel, (req, res) => {

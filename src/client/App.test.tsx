@@ -323,6 +323,9 @@ const jobs: Job[] = [
     originalFilename: "first.xlsx",
     sectionId: section.id,
     sectionName: section.name,
+    sectionConfigVersionNumber: 2,
+    platformName: "测试平台",
+    platformCode: "TEST",
     status: "ready",
     totalRecords: 120,
     completedRecords: 0,
@@ -338,6 +341,9 @@ const jobs: Job[] = [
     originalFilename: "second.xlsx",
     sectionId: section.id,
     sectionName: section.name,
+    sectionConfigVersionNumber: 1,
+    platformName: "测试平台",
+    platformCode: "TEST",
     status: "ready",
     totalRecords: 20,
     completedRecords: 0,
@@ -518,6 +524,25 @@ async function openBatchDialog() {
   await act(async () => analyzeButton.click());
   await waitFor(() => expect(host.textContent).toContain("批量解析运行设置"));
 }
+
+describe("task scope and board context", () => {
+  it("shows the bound board context and distinguishes whole-task analysis from page selection", async () => {
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("记录 01"));
+
+    expect(host.textContent).toContain("任务范围：整份 Excel");
+    expect(host.textContent).toContain("板块：接待分析");
+    expect(host.textContent).toContain("平台：测试平台");
+    expect(host.textContent).toContain("配置版本：V2");
+    expect(host.textContent).toContain("批量解析全部待处理（120）");
+    expect(host.textContent).toContain("导入完成，待解析");
+
+    const checkbox = host.querySelector<HTMLInputElement>('input[aria-label="选择记录 1"]')!;
+    await act(async () => checkbox.click());
+    expect(host.textContent).toContain("已选择当前页 1 条");
+    expect(host.textContent).not.toContain("已选择整份 Excel 1 条");
+  });
+});
 
 describe("explicit import section and manual refresh", () => {
   it("immediately displays saved review status and refreshes the task summary", async () => {
@@ -885,7 +910,7 @@ describe("targeted record analysis", () => {
 
     const checkbox = host.querySelector<HTMLInputElement>('input[aria-label="选择记录 1"]')!;
     await act(async () => checkbox.click());
-    expect(host.textContent).toContain("已选择 1 条");
+    expect(host.textContent).toContain("已选择当前页 1 条");
     expect(host.textContent).not.toContain("RECORD 01");
 
     const targeted = [...host.querySelectorAll<HTMLButtonElement>(".record-bulk-bar button")]

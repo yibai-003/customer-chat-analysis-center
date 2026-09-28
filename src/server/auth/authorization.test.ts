@@ -176,6 +176,11 @@ describe("task and review authorization", () => {
     for (const role of ["reviewer", "readonly", "config"]) {
       expect((await request(`/api/jobs/${jobId}/analyze`, { cookie: cookieFor(role), method: "POST", body: { sectionId } })).status, role).toBe(403);
       expect((await request(`/api/jobs/${jobId}/pause`, { cookie: cookieFor(role), method: "POST" })).status, role).toBe(403);
+      expect((await request("/api/jobs/batch-control", {
+        cookie: cookieFor(role),
+        method: "POST",
+        body: { action: "pause", ids: [jobId] },
+      })).status, role).toBe(403);
       expect((await request(`/api/jobs/${jobId}/cancel`, { cookie: cookieFor(role), method: "POST" })).status, role).toBe(403);
       expect((await request(`/api/jobs/${jobId}/retry-failed`, { cookie: cookieFor(role), method: "POST" })).status, role).toBe(403);
       expect((await request("/api/system/analysis-capacity", { cookie: cookieFor(role) })).status, role).toBe(403);
@@ -188,6 +193,60 @@ describe("task and review authorization", () => {
     expect((await request(`/api/jobs/${jobId}/retry-failed`, { cookie: cookieFor("operator"), method: "POST" })).status).toBe(200);
     expect(retryFailedJobStarter).toHaveBeenCalledTimes(1);
     expect((await request("/api/system/analysis-capacity", { cookie: cookieFor("operator") })).status).toBe(200);
+  });
+
+  it("limits batch task controls to analysis-capable users and returns per-task outcomes", async () => {
+    for (const role of ["reviewer", "readonly", "config"]) {
+      expect((await request("/api/jobs/batch-control", {
+        cookie: cookieFor(role),
+        method: "POST",
+        body: { action: "pause", ids: [jobId] },
+      })).status, role).toBe(403);
+    }
+
+    const response = await request("/api/jobs/batch-control", {
+      cookie: cookieFor("operator"),
+      method: "POST",
+      body: { action: "pause", ids: [jobId] },
+    });
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual([{
+      jobId,
+      outcome: "skipped",
+      status: "ready",
+      reason: "只有解析中的任务可以暂停",
+    }]);
+
+    db.prepare("UPDATE jobs SET status = 'paused' WHERE id = ?").run(jobId);
+    const resumed = await request("/api/jobs/batch-control", {
+      cookie: cookieFor("operator"),
+      method: "POST",
+      body: {
+        action: "resume",
+        ids: [jobId],
+        concurrency: 3,
+        batchSize: 25,
+        maxPaidTokens: 6000,
+      },
+    });
+    expect(resumed.status).toBe(200);
+    expect(analyzeJobRunner).toHaveBeenCalledWith(jobId, sectionId, {
+      concurrency: 3,
+      batchSize: 25,
+      maxPaidTokens: 6000,
+    });
+
+    const batchEvents = db.prepare(`
+      SELECT action, outcome
+      FROM audit_events
+      WHERE target_id = ?
+        AND json_extract(metadata_json, '$.batch') = 1
+      ORDER BY occurred_at, rowid
+    `).all(jobId);
+    expect(batchEvents).toEqual([
+      { action: "task.pause", outcome: "success" },
+      { action: "task.start_analysis", outcome: "success" },
+    ]);
   });
 
   it("allows only reviewers and administrators to save reviews and leaves data untouched on denial", async () => {

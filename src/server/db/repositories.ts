@@ -3,7 +3,7 @@ import { cancelAnalysis } from "../services/analysis-cancellation";
 import crypto from "node:crypto";
 import { sectionInput, parseConfiguration } from "../security/configuration-input";
 import { db } from "./client";
-import type { AnalysisSection, ImportJob, Job, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ImportJobStatus, RecordStatus, Platform } from "../../shared/types";
+import type { AnalysisSection, ImportJob, Job, JobUsageSummary, RecordDetail, RecordSummary, RecordPage, RecordPageQuery, AnalysisRun, ImportJobStatus, RecordStatus, Platform } from "../../shared/types";
 import { listFieldRuns } from "../services/field-run-service";
 import {
   ensureConversationId,
@@ -298,20 +298,56 @@ function liveJobCounts(jobId: string, sectionId: string | null) {
     completedFields: p.completedFields, failedFields: p.failedFields, skippedFields: p.skippedFields,
     needsReviewFields: p.needsReviewFields };
 }
+
+export function getJobUsageSummary(jobId: string): JobUsageSummary {
+  const row = db.prepare(`
+    SELECT
+      COUNT(CASE WHEN event_type IN ('success', 'failure') THEN 1 END) AS call_count,
+      COALESCE(SUM(CASE WHEN event_type IN ('success', 'failure') THEN COALESCE(input_tokens, 0) ELSE 0 END), 0) AS input_tokens,
+      COALESCE(SUM(CASE WHEN event_type IN ('success', 'failure') THEN COALESCE(output_tokens, 0) ELSE 0 END), 0) AS output_tokens,
+      COALESCE(SUM(CASE WHEN event_type IN ('success', 'failure', 'usage_unknown') THEN accounted_tokens ELSE 0 END), 0) AS accounted_tokens,
+      COUNT(CASE WHEN event_type = 'usage_unknown' THEN 1 END) AS unknown_call_count
+    FROM model_usage_events events
+    JOIN records ON records.id = events.record_id
+    WHERE records.job_id = ?
+  `).get(jobId) as {
+    call_count: number;
+    input_tokens: number;
+    output_tokens: number;
+    accounted_tokens: number;
+    unknown_call_count: number;
+  };
+  return {
+    callCount: Number(row.call_count ?? 0),
+    inputTokens: Number(row.input_tokens ?? 0),
+    outputTokens: Number(row.output_tokens ?? 0),
+    accountedTokens: Number(row.accounted_tokens ?? 0),
+    unknownCallCount: Number(row.unknown_call_count ?? 0),
+  };
+}
+
 export function getJob(id: string): Job | undefined {
-  const row = db.prepare("SELECT * FROM jobs WHERE id = ?").get(id) as any;
+  const row = db.prepare(`
+    SELECT jobs.*, versions.version_number AS section_config_version_number
+    FROM jobs
+    LEFT JOIN analysis_section_versions versions
+      ON versions.id = jobs.section_config_version_id
+    WHERE jobs.id = ?
+  `).get(id) as any;
   return row && {
     id: row.id,
     originalFilename: row.original_filename,
     sectionId: row.section_id ?? null,
     sectionName: row.section_name ?? null,
     sectionConfigVersionId: row.section_config_version_id ?? null,
+    sectionConfigVersionNumber: row.section_config_version_number ?? null,
     platformId: row.platform_id ?? null,
     platformCode: row.platform_code ?? null,
     platformName: row.platform_name ?? null,
     status: row.status,
     createdAt: row.created_at,
     cancelRequested: Boolean(row.cancel_requested),
+    usageSummary: getJobUsageSummary(row.id),
     ...liveJobCounts(row.id, row.section_id),
   };
 }
@@ -320,20 +356,149 @@ export function deleteJob(id: string) {
   if (!result.changes) throw new Error("任务不存在");
 }
 export function listJobs() {
-  return (db.prepare("SELECT * FROM jobs ORDER BY created_at DESC").all() as any[]).map((row) => ({
-    id: row.id,
-    originalFilename: row.original_filename,
-    sectionId: row.section_id ?? null,
-    sectionName: row.section_name ?? null,
-    sectionConfigVersionId: row.section_config_version_id ?? null,
-    platformId: row.platform_id ?? null,
-    platformCode: row.platform_code ?? null,
-    platformName: row.platform_name ?? null,
-    status: row.status,
-    createdAt: row.created_at,
-    cancelRequested: Boolean(row.cancel_requested),
-    ...liveJobCounts(row.id, row.section_id),
-  }));
+  const rows = db.prepare(`
+    SELECT jobs.*, versions.version_number AS section_config_version_number
+    FROM jobs
+    LEFT JOIN analysis_section_versions versions
+      ON versions.id = jobs.section_config_version_id
+    ORDER BY jobs.created_at DESC
+  `).all() as any[];
+  if (!rows.length) return [];
+
+  const recordCounts = new Map((db.prepare(`
+    SELECT
+      job_id,
+      COUNT(*) AS total,
+      COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending,
+      COALESCE(SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END), 0) AS processing,
+      COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
+      COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
+      COALESCE(SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END), 0) AS needs_review
+    FROM records
+    GROUP BY job_id
+  `).all() as any[]).map((row) => [row.job_id, row]));
+  const fieldCounts = new Map((db.prepare(`
+    WITH job_fields AS (
+      SELECT
+        jobs.id AS job_id,
+        CASE
+          WHEN versions.id IS NOT NULL THEN (
+            SELECT COUNT(*)
+            FROM json_each(versions.fields_snapshot_json) field
+            WHERE COALESCE(json_extract(field.value, '$.isEnabled'), 1) = 1
+          )
+          ELSE (
+            SELECT COUNT(*)
+            FROM analysis_fields fields
+            WHERE fields.section_id = jobs.section_id
+              AND fields.is_enabled = 1
+          )
+        END AS field_count
+      FROM jobs
+      LEFT JOIN analysis_section_versions versions
+        ON versions.id = jobs.section_config_version_id
+    ),
+    bound_fields AS (
+      SELECT
+        jobs.id AS job_id,
+        json_extract(field.value, '$.id') AS field_id
+      FROM jobs
+      JOIN analysis_section_versions versions
+        ON versions.id = jobs.section_config_version_id
+       AND versions.section_id = jobs.section_id
+      JOIN json_each(versions.fields_snapshot_json) field
+      WHERE COALESCE(json_extract(field.value, '$.isEnabled'), 1) = 1
+    ),
+    latest_runs AS (
+      SELECT
+        records.job_id,
+        runs.status,
+        ROW_NUMBER() OVER (
+          PARTITION BY records.job_id, runs.record_id,
+            COALESCE(json_extract(runs.field_snapshot_json, '$.id'), runs.field_id)
+          ORDER BY runs.created_at DESC, runs.rowid DESC
+        ) AS rank
+      FROM analysis_field_runs runs
+      JOIN records ON records.id = runs.record_id
+      JOIN bound_fields
+        ON bound_fields.job_id = records.job_id
+       AND bound_fields.field_id = COALESCE(
+         json_extract(runs.field_snapshot_json, '$.id'),
+         runs.field_id
+       )
+    ),
+    run_counts AS (
+      SELECT
+        job_id,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed,
+        COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
+        COALESCE(SUM(CASE WHEN status = 'skipped' THEN 1 ELSE 0 END), 0) AS skipped,
+        COALESCE(SUM(CASE WHEN status = 'needs_review' THEN 1 ELSE 0 END), 0) AS needs_review
+      FROM latest_runs
+      WHERE rank = 1
+      GROUP BY job_id
+    )
+    SELECT
+      job_fields.job_id,
+      job_fields.field_count,
+      COALESCE(run_counts.completed, 0) AS completed,
+      COALESCE(run_counts.failed, 0) AS failed,
+      COALESCE(run_counts.skipped, 0) AS skipped,
+      COALESCE(run_counts.needs_review, 0) AS needs_review
+    FROM job_fields
+    LEFT JOIN run_counts ON run_counts.job_id = job_fields.job_id
+  `).all() as any[]).map((row) => [row.job_id, row]));
+  const usageCounts = new Map((db.prepare(`
+    SELECT
+      records.job_id,
+      COUNT(CASE WHEN events.event_type IN ('success', 'failure') THEN 1 END) AS call_count,
+      COALESCE(SUM(CASE WHEN events.event_type IN ('success', 'failure') THEN COALESCE(events.input_tokens, 0) ELSE 0 END), 0) AS input_tokens,
+      COALESCE(SUM(CASE WHEN events.event_type IN ('success', 'failure') THEN COALESCE(events.output_tokens, 0) ELSE 0 END), 0) AS output_tokens,
+      COALESCE(SUM(CASE WHEN events.event_type IN ('success', 'failure', 'usage_unknown') THEN events.accounted_tokens ELSE 0 END), 0) AS accounted_tokens,
+      COUNT(CASE WHEN events.event_type = 'usage_unknown' THEN 1 END) AS unknown_call_count
+    FROM model_usage_events events
+    JOIN records ON records.id = events.record_id
+    GROUP BY records.job_id
+  `).all() as any[]).map((row) => [row.job_id, row]));
+
+  return rows.map((row) => {
+    const records = recordCounts.get(row.id) as any;
+    const fields = fieldCounts.get(row.id) as any;
+    const usage = usageCounts.get(row.id) as any;
+    const totalRecords = Number(records?.total ?? 0);
+    return {
+      id: row.id,
+      originalFilename: row.original_filename,
+      sectionId: row.section_id ?? null,
+      sectionName: row.section_name ?? null,
+      sectionConfigVersionId: row.section_config_version_id ?? null,
+      sectionConfigVersionNumber: row.section_config_version_number ?? null,
+      platformId: row.platform_id ?? null,
+      platformCode: row.platform_code ?? null,
+      platformName: row.platform_name ?? null,
+      status: row.status,
+      createdAt: row.created_at,
+      cancelRequested: Boolean(row.cancel_requested),
+      usageSummary: {
+        callCount: Number(usage?.call_count ?? 0),
+        inputTokens: Number(usage?.input_tokens ?? 0),
+        outputTokens: Number(usage?.output_tokens ?? 0),
+        accountedTokens: Number(usage?.accounted_tokens ?? 0),
+        unknownCallCount: Number(usage?.unknown_call_count ?? 0),
+      },
+      totalRecords,
+      completedRecords: Number(records?.completed ?? 0),
+      failedRecords: Number(records?.failed ?? 0),
+      totalFields: totalRecords * Number(fields?.field_count ?? 0),
+      pendingRecords: Number(records?.pending ?? 0),
+      processingRecords: Number(records?.processing ?? 0),
+      needsReviewRecords: Number(records?.needs_review ?? 0),
+      completedFields: Number(fields?.completed ?? 0),
+      failedFields: Number(fields?.failed ?? 0),
+      skippedFields: Number(fields?.skipped ?? 0),
+      needsReviewFields: Number(fields?.needs_review ?? 0),
+    };
+  });
 }
 
 export function bindJobPlatform(jobId: string, platformId: string): Job {

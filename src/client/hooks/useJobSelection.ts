@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { AnalysisSection, Job, ModelConfig, Platform } from "../../shared/types";
 import { api } from "../api";
 import { useAnalysisPolling } from "./useAnalysisPolling";
+import { useJobSummaryPolling } from "./useJobSummaryPolling";
 import { EMPTY_RECORD_PAGE, EMPTY_RECORD_QUERY, type RecordQueryIdentity, type useRecordWorkspace } from "./useRecordWorkspace";
 import type { JobOperationHelpers, JobOperationToken } from "./workspace-types";
 
@@ -120,6 +121,16 @@ export function useJobSelection({ setNotice, records }: {
     setActiveJob(nextJob);
     setJobs((current) => current.map((item) => item.id === nextJob.id ? nextJob : item));
   };
+  useJobSummaryPolling(
+    jobs.some((item) => item.status === "processing"),
+    job?.id ?? null,
+    setJobs,
+    commitJobSummary,
+    (activeJob) => refreshCurrentRecordPage(
+      activeJob.id,
+      () => mountedRef.current && activeJobIdRef.current === activeJob.id,
+    ),
+  );
 
   const refresh = async (
     jobId?: string,
