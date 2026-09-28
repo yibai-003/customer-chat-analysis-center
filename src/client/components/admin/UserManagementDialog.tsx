@@ -3,6 +3,7 @@ import type { UserProfile, UserRole } from "../../../shared/types";
 import { api } from "../../api";
 import { Modal } from "../Modal";
 import { ConfirmDialog } from "../ConfirmDialog";
+import { SelectMenu } from "../SelectMenu";
 
 export const USER_ROLE_ORDER: UserRole[] = ["admin", "config", "operator", "reviewer", "readonly"];
 
@@ -252,9 +253,7 @@ export function UserManagementDialog({ close }: { close: () => void }) {
                 </div>
                 <div className="admin-user-role">
                   {editState
-                    ? <select aria-label={`角色 ${user.username}`} value={editState.role} onChange={(event) => setEditing({ ...editState, role: event.target.value as UserRole })}>
-                      {USER_ROLE_ORDER.map((role) => <option value={role} key={role}>{USER_ROLE_LABELS[role]}</option>)}
-                    </select>
+                    ? <SelectMenu ariaLabel={`角色 ${user.username}`} value={editState.role} onChange={(value) => setEditing({ ...editState, role: value as UserRole })} options={USER_ROLE_ORDER.map((role) => ({ value: role, label: USER_ROLE_LABELS[role] }))} />
                     : <span className={`admin-role ${user.role}`}>{USER_ROLE_LABELS[user.role]}</span>}
                 </div>
                 <div className={`admin-user-state ${user.isEnabled ? "enabled" : "disabled"}`}>{user.isEnabled ? "已启用" : "已停用"}</div>
@@ -298,9 +297,7 @@ export function UserManagementDialog({ close }: { close: () => void }) {
               <label>账号<input aria-label="账号" value={createForm.username} maxLength={100} autoComplete="off" onChange={(event) => setCreateForm({ ...createForm, username: event.target.value })} /></label>
               <label>显示名称<input aria-label="显示名称" value={createForm.displayName} maxLength={100} autoComplete="off" onChange={(event) => setCreateForm({ ...createForm, displayName: event.target.value })} /></label>
               <label>初始密码（至少 8 位）<input type="password" aria-label="初始密码" value={createForm.password} autoComplete="new-password" onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })} /></label>
-              <label>角色<select aria-label="角色" value={createForm.role} onChange={(event) => setCreateForm({ ...createForm, role: event.target.value as UserRole })}>
-                {USER_ROLE_ORDER.map((role) => <option value={role} key={role}>{USER_ROLE_LABELS[role]}</option>)}
-              </select></label>
+              <label>角色<SelectMenu ariaLabel="角色" value={createForm.role} onChange={(value) => setCreateForm({ ...createForm, role: value as UserRole })} options={USER_ROLE_ORDER.map((role) => ({ value: role, label: USER_ROLE_LABELS[role] }))} /></label>
             </div>
             {createError && <div className="form-error" role="alert">{createError}</div>}
             <div className="modal-actions"><button type="submit" className="button primary" disabled={creating}>{creating ? "创建中…" : "创建账号"}</button></div>

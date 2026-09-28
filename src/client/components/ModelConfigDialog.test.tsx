@@ -82,6 +82,13 @@ let requests: RequestRecord[];
 let responseFor: (url: string, init?: RequestInit) => unknown;
 let currentMembers: ModelConfig[];
 
+function chooseSelectMenuOption(trigger: HTMLElement, value: string) {
+  fireEvent.click(trigger);
+  const option = document.querySelector<HTMLButtonElement>(`[role="option"][data-value="${value}"]`);
+  if (!option) throw new Error(`Select option not found: ${value}`);
+  fireEvent.click(option);
+}
+
 function success(data: unknown) {
   return new Response(JSON.stringify({ success: true, data, error: null }), {
     status: 200,
@@ -441,8 +448,8 @@ describe("ModelConfigDialog", () => {
     if (!row) throw new Error("model row not found");
     fireEvent.click(within(row).getByRole("button", { name: "编辑" }));
 
-    fireEvent.change(within(row).getByLabelText("等级"), { target: { value: "B" } });
-    fireEvent.change(within(row).getByLabelText("计费"), { target: { value: "paid" } });
+    chooseSelectMenuOption(within(row).getByLabelText("等级"), "B");
+    chooseSelectMenuOption(within(row).getByLabelText("计费"), "paid");
     fireEvent.change(within(row).getByLabelText("已用 Token"), { target: { value: "250000" } });
     fireEvent.change(within(row).getByLabelText("总额 Token"), { target: { value: "1200000" } });
     fireEvent.change(within(row).getByLabelText("到期时间"), { target: { value: "2026-12-30T12:30" } });
@@ -660,9 +667,9 @@ describe("ModelConfigDialog", () => {
     fireEvent.click(screen.getByRole("tab", { name: "调用状态" }));
     await screen.findByText("RATE_LIMIT");
 
-    fireEvent.change(screen.getByLabelText("用途筛选"), { target: { value: "text" } });
-    fireEvent.change(screen.getByLabelText("模型筛选"), { target: { value: "model-text" } });
-    fireEvent.change(screen.getByLabelText("事件筛选"), { target: { value: "failure" } });
+    chooseSelectMenuOption(screen.getByLabelText("用途筛选"), "text");
+    chooseSelectMenuOption(screen.getByLabelText("模型筛选"), "model-text");
+    chooseSelectMenuOption(screen.getByLabelText("事件筛选"), "failure");
 
     await waitFor(() => expect(requests.at(-1)?.url).toBe(
       "/api/model-usage-events?purpose=text&modelConfigId=model-text&eventType=failure&limit=100",
@@ -871,7 +878,7 @@ describe("ModelConfigDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "剔除已选" }));
     expect(await screen.findByText(/视觉用途将进入未就绪状态/)).toBeTruthy();
 
-    fireEvent.change(screen.getByLabelText("剔除原因"), { target: { value: "quota" } });
+    chooseSelectMenuOption(screen.getByLabelText("剔除原因"), "quota");
     fireEvent.click(screen.getByRole("button", { name: "确认剔除" }));
 
     await waitFor(() => expect(

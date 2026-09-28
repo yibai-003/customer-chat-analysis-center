@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AnalysisField, KnowledgeBase } from "../../shared/types";
 import { knowledgeApi } from "../api/knowledge-api";
 import { executionSetting } from "./execution-registry";
+import { SelectMenu } from "./SelectMenu";
 
 export function KnowledgeFieldSettings({
   field,
@@ -69,10 +70,10 @@ export function KnowledgeFieldSettings({
 
   if (field.executionType === "knowledge_match") {
     return <div className="knowledge-field-settings">
-      <label>知识库<select aria-label="知识库" disabled={loading || Boolean(error)} value={field.knowledgeBaseId ?? ""} onChange={(event) => onChange({ knowledgeBaseId: event.target.value || undefined })}>
-        <option value="">请选择知识库</option>
-        {bases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
-      </select></label>
+      <label>知识库<SelectMenu ariaLabel="知识库" disabled={loading || Boolean(error)} value={field.knowledgeBaseId ?? ""} onChange={(value) => onChange({ knowledgeBaseId: value || undefined })} options={[
+        { value: "", label: "请选择知识库" },
+        ...bases.map((base) => ({ value: base.id, label: base.name })),
+      ]} /></label>
       <label>候选数<input aria-label="候选数" type="number" min={1} max={50} value={field.candidateLimit ?? 15} onChange={(event) => onChange({ candidateLimit: Number(event.target.value) || 1 })} /></label>
       <div className="wide export-setting"><span>导出设置</span><label className="inline-control"><input aria-label="导出到 Excel" type="checkbox" checked={field.exportEnabled !== false} onChange={(event) => onChange({ exportEnabled: event.target.checked })} />导出到 Excel</label></div>
       {loading && <div className="knowledge-field-status">正在加载知识库</div>}
@@ -81,8 +82,8 @@ export function KnowledgeFieldSettings({
   }
 
   return <div className="knowledge-field-settings">
-    <label>匹配来源<select aria-label="匹配来源" disabled={loading || Boolean(error)} value={field.matchFieldKey ?? ""} onChange={(event) => {
-      const nextMatchFieldKey = event.target.value || undefined;
+    <label>匹配来源<SelectMenu ariaLabel="匹配来源" disabled={loading || Boolean(error)} value={field.matchFieldKey ?? ""} onChange={(value) => {
+      const nextMatchFieldKey = value || undefined;
       const nextMatch = matchFields.find((match) => match.key === nextMatchFieldKey);
       const nextColumns = bases.find((base) => base.id === nextMatch?.knowledgeBaseId)?.columns ?? [];
       const shouldClearColumn = Boolean(field.knowledgeColumn) && !nextColumns.some((column) => column.name === field.knowledgeColumn);
@@ -91,17 +92,17 @@ export function KnowledgeFieldSettings({
         matchFieldKey: nextMatchFieldKey,
         ...(shouldClearColumn ? { knowledgeColumn: undefined } : {}),
       });
-    }}>
-      <option value="">请选择匹配字段</option>
-      {matchFields.map((match) => <option key={match.key} value={match.key}>{match.label} ({match.key})</option>)}
-    </select></label>
-    <label>知识列<select aria-label="知识列" value={field.knowledgeColumn ?? ""} onChange={(event) => {
+    }} options={[
+      { value: "", label: "请选择匹配字段" },
+      ...matchFields.map((match) => ({ value: match.key, label: `${match.label} (${match.key})` })),
+    ]} /></label>
+    <label>知识列<SelectMenu ariaLabel="知识列" value={field.knowledgeColumn ?? ""} onChange={(value) => {
       setSelectionNotice("");
-      onChange({ knowledgeColumn: event.target.value || undefined });
-    }} disabled={!selectedBaseId || loading || Boolean(error)}>
-      <option value="">请选择知识列</option>
-      {columns.map((column) => <option key={column.name} value={column.name}>{column.name}</option>)}
-    </select></label>
+      onChange({ knowledgeColumn: value || undefined });
+    }} disabled={!selectedBaseId || loading || Boolean(error)} options={[
+      { value: "", label: "请选择知识列" },
+      ...columns.map((column) => ({ value: column.name, label: column.name })),
+    ]} /></label>
     <div className="wide export-setting"><span>导出设置</span><label className="inline-control"><input aria-label="导出到 Excel" type="checkbox" checked={field.exportEnabled !== false} onChange={(event) => onChange({ exportEnabled: event.target.checked })} />导出到 Excel</label></div>
     {loading && <div className="knowledge-field-status">正在加载知识库</div>}
     {error && <div className="form-error">知识库加载失败：{error}</div>}

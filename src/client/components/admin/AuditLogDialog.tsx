@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuditEvent, AuditEventPage } from "../../../shared/types";
 import { api } from "../../api";
 import { Modal } from "../Modal";
+import { SelectMenu } from "../SelectMenu";
 
 interface FilterDraft {
   action: string;
@@ -100,11 +101,7 @@ export function AuditLogDialog({ close }: { close: () => void }) {
       <label>操作者 ID<input aria-label="按操作者筛选" value={draft.actorUserId} onChange={(event) => setDraft({ ...draft, actorUserId: event.target.value })} /></label>
       <label>目标类型<input aria-label="按目标类型筛选" value={draft.targetType} onChange={(event) => setDraft({ ...draft, targetType: event.target.value })} /></label>
       <label>目标 ID<input aria-label="按目标ID筛选" value={draft.targetId} onChange={(event) => setDraft({ ...draft, targetId: event.target.value })} /></label>
-      <label>结果<select aria-label="按结果筛选" value={draft.outcome} onChange={(event) => setDraft({ ...draft, outcome: event.target.value as FilterDraft["outcome"] })}>
-        <option value="">全部</option>
-        <option value="success">成功</option>
-        <option value="failure">拒绝或失败</option>
-      </select></label>
+      <label>结果<SelectMenu ariaLabel="按结果筛选" value={draft.outcome} onChange={(value) => setDraft({ ...draft, outcome: value as FilterDraft["outcome"] })} options={[{ value: "", label: "全部" }, { value: "success", label: "成功" }, { value: "failure", label: "拒绝或失败" }]} /></label>
       <label>开始时间<input type="datetime-local" aria-label="开始时间" value={draft.from} onChange={(event) => setDraft({ ...draft, from: event.target.value })} /></label>
       <label>结束时间<input type="datetime-local" aria-label="结束时间" value={draft.to} onChange={(event) => setDraft({ ...draft, to: event.target.value })} /></label>
       <div className="audit-filter-actions">

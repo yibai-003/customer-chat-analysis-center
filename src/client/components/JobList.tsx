@@ -5,6 +5,7 @@ import type {
   AnalysisJobOptions,
   AnalysisSection,
   Job,
+  JobUsageSummary,
 } from "../../shared/types";
 import type { BatchJobControlResult } from "../../shared/types";
 import { api } from "../api";
@@ -12,10 +13,30 @@ import { AlertDialog } from "./AlertDialog";
 import { AnalysisRunDialog } from "./AnalysisRunDialog";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { formatTokenCount, taskStatusLabels } from "../task-display";
+import { SelectMenu } from "./SelectMenu";
+import { UsagePopover } from "./UsagePopover";
 
 type AnalysisRunOptions = Required<
   Pick<AnalysisJobOptions, "concurrency" | "batchSize" | "maxPaidTokens">
 >;
+
+const taskStatusOptions = [
+  { value: "all", label: "全部状态" },
+  { value: "ready", label: "导入完成，待解析" },
+  { value: "processing", label: "解析中" },
+  { value: "paused", label: "已暂停" },
+  { value: "completed", label: "解析已完成" },
+  { value: "failed", label: "解析失败" },
+  { value: "cancelled", label: "已取消" },
+];
+
+const emptyUsageSummary: JobUsageSummary = {
+  callCount: 0,
+  inputTokens: 0,
+  outputTokens: 0,
+  accountedTokens: 0,
+  unknownCallCount: 0,
+};
 
 export function JobList({ jobs, sections, sectionFilter, onSectionFilterChange, onOpenKnowledge, selectedId, canDelete = true, canControl = true, onSelect, onDeleted, onBatchControlComplete }: { jobs: Job[]; sections: AnalysisSection[]; sectionFilter?: string; onSectionFilterChange?: (sectionId: string) => void; onOpenKnowledge?: (section: AnalysisSection) => void; selectedId?: string; canDelete?: boolean; canControl?: boolean; onSelect: (id: string) => void; onDeleted: (ids: string[]) => void; onBatchControlComplete?: () => void }) {
   const [pendingDelete, setPendingDelete] = useState<Job | null>(null);
@@ -124,31 +145,50 @@ export function JobList({ jobs, sections, sectionFilter, onSectionFilterChange, 
     }
   };
   const canSelectJobs = canDelete || canControl;
-  const renderJob = (job: Job) => <div key={job.id} className={`job ${selectedId === job.id ? "active" : ""}`}>
-    {canSelectJobs && <label className="job-check"><input type="checkbox" aria-label={`选择任务 ${job.originalFilename}`} checked={selectedIds.includes(job.id)} disabled={busyControl} onChange={() => toggleSelected(job.id)} onClick={(event) => event.stopPropagation()} /></label>}
-    <button className="job-select" onClick={() => onSelect(job.id)}><span className="xls">X</span><span><strong title={job.originalFilename}>{job.originalFilename}</strong><small>{job.sectionName ?? "未指定板块"} · {job.platformName ?? "未指定平台"} · {job.totalRecords} 条记录 · {taskStatusLabels[job.status] ?? job.status}</small><small className="job-usage">消耗 {formatTokenCount(job.usageSummary?.accountedTokens ?? 0)} Tokens · {job.usageSummary?.callCount ?? 0} 次调用{job.usageSummary?.unknownCallCount ? " · 有未知用量" : ""}</small></span></button>
-    <span className="job-actions">{canDelete && <button type="button" title="删除任务" onClick={(event) => remove(event, job)}>×</button>}<i>›</i></span>
-  </div>;
+  const renderJob = (job: Job) => {
+    const usage = job.usageSummary ?? emptyUsageSummary;
+    return <div key={job.id} className={`job ${selectedId === job.id ? "active" : ""}`}>
+      {canSelectJobs && <label className="job-check"><input type="checkbox" aria-label={`选择任务 ${job.originalFilename}`} checked={selectedIds.includes(job.id)} disabled={busyControl} onChange={() => toggleSelected(job.id)} onClick={(event) => event.stopPropagation()} /></label>}
+      <div className="job-main">
+        <button className="job-select" onClick={() => onSelect(job.id)}><span className="xls">X</span><span><strong title={job.originalFilename}>{job.originalFilename}</strong><small>{job.sectionName ?? "未指定板块"} · {job.platformName ?? "未指定平台"} · {job.totalRecords} 条记录 · {taskStatusLabels[job.status] ?? job.status}</small></span></button>
+        <UsagePopover
+          ariaLabel={`查看 ${job.originalFilename} 用量`}
+          summary={usage}
+          compactLabel={`消耗 ${formatTokenCount(usage.accountedTokens)} Tokens · ${usage.callCount} 次调用${usage.unknownCallCount ? " · 有未知用量" : ""}`}
+          className="job-usage"
+        />
+      </div>
+      <span className="job-actions">{canDelete && <button type="button" title="删除任务" onClick={(event) => remove(event, job)}>×</button>}<i>›</i></span>
+    </div>;
+  };
   const renderSectionGroup = (section: AnalysisSection) => {
     const sectionJobs = filteredJobs.filter((job) => job.sectionId === section.id);
     const totalSectionJobs = jobs.filter((job) => job.sectionId === section.id).length;
     const sectionUsage = jobs
       .filter((job) => job.sectionId === section.id)
       .reduce((summary, job) => ({
+        inputTokens: summary.inputTokens + (job.usageSummary?.inputTokens ?? 0),
+        outputTokens: summary.outputTokens + (job.usageSummary?.outputTokens ?? 0),
         accountedTokens: summary.accountedTokens + (job.usageSummary?.accountedTokens ?? 0),
         callCount: summary.callCount + (job.usageSummary?.callCount ?? 0),
-      }), { accountedTokens: 0, callCount: 0 });
+        unknownCallCount: summary.unknownCallCount + (job.usageSummary?.unknownCallCount ?? 0),
+      }), { ...emptyUsageSummary });
     return <div className="job-section-group" data-section-task-group={section.id} key={section.id}>
       <div className="job-section-heading">
         <button type="button" onClick={() => changeSectionFilter(section.id)}><span />{section.name}<b>{totalSectionJobs}</b><i /></button>
-        <small className="section-usage">消耗 {formatTokenCount(sectionUsage.accountedTokens)} · {sectionUsage.callCount} 次</small>
+        <UsagePopover
+          ariaLabel={`查看${section.name}板块用量`}
+          summary={sectionUsage}
+          compactLabel={`${formatTokenCount(sectionUsage.accountedTokens)} · ${sectionUsage.callCount}次${sectionUsage.unknownCallCount ? " · 未知" : ""}`}
+          className="section-usage"
+        />
         {onOpenKnowledge && <button type="button" className="section-knowledge" aria-label={`打开${section.name}知识库`} title="知识库" onClick={() => onOpenKnowledge(section)}>知</button>}
       </div>
       {sectionJobs.length ? sectionJobs.map(renderJob) : <div className="job-section-empty">当前板块暂无匹配任务</div>}
     </div>;
   };
   const visibleParents = sections.filter((section) => !section.parentId);
-  return <><div className="job-filters"><input aria-label="搜索解析任务" placeholder="搜索文件名" value={search} onChange={(event) => setSearch(event.target.value)} /><select aria-label="按任务状态筛选" value={status} onChange={(event) => setStatus(event.target.value)}><option value="all">全部状态</option><option value="ready">导入完成，待解析</option><option value="processing">解析中</option><option value="paused">已暂停</option><option value="completed">解析已完成</option><option value="failed">解析失败</option><option value="cancelled">已取消</option></select><select aria-label="按解析板块筛选" value={currentSectionFilter} onChange={(event) => changeSectionFilter(event.target.value)}><option value="all">全部板块</option>{childSections.map((section) => <option value={section.id} key={section.id}>{section.name}</option>)}</select></div>{canSelectJobs && <div className="job-bulk-bar"><label><input type="checkbox" aria-label="全选当前任务" checked={allVisibleSelected} disabled={busyControl} onChange={toggleAll} />全选当前任务</label><span>{selectedIds.length ? `已选择 ${selectedIds.length} 个任务` : "未选择任务"}</span>{canDelete && <button type="button" disabled={!selectedIds.length || busyControl} onClick={() => setPendingBulkDelete(true)}>批量删除</button>}</div>}
+  return <><div className="job-filters"><input aria-label="搜索解析任务" placeholder="搜索文件名" value={search} onChange={(event) => setSearch(event.target.value)} /><SelectMenu ariaLabel="按任务状态筛选" value={status} options={taskStatusOptions} onChange={setStatus} /><SelectMenu ariaLabel="按解析板块筛选" value={currentSectionFilter} options={[{ value: "all", label: "全部板块" }, ...childSections.map((section) => ({ value: section.id, label: section.name }))]} onChange={changeSectionFilter} align="end" /></div>{canSelectJobs && <div className="job-bulk-bar"><label><input type="checkbox" aria-label="全选当前任务" checked={allVisibleSelected} disabled={busyControl} onChange={toggleAll} />全选当前任务</label><span>{selectedIds.length ? `已选择 ${selectedIds.length} 个任务` : "未选择任务"}</span>{canDelete && <button type="button" disabled={!selectedIds.length || busyControl} onClick={() => setPendingBulkDelete(true)}>批量删除</button>}</div>}
   {canControl && selectedIds.length > 0 && <div className="job-control-bar">
     {processingSelected.length > 0 && <button type="button" disabled={busyControl || selectedIds.length > 50} onClick={() => void controlJobs("pause")}>批量暂停 {processingSelected.length} 个{processingSelected.length < selectedJobs.length ? `（其余 ${selectedJobs.length - processingSelected.length} 个将跳过）` : ""}</button>}
     {pausedSelected.length > 0 && <button type="button" disabled={busyControl || selectedIds.length > 50} onClick={() => void requestResume()}>批量继续 {pausedSelected.length} 个{pausedSelected.length < selectedJobs.length ? `（其余 ${selectedJobs.length - pausedSelected.length} 个将跳过）` : ""}</button>}

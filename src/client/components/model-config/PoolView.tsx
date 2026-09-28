@@ -8,6 +8,7 @@ import type {
 } from "../../../shared/types";
 import { PoolCheckbox } from "./PoolCheckbox";
 import { QuotaMeter } from "./QuotaMeter";
+import { SelectMenu } from "../SelectMenu";
 import {
   formatQuotaTokens,
   quotaPresentation,
@@ -568,12 +569,10 @@ export function PoolView({
             )}
           </p>
           <label>剔除原因
-            <select aria-label="剔除原因" value={removalReason}
-              onChange={(event) => setRemovalReason(event.target.value as RemovalReason)}>
-              {(Object.keys(removalReasonLabels) as RemovalReason[]).map((reason) => (
-                <option key={reason} value={reason}>{removalReasonLabels[reason]}</option>
-              ))}
-            </select>
+            <SelectMenu ariaLabel="剔除原因" value={removalReason}
+              onChange={(value) => setRemovalReason(value as RemovalReason)}
+              options={(Object.keys(removalReasonLabels) as RemovalReason[]).map((reason) => ({ value: reason, label: removalReasonLabels[reason] }))}
+            />
           </label>
           <label>补充说明
             <input aria-label="剔除补充说明" maxLength={200} value={removalNote}
@@ -673,31 +672,28 @@ export function PoolView({
                   </td>
                   <td>
                     {editing ? (
-                      <select
-                        aria-label="等级"
+                      <SelectMenu
+                        ariaLabel="等级"
                         value={editState.qualityTier}
-                        onChange={(event) => setEditState({
+                        onChange={(value) => setEditState({
                           ...editState,
-                          qualityTier: event.target.value as ModelQualityTier,
+                          qualityTier: value as ModelQualityTier,
                         })}
-                      >
-                        <option>A</option><option>B</option><option>C</option>
-                      </select>
+                        options={[{ value: "A", label: "A" }, { value: "B", label: "B" }, { value: "C", label: "C" }]}
+                      />
                     ) : model.qualityTier}
                   </td>
                   <td>
                     {editing ? (
-                      <select
-                        aria-label="计费"
+                      <SelectMenu
+                        ariaLabel="计费"
                         value={editState.billingMode}
-                        onChange={(event) => setEditState({
+                        onChange={(value) => setEditState({
                           ...editState,
-                          billingMode: event.target.value as ModelBillingMode,
+                          billingMode: value as ModelBillingMode,
                         })}
-                      >
-                        <option value="free">免费</option>
-                        <option value="paid">付费</option>
-                      </select>
+                        options={[{ value: "free", label: "免费" }, { value: "paid", label: "付费" }]}
+                      />
                     ) : model.billingMode === "free" ? "免费" : "付费"}
                   </td>
                   <td>

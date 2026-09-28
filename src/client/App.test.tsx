@@ -599,12 +599,11 @@ describe("explicit import section and manual refresh", () => {
     Object.defineProperty(input, "files", { configurable: true, value: [new File(["sample"], "new.xlsx")] });
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
     expect(requests).not.toContain("/api/jobs/import-preview");
-    const select = host.querySelector<HTMLSelectElement>('[aria-label="文件所属解析板块"]')!;
+    const select = host.querySelector<HTMLButtonElement>('[aria-label="文件所属解析板块"]')!;
     expect(select.value).toBe("");
     expect([...host.querySelectorAll<HTMLButtonElement>("button")].find((b) => b.textContent === "下一步：预览文件")?.disabled).toBe(true);
-    await act(async () => { select.value = "refund"; select.dispatchEvent(new Event("change", { bubbles: true })); });
-    const platformSelect = host.querySelector<HTMLSelectElement>('[aria-label="文件所属平台"]')!;
-    await act(async () => { platformSelect.value = "platform-1"; platformSelect.dispatchEvent(new Event("change", { bubbles: true })); });
+    await chooseSelectMenuOption("文件所属解析板块", "refund");
+    await chooseSelectMenuOption("文件所属平台", "platform-1");
     await clickText("下一步：预览文件");
     expect(host.textContent).toContain("当前解析板块：退款分析");
     await clickText("确认导入 →");
@@ -615,7 +614,7 @@ describe("explicit import section and manual refresh", () => {
     }
     // A second import must start with a fresh, explicit choice.
     await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
-    expect(host.querySelector<HTMLSelectElement>('[aria-label="文件所属解析板块"]')?.value).toBe("");
+    expect(host.querySelector<HTMLButtonElement>('[aria-label="文件所属解析板块"]')?.value).toBe("");
   });
 
   it("refreshes job progress without replacing unsaved review notes", async () => {
@@ -642,6 +641,15 @@ async function confirmBatchAnalysis() {
     .find((candidate) => candidate.textContent?.includes("按此配置开始解析"));
   if (!confirmButton) throw new Error("找不到批量解析确认按钮");
   await act(async () => confirmButton.click());
+}
+
+async function chooseSelectMenuOption(label: string, value: string) {
+  const trigger = host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  if (!trigger) throw new Error(`找不到下拉菜单：${label}`);
+  await act(async () => trigger.click());
+  const option = host.querySelector<HTMLButtonElement>(`[role="option"][data-value="${value}"]`);
+  if (!option) throw new Error(`找不到下拉选项：${value}`);
+  await act(async () => option.click());
 }
 
 async function flushMicrotasks() {
@@ -1281,12 +1289,7 @@ describe("App record pagination", () => {
     await waitFor(() => expect(host.textContent).toContain("记录 51"));
     expect(requests).toContain("/api/jobs/job-1/records?page=2&pageSize=50");
 
-    const filter = host.querySelector<HTMLSelectElement>(".content-actions select");
-    if (!filter) throw new Error("找不到记录状态筛选");
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(filter, "failed");
-      filter.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await chooseSelectMenuOption("按记录状态筛选", "failed");
 
     await waitFor(() => expect(host.textContent).toContain("记录 101"));
     expect(requests).toContain("/api/jobs/job-1/records?page=1&pageSize=50&status=failed");
@@ -1440,12 +1443,7 @@ describe("App record pagination", () => {
     await act(async () => host.querySelector<HTMLButtonElement>(".record-select")?.click());
     await waitFor(() => expect(requests).toContain("/api/records/page-1"));
 
-    const filter = host.querySelector<HTMLSelectElement>(".content-actions select");
-    if (!filter) throw new Error("找不到记录状态筛选");
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(filter, "failed");
-      filter.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await chooseSelectMenuOption("按记录状态筛选", "failed");
     await waitFor(() => expect(host.textContent).toContain("记录 101"));
 
     await act(async () => {
@@ -1569,19 +1567,13 @@ describe("App record pagination", () => {
     await act(async () => root.render(<App />));
     await waitFor(() => expect(host.textContent).toContain("记录 01"));
 
-    const filter = host.querySelector<HTMLSelectElement>(".content-actions select");
+    const filter = host.querySelector<HTMLButtonElement>('button[aria-label="按记录状态筛选"]');
     if (!filter) throw new Error("找不到记录状态筛选");
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(filter, "failed");
-      filter.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await chooseSelectMenuOption("按记录状态筛选", "failed");
     await waitFor(() => expect(requests).toContain(
       "/api/jobs/job-1/records?page=1&pageSize=50&status=failed",
     ));
-    await act(async () => {
-      Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value")?.set?.call(filter, "completed");
-      filter.dispatchEvent(new Event("change", { bubbles: true }));
-    });
+    await chooseSelectMenuOption("按记录状态筛选", "completed");
     await waitFor(() => expect(requests).toContain(
       "/api/jobs/job-1/records?page=1&pageSize=50&status=completed",
     ));

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Job, Platform } from "../../../shared/types";
 import { api } from "../../api";
 import { Modal } from "../Modal";
+import { SelectMenu } from "../SelectMenu";
 
 function message(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -129,14 +130,10 @@ export function PlatformManagementDialog({ close }: { close: () => void }) {
       <p className="admin-users-loading">仅列出尚未绑定平台的历史任务；保存后不可修改。</p>
       <div className="form-grid">
         <label>历史任务
-          <select aria-label="待补录历史任务" value={backfillJobId} onChange={(event) => setBackfillJobId(event.target.value)}>
-            {backfillCandidates.map((job) => <option value={job.id} key={job.id}>{job.originalFilename} · {job.id}</option>)}
-          </select>
+          <SelectMenu ariaLabel="待补录历史任务" value={backfillJobId} onChange={setBackfillJobId} options={backfillCandidates.map((job) => ({ value: job.id, label: `${job.originalFilename} · ${job.id}` }))} />
         </label>
         <label>补录平台
-          <select aria-label="历史任务补录平台" value={backfillPlatformId} onChange={(event) => setBackfillPlatformId(event.target.value)}>
-            {platforms.map((platform) => <option value={platform.id} key={platform.id}>{platform.name} ({platform.code}){platform.isEnabled ? "" : " · 已停用"}</option>)}
-          </select>
+          <SelectMenu ariaLabel="历史任务补录平台" value={backfillPlatformId} onChange={setBackfillPlatformId} options={platforms.map((platform) => ({ value: platform.id, label: `${platform.name} (${platform.code})${platform.isEnabled ? "" : " · 已停用"}` }))} />
         </label>
         <label className="wide">补录原因
           <input aria-label="历史任务平台补录原因" value={backfillReason} maxLength={500} onChange={(event) => setBackfillReason(event.target.value)} />

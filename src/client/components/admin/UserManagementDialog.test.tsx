@@ -67,10 +67,18 @@ function labeled<T extends HTMLElement>(label: string) {
   return host.querySelector<T>(`[aria-label="${label}"]`);
 }
 
-function setValue(element: HTMLInputElement | HTMLSelectElement, value: string) {
-  const prototype = element instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
-  Object.getOwnPropertyDescriptor(prototype, "value")!.set!.call(element, value);
-  element.dispatchEvent(new Event(element instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+function setValue(element: HTMLInputElement, value: string) {
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+async function chooseOption(label: string, value: string) {
+  const trigger = labeled<HTMLButtonElement>(label);
+  if (!trigger) throw new Error(`找不到下拉菜单：${label}`);
+  await act(async () => trigger.click());
+  const option = host.querySelector<HTMLButtonElement>(`[role="option"][data-value="${value}"]`);
+  if (!option) throw new Error(`找不到下拉选项：${value}`);
+  await act(async () => option.click());
 }
 
 function userRow(username: string) {
@@ -164,7 +172,7 @@ describe("admin user management dialog", () => {
     await act(async () => setValue(labeled<HTMLInputElement>("账号")!, "lisi"));
     await act(async () => setValue(labeled<HTMLInputElement>("显示名称")!, "李四"));
     await act(async () => setValue(labeled<HTMLInputElement>("初始密码")!, "reviewer-password-1"));
-    await act(async () => setValue(labeled<HTMLSelectElement>("角色")!, "reviewer"));
+    await chooseOption("角色", "reviewer");
     await act(async () => buttonByText("创建账号")!.click());
 
     await waitFor(() => expect(host.textContent).toContain("账号已创建"));
@@ -233,7 +241,7 @@ describe("admin user management dialog", () => {
 
     await act(async () => userRow("zhang")!.querySelector<HTMLButtonElement>("button")!.click());
     await act(async () => setValue(labeled<HTMLInputElement>("显示名称 zhang")!, "张三丰"));
-    await act(async () => setValue(labeled<HTMLSelectElement>("角色 zhang")!, "reviewer"));
+    await chooseOption("角色 zhang", "reviewer");
     await act(async () => buttonByText("保存")!.click());
 
     await waitFor(() => expect(host.textContent).toContain("账号已更新"));
@@ -254,7 +262,7 @@ describe("admin user management dialog", () => {
     };
 
     await act(async () => userRow("admin")!.querySelectorAll<HTMLButtonElement>("button")[0]!.click());
-    await act(async () => setValue(labeled<HTMLSelectElement>("角色 admin")!, "config"));
+    await chooseOption("角色 admin", "config");
     await act(async () => buttonByText("保存")!.click());
 
     await waitFor(() => expect(host.textContent).toContain("必须保留至少一个启用中的管理员"));

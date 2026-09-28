@@ -8,6 +8,7 @@ import { KnowledgeImportDialog } from "./KnowledgeImportDialog";
 import { KnowledgeItemList } from "./KnowledgeItemList";
 import { KnowledgeSearchTest } from "./KnowledgeSearchTest";
 import { KnowledgeSyncStatus } from "../KnowledgeSyncStatus";
+import { SelectMenu } from "../SelectMenu";
 
 type KnowledgeTab = "content" | "items" | "search";
 const knowledgeTabs: Array<[KnowledgeTab, string]> = [
@@ -115,14 +116,14 @@ export function KnowledgeWorkspace({
       >{label}</button>)}
       <div className="knowledge-base-switch" role="presentation">
         <label>当前知识库</label>
-        <select
-          aria-label="当前知识库"
+        <SelectMenu
+          ariaLabel="当前知识库"
           value={selectedId ?? ""}
-          onChange={(event) => setSelectedId(event.target.value || undefined)}
-        >
-          {!bases.length && <option value="">暂无知识库</option>}
-          {bases.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}
-        </select>
+          onChange={(value) => setSelectedId(value || undefined)}
+          options={bases.length
+            ? bases.map((base) => ({ value: base.id, label: base.name }))
+            : [{ value: "", label: "暂无知识库" }]}
+        />
       </div>
     </nav>
 

@@ -15,11 +15,14 @@ body[data-ui-theme="atelier"] .knowledge-workspace {
   --workbench-ink-soft: #536b7b;
   --workbench-muted: #718594;
   --workbench-faint: #8b9ca8;
-  --workbench-line: #d8e2e9;
-  --workbench-line-strong: #b9cbd7;
+  --workbench-line-subtle: #e8eef2;
+  --workbench-line: #d9e3ea;
+  --workbench-line-strong: #c5d3dd;
+  --workbench-accent: #557f9e;
+  --workbench-accent-soft: #e8f1f7;
   --workbench-blue: #769bb7;
-  --workbench-blue-strong: #557f9e;
-  --workbench-blue-soft: #e8f1f7;
+  --workbench-blue-strong: var(--workbench-accent);
+  --workbench-blue-soft: var(--workbench-accent-soft);
   --workbench-green: #6e987f;
   --workbench-green-soft: #eaf4ee;
   --workbench-amber: #b98243;
@@ -27,35 +30,53 @@ body[data-ui-theme="atelier"] .knowledge-workspace {
   --workbench-danger: #a25d5b;
   --workbench-danger-soft: #f9eceb;
   --workbench-shadow: rgba(50, 76, 94, 0.12);
-  --workbench-radius: 6px;
-  --workbench-radius-small: 4px;
+  --workbench-radius: 12px;
+  --workbench-radius-small: 8px;
   --workbench-font-body: "Segoe UI", "Microsoft YaHei", sans-serif;
   --workbench-font-mono: "Cascadia Mono", Consolas, "Microsoft YaHei", monospace;
-  --workbench-control-height: 36px;
+  --workbench-control-height: 30px;
+  --workbench-input-height: 34px;
   --workbench-scrollbar-thumb: #b7c9d5;
   --workbench-scrollbar-thumb-hover: #769bb7;
   color: var(--workbench-ink);
   font-family: var(--workbench-font-body);
+  font-size: 13px;
   font-synthesis: none;
 }
 
-body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) *,
-body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) *::before,
-body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) *::after {
-  border-radius: 4px;
-}
-
 body[data-ui-theme="atelier"] .app:not(.signin-app) {
+  min-height: 100dvh;
+  padding: 8px;
   background: var(--workbench-page);
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .topbar {
-  min-height: 72px;
-  height: auto;
-  padding: 12px 28px;
-  border-bottom: 1px solid var(--workbench-line-strong);
+  min-height: 52px;
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--workbench-line-strong);
+  border-bottom-color: var(--workbench-line);
+  border-radius: var(--workbench-radius) var(--workbench-radius) 0 0;
   background: var(--workbench-panel);
-  box-shadow: 0 2px 10px var(--workbench-shadow);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .user-chip .user-role {
+  padding: 3px 7px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: 5px;
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .user-chip:hover .user-role,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .user-chip[aria-expanded="true"] .user-role {
+  border-color: var(--workbench-accent);
+  background: var(--workbench-accent);
+  color: #ffffff;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .brand {
@@ -63,11 +84,12 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .brand {
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .brand-mark {
-  width: 36px;
-  height: 36px;
-  border: 1px solid var(--workbench-blue-strong);
-  background: var(--workbench-ink);
-  color: #d6e7f1;
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--workbench-accent);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-accent);
+  color: #ffffff;
   box-shadow: none;
   font-family: Georgia, "Times New Roman", serif;
 }
@@ -88,7 +110,12 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-head small {
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace {
-  background: var(--workbench-page);
+  min-height: calc(100dvh - var(--workspace-header-height, 52px) - 16px);
+  border: 1px solid var(--workbench-line-strong);
+  border-top: 0;
+  border-radius: 0 0 var(--workbench-radius) var(--workbench-radius);
+  background: var(--workbench-panel);
+  overflow: hidden;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title b {
@@ -123,6 +150,125 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job .job-usage {
   color: var(--workbench-blue-strong);
 }
 
+body[data-ui-theme="atelier"] .app:not(.signin-app) .usage-popover-trigger {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--workbench-blue-strong);
+  font-family: var(--workbench-font-mono);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+  text-align: right;
+  transition: background-color 0.14s ease-out, color 0.14s ease-out;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .usage-popover-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .usage-popover-trigger > i {
+  display: grid;
+  flex: 0 0 14px;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 9px;
+  font-style: normal;
+  line-height: 1;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .usage-popover-trigger:hover,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .usage-popover-trigger:focus-visible,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .usage-popover-trigger[aria-expanded="true"] {
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  outline: none;
+}
+
+body[data-ui-theme="atelier"] .usage-popover-panel {
+  position: fixed;
+  z-index: 30;
+  padding: 12px;
+  border: 1px solid #c5d3dd;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #263847;
+  box-shadow: 0 12px 28px rgba(50, 76, 94, 0.18);
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  animation: usage-popover-enter 0.14s ease-out both;
+}
+
+body[data-ui-theme="atelier"] .usage-popover-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #d9e3ea;
+}
+
+body[data-ui-theme="atelier"] .usage-popover-head strong {
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .usage-popover-head span {
+  color: #718594;
+  font-size: 10px;
+}
+
+body[data-ui-theme="atelier"] .usage-popover-panel dl {
+  display: grid;
+  gap: 6px;
+  margin: 9px 0 0;
+}
+
+body[data-ui-theme="atelier"] .usage-popover-panel dl > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+body[data-ui-theme="atelier"] .usage-popover-panel dt {
+  color: #718594;
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .usage-popover-panel dd {
+  margin: 0;
+  color: #263847;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-ui-theme="atelier"] .usage-popover-panel .warning dd {
+  color: #a25d5b;
+}
+
+@keyframes usage-popover-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 body[data-ui-theme="atelier"] .app:not(.signin-app) .xls {
   border: 1px solid var(--workbench-line-strong);
   background: var(--workbench-blue-soft);
@@ -146,10 +292,6 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .server-state i {
   background: var(--workbench-green);
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) .content {
-  background: var(--workbench-page);
-}
-
 body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header {
   border-bottom-color: var(--workbench-line-strong);
 }
@@ -167,13 +309,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .blank p {
   color: var(--workbench-muted);
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) .button,
-body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions select,
-body[data-ui-theme="atelier"] .app:not(.signin-app) .form-grid input,
-body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-editor textarea,
-body[data-ui-theme="atelier"] .app:not(.signin-app) .result-field textarea,
-body[data-ui-theme="atelier"] .app:not(.signin-app) .config-item,
-body[data-ui-theme="atelier"] .app:not(.signin-app) .knowledge-tab {
+body[data-ui-theme="atelier"] .app:not(.signin-app) .button, body[data-ui-theme="atelier"] .app:not(.signin-app) .form-grid input, body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-editor textarea, body[data-ui-theme="atelier"] .app:not(.signin-app) .result-field textarea, body[data-ui-theme="atelier"] .app:not(.signin-app) .config-item, body[data-ui-theme="atelier"] .app:not(.signin-app) .knowledge-tab {
   border-color: var(--workbench-line);
   background: var(--workbench-panel);
   color: var(--workbench-ink);
@@ -191,22 +327,17 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .detail figure {
   box-shadow: none;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
-  .button,
-  input,
-  textarea,
-  select,
-  .modal,
-  .config-item,
-  .detail figure,
-  .knowledge-tab
-) {
-  border-radius: 4px;
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(.button, input, textarea, .modal, .config-item, .detail figure, .knowledge-tab) {
+  border-radius: var(--workbench-radius-small);
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .button {
+  min-height: var(--workbench-control-height);
+  height: var(--workbench-control-height);
+  padding: 0 10px;
   border-width: 1px;
-  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease;
+  font-size: 12px;
+  transition: background-color 0.12s ease-out, border-color 0.12s ease-out, color 0.12s ease-out;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .button:hover {
@@ -232,6 +363,23 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .button.export {
 body[data-ui-theme="atelier"] .app:not(.signin-app) .button.light,
 body[data-ui-theme="atelier"] .app:not(.signin-app) .button.ghost {
   background: var(--workbench-panel-muted);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(input:not([type="checkbox"]):not([type="radio"])) {
+  min-height: var(--workbench-input-height);
+  border: 1px solid var(--workbench-line-strong);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  font-size: 12px;
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) textarea {
+  border: 1px solid var(--workbench-line-strong);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  font-size: 12px;
+  box-shadow: none;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .model-console-message {
@@ -290,6 +438,66 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .detail figure {
   background: var(--workbench-panel-muted);
 }
 
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-image-button figure {
+  border-width: 1px;
+  border-style: solid;
+  border-color: var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  box-shadow: none;
+  transition: border-color 0.14s ease-out, box-shadow 0.14s ease-out, transform 0.14s ease-out;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail figure::before,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail figure::after {
+  width: 10px;
+  height: 10px;
+  border-color: var(--workbench-blue);
+  opacity: 0.8;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail figure::before {
+  border-width: 1px 0 0 1px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail figure::after {
+  border-width: 0 1px 1px 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail figcaption {
+  padding: 5px 8px;
+  border: 1px solid var(--workbench-ink);
+  border-radius: 5px;
+  background: var(--workbench-ink);
+  color: #ffffff;
+  box-shadow: none;
+  font-family: var(--workbench-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.2;
+  transition: background-color 0.14s ease-out, border-color 0.14s ease-out;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-image-button:hover figure {
+  border-color: var(--workbench-accent);
+  box-shadow: 0 4px 12px var(--workbench-shadow);
+  transform: translateY(-1px);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-image-button:hover figcaption {
+  border-color: var(--workbench-accent);
+  background: var(--workbench-accent);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-image-button:focus-visible {
+  outline: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-image-button:focus-visible figure {
+  border-color: var(--workbench-accent);
+  box-shadow: 0 0 0 3px var(--workbench-accent-soft);
+}
+
 body[data-ui-theme="atelier"] .app:not(.signin-app) .modal > header,
 body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-block {
   border-bottom-color: var(--workbench-line);
@@ -334,39 +542,13 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
   box-shadow: none;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
-  .model-console-panel input,
-  .model-console-panel select,
-  .provider-form input,
-  .model-pool-settings input,
-  .usage-filters select,
-  .model-pool-table input,
-  .model-pool-table select,
-  .audit-filters input,
-  .audit-filters select,
-  .admin-user-identity input,
-  .admin-user-role select,
-  .restore-panel input
-) {
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(.model-console-panel input, .provider-form input, .model-pool-settings input, .model-pool-table input, .audit-filters input, .admin-user-identity input, .restore-panel input) {
   border-color: var(--workbench-line);
   background: var(--workbench-panel);
   color: var(--workbench-ink);
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
-  .model-console-panel input:focus,
-  .model-console-panel select:focus,
-  .provider-form input:focus,
-  .model-pool-settings input:focus,
-  .usage-filters select:focus,
-  .model-pool-table input:focus,
-  .model-pool-table select:focus,
-  .audit-filters input:focus,
-  .audit-filters select:focus,
-  .admin-user-identity input:focus,
-  .admin-user-role select:focus,
-  .restore-panel input:focus
-) {
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(.model-console-panel input:focus, .provider-form input:focus, .model-pool-settings input:focus, .model-pool-table input:focus, .audit-filters input:focus, .admin-user-identity input:focus, .restore-panel input:focus) {
   border-color: var(--workbench-blue);
   box-shadow: 0 0 0 3px var(--workbench-blue-soft);
 }
@@ -480,12 +662,6 @@ body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button {
   color: var(--workbench-muted);
 }
 
-body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button.active {
-  border-bottom-color: var(--workbench-blue);
-  background: var(--workbench-blue-soft);
-  color: var(--workbench-blue-strong);
-}
-
 body[data-ui-theme="atelier"] .knowledge-workspace :is(
   .knowledge-base-row,
   .knowledge-item-table,
@@ -528,25 +704,11 @@ body[data-ui-theme="atelier"] .knowledge-workspace :is(
   background: var(--workbench-blue-soft);
 }
 
-body[data-ui-theme="atelier"] .knowledge-workspace :is(
-  .knowledge-base-switch select,
-  .knowledge-item-tools input,
-  .knowledge-item-tools select,
-  .search-test-actions input,
-  .knowledge-import-top input,
-  .column-map-row select,
-  .knowledge-item-editor textarea,
-  .search-test-input textarea
-) {
+body[data-ui-theme="atelier"] .knowledge-workspace :is(.knowledge-item-tools input, .search-test-actions input, .knowledge-import-top input, .knowledge-item-editor textarea, .search-test-input textarea) {
   border-color: var(--workbench-line);
   background: var(--workbench-panel);
   color: var(--workbench-ink);
   box-shadow: none;
-}
-
-body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-row.selected {
-  box-shadow: inset 4px 0 var(--workbench-blue);
-  background: var(--workbench-blue-soft);
 }
 
 body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-batch-bar {
@@ -566,12 +728,7 @@ body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-state.disabled {
   color: var(--workbench-amber);
 }
 
-body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) :is(
-  button,
-  input,
-  textarea,
-  select
-):focus-visible {
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) :is(button, input, textarea):focus-visible {
   outline: 3px solid var(--workbench-blue-soft);
   outline-offset: 2px;
 }
@@ -668,7 +825,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > butto
 
 /* Keep board metadata readable when the sidebar is narrow. */
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading {
-  grid-template-rows: auto auto;
+  grid-template-rows: auto;
   align-items: center;
 }
 
@@ -679,14 +836,17 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > butto
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading .section-usage {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  padding: 0 8px 7px 13px;
+  grid-column: 2;
+  grid-row: 1;
+  max-width: 72px;
+  overflow: hidden;
+  padding: 0 2px 0 0;
+  text-overflow: ellipsis;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading .section-knowledge {
-  grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-column: 3;
+  grid-row: 1;
   align-self: center;
 }
 
@@ -893,13 +1053,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) {
   line-height: 1.45;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
-  button,
-  input,
-  textarea,
-  select,
-  label.button
-) {
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(button, input, textarea, label.button) {
   font-family: var(--workbench-font-body);
   font-synthesis: none;
 }
@@ -920,7 +1074,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
   .knowledge-pagination button
 ) {
   min-height: var(--workbench-control-height);
-  border-radius: 4px;
+  border-radius: var(--workbench-radius-small);
   line-height: 1.3;
   font-size: 12px;
   font-weight: 600;
@@ -929,31 +1083,25 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
 
 /* Keep critical control geometry explicit for older selector engines too. */
 body[data-ui-theme="atelier"] .app:not(.signin-app) .button {
-  min-height: 36px;
-  border-radius: 4px !important;
+  min-height: 30px;
+  border-radius: 8px !important;
   line-height: 1.3;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) select,
-body[data-ui-theme="atelier"] .app:not(.signin-app) input:not([type="checkbox"]):not([type="radio"]),
-body[data-ui-theme="atelier"] .app:not(.signin-app) textarea {
-  min-height: 36px;
-  border-radius: 4px !important;
+body[data-ui-theme="atelier"] .app:not(.signin-app) input:not([type="checkbox"]):not([type="radio"]), body[data-ui-theme="atelier"] .app:not(.signin-app) textarea {
+  min-height: 34px;
+  border-radius: 8px !important;
   line-height: 1.3;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
-  input:not([type="checkbox"]):not([type="radio"]),
-  textarea,
-  select
-) {
-  min-height: var(--workbench-control-height);
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(input:not([type="checkbox"]):not([type="radio"]), textarea) {
+  min-height: var(--workbench-input-height);
   border: 1px solid var(--workbench-line);
   border-radius: var(--workbench-radius-small);
   background: var(--workbench-panel);
@@ -971,12 +1119,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
   accent-color: var(--workbench-blue-strong);
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
-  button,
-  input,
-  textarea,
-  select
-):disabled {
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(button, input, textarea):disabled {
   cursor: not-allowed;
   opacity: 0.48;
 }
@@ -1032,34 +1175,40 @@ body[data-ui-theme="atelier"] :is(
   background-clip: padding-box;
 }
 
-body[data-ui-theme="atelier"] :is(
-  .app:not(.signin-app),
-  .knowledge-workspace
-) :is(button, input, textarea, select):focus-visible {
-  outline: 2px solid var(--workbench-blue);
-  outline-offset: 2px;
-  box-shadow: 0 0 0 4px var(--workbench-blue-soft);
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) :is(button, input, textarea):focus-visible {
+  outline: 1px solid var(--workbench-accent);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px var(--workbench-accent-soft);
 }
 
 /* Keep the three workbench columns readable at desktop widths. */
 body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace {
-  grid-template-columns: var(--sidebar-width, 240px) minmax(0, 1fr) clamp(360px, 27vw, 440px);
+  grid-template-columns: 248px minmax(0, 1fr) clamp(320px, 25vw, 400px);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace:has(> .sidebar.is-collapsed) {
+  grid-template-columns: 56px minmax(0, 1fr) clamp(320px, 25vw, 400px);
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .content {
   min-width: 0;
-  padding: clamp(24px, 3vw, 36px) clamp(18px, 3vw, 38px) 52px;
+  padding: 20px 24px 40px;
+  background: var(--workbench-panel);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .content::before {
+  content: none;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header {
-  gap: 18px;
-  padding-bottom: 18px;
+  gap: 16px;
+  padding-bottom: 14px;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header h1 {
   max-width: min(100%, 820px);
-  font-size: clamp(24px, 2.15vw, 32px);
-  line-height: 1.2;
+  font-size: 20px;
+  line-height: 1.3;
   font-weight: 700;
   text-wrap: balance;
 }
@@ -1074,17 +1223,12 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions {
   gap: 8px;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions select {
-  min-height: var(--workbench-control-height);
-  padding: 0 10px;
-}
-
 /* The sidebar is a navigation rail, not a second card grid. */
 body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar {
   min-width: 0;
-  padding: 16px 10px 12px;
+  padding: 12px 8px 10px;
   border-right: 1px solid var(--workbench-line);
-  background: var(--workbench-panel-tint);
+  background: var(--workbench-panel-muted);
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-scroll {
@@ -1129,16 +1273,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-system-status .know
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-botanical {
-  flex: 0 0 auto;
-  margin: 0 0 4px;
-  padding-top: 10px;
-}
-
-body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-botanical .botanical-art {
-  width: min(170px, 100%);
-  height: 112px;
-  margin: 0 auto;
-  opacity: 0.68;
+  display: none;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .server-state {
@@ -1214,8 +1349,18 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-scroll {
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-scroll {
+  height: 100%;
+  max-height: 100%;
   padding: 22px 16px 30px;
+  overflow: auto;
   scrollbar-gutter: stable;
+}
+
+@media (min-width: 1200px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail {
+    height: calc(100dvh - var(--workspace-header-height, 52px) - 16px);
+    max-height: calc(100dvh - var(--workspace-header-height, 52px) - 16px);
+  }
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-head {
@@ -1394,29 +1539,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
   color: var(--workbench-blue-strong);
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
-  .model-console-panel input,
-  .model-console-panel select,
-  .provider-form input,
-  .model-pool-settings input,
-  .usage-filters select,
-  .model-pool-table input,
-  .model-pool-table select,
-  .audit-filters input,
-  .audit-filters select,
-  .admin-user-identity input,
-  .admin-user-role select,
-  .restore-panel input,
-  .schema-editor input,
-  .schema-editor select,
-  .field-editor input,
-  .field-editor select,
-  .field-editor textarea,
-  .prompt-field textarea,
-  .prompt-large-editor,
-  .reception-rule-table input:not([type="checkbox"]),
-  .reception-rule-table textarea
-) {
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(.model-console-panel input, .provider-form input, .model-pool-settings input, .model-pool-table input, .audit-filters input, .admin-user-identity input, .restore-panel input, .schema-editor input, .field-editor input, .field-editor textarea, .prompt-field textarea, .prompt-large-editor, .reception-rule-table input:not([type="checkbox"]), .reception-rule-table textarea) {
   min-height: 34px;
   border: 1px solid var(--workbench-line);
   background: var(--workbench-panel);
@@ -1541,12 +1664,7 @@ body[data-ui-theme="atelier"] .knowledge-workspace {
   line-height: 1.45;
 }
 
-body[data-ui-theme="atelier"] .knowledge-workspace :is(
-  button,
-  input,
-  textarea,
-  select
-) {
+body[data-ui-theme="atelier"] .knowledge-workspace :is(button, input, textarea) {
   font-family: var(--workbench-font-body);
   font-synthesis: none;
 }
@@ -1563,11 +1681,7 @@ body[data-ui-theme="atelier"] .knowledge-workspace :is(
   line-height: 1.3;
 }
 
-body[data-ui-theme="atelier"] .knowledge-workspace :is(
-  input:not([type="checkbox"]):not([type="radio"]),
-  textarea,
-  select
-) {
+body[data-ui-theme="atelier"] .knowledge-workspace :is(input:not([type="checkbox"]):not([type="radio"]), textarea) {
   min-height: var(--workbench-control-height);
   font-size: 12px;
   line-height: 1.45;
@@ -1601,7 +1715,11 @@ body[data-ui-theme="atelier"] .knowledge-workspace :is(
 
 @media (max-width: 1199px) {
   body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace {
-    grid-template-columns: var(--sidebar-width, 220px) minmax(0, 1fr);
+    grid-template-columns: 248px minmax(0, 1fr);
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace:has(> .sidebar.is-collapsed) {
+    grid-template-columns: 56px minmax(0, 1fr);
   }
 
   body[data-ui-theme="atelier"] .app:not(.signin-app) .detail {
@@ -1611,9 +1729,21 @@ body[data-ui-theme="atelier"] .knowledge-workspace :is(
 }
 
 @media (max-width: 700px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) {
+    padding: 4px;
+  }
+
   body[data-ui-theme="atelier"] .app:not(.signin-app) .topbar {
-    min-height: 64px;
-    padding: 10px 14px;
+    min-height: 56px;
+    height: auto;
+    padding: 8px 10px;
+    border-radius: var(--workbench-radius-small) var(--workbench-radius-small) 0 0;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace,
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .workspace:has(> .sidebar.is-collapsed) {
+    min-height: calc(100dvh - var(--workspace-header-height, 56px) - 8px);
+    border-radius: 0 0 var(--workbench-radius-small) var(--workbench-radius-small);
   }
 
   body[data-ui-theme="atelier"] .app:not(.signin-app) .brand {
@@ -1621,8 +1751,8 @@ body[data-ui-theme="atelier"] .knowledge-workspace :is(
   }
 
   body[data-ui-theme="atelier"] .app:not(.signin-app) .brand-mark {
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
   }
 
   body[data-ui-theme="atelier"] .app:not(.signin-app) .brand strong {
@@ -1639,8 +1769,8 @@ body[data-ui-theme="atelier"] .knowledge-workspace :is(
   }
 
   body[data-ui-theme="atelier"] .app:not(.signin-app) .top-actions .button {
-    min-height: 32px;
-    padding-inline: 9px;
+    min-height: var(--workbench-control-height);
+    padding-inline: 8px;
     font-size: 11px;
   }
 
@@ -1664,21 +1794,16 @@ body[data-ui-theme="atelier"] .knowledge-workspace :is(
   }
 
   body[data-ui-theme="atelier"] .app:not(.signin-app) .content {
-    padding: 22px 14px 36px;
+    padding: 18px 14px 32px;
   }
 
   body[data-ui-theme="atelier"] .app:not(.signin-app) .content-header h1 {
-    font-size: clamp(22px, 7vw, 28px);
+    font-size: 20px;
   }
 
   body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions select {
-    grid-column: 1 / -1;
-    width: 100%;
   }
 
   body[data-ui-theme="atelier"] .app:not(.signin-app) .content-actions .button {
@@ -1778,6 +1903,150 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .user-menu-caret {
   color: var(--workbench-muted);
 }
 
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu {
+  position: relative;
+  min-width: 0;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-trigger {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 14px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  height: var(--workbench-input-height);
+  min-height: var(--workbench-input-height);
+  gap: 8px;
+  padding: 0 9px 0 10px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: none;
+  font-family: var(--workbench-font-body);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: left;
+  transition: border-color 0.14s ease-out, background-color 0.14s ease-out, color 0.14s ease-out, box-shadow 0.14s ease-out;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-trigger:hover:not(:disabled),
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu[data-open="true"] .select-menu-trigger {
+  border-color: var(--workbench-accent);
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  box-shadow: 0 0 0 2px rgba(85, 127, 158, 0.08);
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-caret {
+  justify-self: center;
+  width: 7px;
+  height: 7px;
+  margin-top: -3px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.14s ease-out, margin 0.14s ease-out;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu[data-open="true"] .select-menu-caret {
+  margin-top: 3px;
+  transform: rotate(225deg);
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-popup {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(280px, calc(100vw - 24px));
+  max-height: min(320px, 45dvh);
+  overflow: auto;
+  padding: 5px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-panel);
+  box-shadow: 0 14px 34px rgba(38, 56, 71, 0.18);
+  animation: workbench-select-enter 0.14s ease-out;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu[data-align="end"] .select-menu-popup {
+  right: 0;
+  left: auto;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 32px;
+  gap: 10px;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--workbench-ink-soft);
+  box-shadow: none;
+  font-family: var(--workbench-font-body);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  text-align: left;
+  white-space: nowrap;
+  transition: border-color 0.12s ease-out, background-color 0.12s ease-out, color 0.12s ease-out;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-option:hover:not(:disabled),
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-option:focus-visible {
+  outline: 0;
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-option[aria-selected="true"] {
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  font-weight: 650;
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu-option[aria-selected="true"] > i::before {
+  content: "";
+  display: block;
+  width: 8px;
+  height: 4px;
+  border-bottom: 2px solid currentColor;
+  border-left: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) .select-menu :is(button:disabled, .select-menu-option:disabled) {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+@keyframes workbench-select-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* Board headers and task rows use different surfaces so the rail reads as a hierarchy. */
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent-label {
   display: flex;
@@ -1787,10 +2056,6 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent-label {
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group {
   overflow: hidden;
-}
-
-body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading {
-  border-bottom: 1px solid var(--workbench-line-strong);
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child:hover,
@@ -1822,10 +2087,6 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .section-knowledge:focus-vis
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job:hover {
   border-left-color: var(--workbench-line-strong);
   background: var(--workbench-panel-muted);
-  box-shadow: none;
-}
-
-body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job.active {
   box-shadow: none;
 }
 
@@ -2031,9 +2292,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .field-label {
   color: var(--workbench-muted);
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor :is(input, select, textarea),
-body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-field textarea,
-body[data-ui-theme="atelier"] .app:not(.signin-app) .dependency-select label {
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor :is(input, textarea), body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-field textarea, body[data-ui-theme="atelier"] .app:not(.signin-app) .dependency-select label {
   border-color: var(--workbench-line);
   border-radius: var(--workbench-radius-small);
   background: var(--workbench-panel);
@@ -2048,8 +2307,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .knowledge-field-settings {
   box-shadow: none;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor :is(input, select, textarea):focus,
-body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-field textarea:focus {
+body[data-ui-theme="atelier"] .app:not(.signin-app) .field-editor :is(input, textarea):focus, body[data-ui-theme="atelier"] .app:not(.signin-app) .prompt-field textarea:focus {
   border-color: var(--workbench-blue);
   box-shadow: 0 0 0 3px var(--workbench-blue-soft);
 }
@@ -2128,6 +2386,16 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .schema-field {
   border-bottom: 1px solid var(--workbench-line);
 }
 
+/* Repeated rows use a quieter hairline than controls and outer frames. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .schema-field,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-block,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-results,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-bulk-bar,
+body[data-ui-theme="atelier"] .app:not(.signin-app) .modal > header {
+  border-color: var(--workbench-line-subtle);
+}
+
 /* Pagination is a compact utility row, not a legacy green footer. */
 body[data-ui-theme="atelier"] .app:not(.signin-app) .record-list {
   background: transparent;
@@ -2136,7 +2404,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .record-list {
 body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager {
   min-height: 48px;
   padding: 8px 12px;
-  border-top: 1px solid var(--workbench-line-strong);
+  border-top: 1px solid var(--workbench-line);
   background: var(--workbench-panel-tint);
   color: var(--workbench-muted);
   font-family: var(--workbench-font-body);
@@ -2147,25 +2415,42 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager label {
   color: var(--workbench-muted);
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager select {
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager .record-page-size-select {
+  flex: 0 0 54px;
+  width: 54px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager .record-page-size-select .select-menu-trigger {
+  grid-template-columns: minmax(0, 1fr) 10px;
   min-height: 30px;
   height: 30px;
-  border: 1px solid var(--workbench-line);
-  border-radius: var(--workbench-radius-small);
-  background: var(--workbench-panel);
+  gap: 4px;
+  padding: 0 6px 0 8px;
+  border-color: var(--workbench-line);
   color: var(--workbench-ink-soft);
   font-family: var(--workbench-font-body);
   font-size: 11px;
-  box-shadow: none;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager .record-page-size-select .select-menu-popup {
+  min-width: 72px;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager .record-page-size-select .select-menu-option {
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager output {
-  color: var(--workbench-ink-soft);
+  color: var(--workbench-muted);
   font-family: var(--workbench-font-mono);
-  font-size: 11px;
+  font-size: 10px;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager button {
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager > button {
   width: 30px;
   height: 30px;
   border: 1px solid var(--workbench-line);
@@ -2174,10 +2459,11 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager button {
   color: var(--workbench-ink-soft);
   box-shadow: none;
   font-family: var(--workbench-font-body);
-  font-size: 18px;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager button:hover:not(:disabled) {
+body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager > button:hover:not(:disabled) {
   border-color: var(--workbench-blue);
   background: var(--workbench-blue-soft);
   color: var(--workbench-blue-strong);
@@ -2202,9 +2488,9 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .record-pager button:hover:n
 
 /* Keep the task rail overrides last so legacy component rules cannot split the hierarchy. */
 body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title {
-  min-height: 36px;
+  min-height: 30px;
   margin: 0;
-  padding: 0 8px 8px;
+  padding: 0 6px 7px;
   border-bottom: 1px solid var(--workbench-line);
   color: var(--workbench-ink-soft);
   font-size: 11px;
@@ -2214,7 +2500,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title {
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .sidebar-title.section-title {
-  margin-top: 18px;
+  margin-top: 12px;
   padding-top: 0;
 }
 
@@ -2229,17 +2515,21 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job-filters input {
   grid-column: 1 / -1;
 }
 
-body[data-ui-theme="atelier"] .app:not(.signin-app) .job-filters :is(input, select) {
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-filters input {
   min-width: 0;
-  height: 36px;
-  min-height: 36px;
+  height: var(--workbench-input-height);
+  min-height: var(--workbench-input-height);
   padding: 0 10px;
-  border: 1px solid var(--workbench-line);
+  border: 1px solid var(--workbench-line-strong);
   border-radius: var(--workbench-radius-small);
   background: var(--workbench-panel);
   color: var(--workbench-ink);
   font-size: 12px;
   line-height: 1.3;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-filters .select-menu {
+  width: 100%;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar {
@@ -2318,9 +2608,9 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job-control-results {
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent-label {
-  min-height: 30px;
-  margin-top: 14px;
-  padding: 9px 8px 6px;
+  min-height: 28px;
+  margin-top: 10px;
+  padding: 7px 6px 5px;
   border: 0;
   border-bottom: 1px solid var(--workbench-line);
   background: transparent;
@@ -2332,7 +2622,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent-label {
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-parent + .job-section-parent {
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group {
@@ -2345,27 +2635,27 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group {
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading {
   grid-template-columns: minmax(0, 1fr) auto auto;
-  min-height: 42px;
-  gap: 5px;
-  padding: 0 5px 0 0;
-  border: 1px solid var(--workbench-line);
-  border-bottom-color: var(--workbench-line-strong);
-  border-radius: var(--workbench-radius-small);
-  background: #dce9f1;
+  min-height: 38px;
+  gap: 4px;
+  padding: 0 4px 0 0;
+  border: 0;
+  border-bottom: 1px solid var(--workbench-line-strong);
+  border-radius: 0;
+  background: var(--workbench-panel-muted);
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-heading > button:first-child {
   min-width: 0;
-  min-height: 42px;
+  min-height: 38px;
   overflow: hidden;
-  padding: 9px 6px 9px 10px;
+  padding: 8px 6px 8px 8px;
   border: 0;
-  border-left: 3px solid var(--workbench-blue-strong);
+  border-left: 2px solid var(--workbench-accent);
   border-radius: 0;
   background: transparent;
   color: var(--workbench-ink);
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 600;
   line-height: 1.25;
   white-space: nowrap;
   text-align: left;
@@ -2390,14 +2680,14 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .section-usage {
   padding: 0;
   color: var(--workbench-muted);
   font-family: var(--workbench-font-mono);
-  font-size: 12px;
+  font-size: 11px;
   font-variant-numeric: tabular-nums;
   line-height: 1.3;
   white-space: nowrap;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .section-knowledge {
-  width: 30px;
+  width: 28px;
   height: 28px;
   margin: 0;
   padding: 0;
@@ -2409,12 +2699,12 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .section-knowledge {
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job {
-  min-height: 68px;
+  min-height: 44px;
   margin: 0;
-  padding: 9px 7px 9px 10px;
+  padding: 7px 6px 7px 8px;
   border: 0;
   border-top: 1px solid var(--workbench-line);
-  border-left: 3px solid transparent;
+  border-left: 2px solid transparent;
   border-radius: 0;
   background: var(--workbench-panel);
   box-shadow: none;
@@ -2422,8 +2712,17 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job {
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-select {
   min-width: 0;
-  gap: 9px;
+  gap: 7px;
   padding: 0;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-main {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 1px;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-select > span:last-child {
@@ -2431,31 +2730,40 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .j
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-select strong {
+  grid-column: 1 / -1;
   overflow: hidden;
   color: var(--workbench-ink);
-  font-size: 14px;
-  font-weight: 650;
-  line-height: 1.35;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-select small {
-  margin-top: 3px;
+  margin-top: 2px;
+  min-width: 0;
+  overflow: hidden;
   color: var(--workbench-muted);
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-usage {
+  max-width: 100%;
+  justify-content: flex-start;
+  padding-left: 33px;
   color: var(--workbench-blue-strong);
-  font-family: var(--workbench-font-mono);
-  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+  text-align: left;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job.active {
-  border-left-color: var(--workbench-blue-strong);
-  background: var(--workbench-blue-soft);
+  border-left-color: var(--workbench-accent);
+  background: var(--workbench-accent-soft);
+  box-shadow: none;
 }
 
 body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-empty {
@@ -2520,5 +2828,713 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .server-state b {
   body[data-ui-theme="atelier"] .app:not(.signin-app) .job-bulk-bar span {
     grid-column: 1 / -1;
     grid-row: 2;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .job-section-group > .job .job-usage {
+    padding-left: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui-theme="atelier"] .usage-popover-panel {
+    animation: none;
+  }
+}
+
+/* Knowledge workspace final sync: compact pale-blue shell and controls. */
+body[data-ui-theme="atelier"] .knowledge-workspace,
+body[data-ui-theme="atelier"] .knowledge-import-modal {
+  --knowledge-tabs-row-height: 44px;
+  --knowledge-selector-height: 38px;
+  --workbench-page: #f3f6f8;
+  --workbench-panel: #ffffff;
+  --workbench-panel-muted: #f7fafc;
+  --workbench-panel-tint: #edf3f7;
+  --workbench-ink: #263847;
+  --workbench-ink-soft: #536b7b;
+  --workbench-muted: #718594;
+  --workbench-line-subtle: #e8eef2;
+  --workbench-line: #d9e3ea;
+  --workbench-line-strong: #c5d3dd;
+  --workbench-accent: #557f9e;
+  --workbench-accent-soft: #e8f1f7;
+  --workbench-green: #6e987f;
+  --workbench-green-soft: #eaf4ee;
+  --workbench-danger: #a25d5b;
+  --workbench-danger-soft: #f9eceb;
+  --workbench-radius: 12px;
+  --workbench-radius-small: 8px;
+  --workbench-font-body: "Segoe UI", "Microsoft YaHei", sans-serif;
+  --workbench-font-mono: "Cascadia Mono", Consolas, "Microsoft YaHei", monospace;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace {
+  width: 100%;
+  min-height: 100dvh;
+  padding: 8px;
+  overflow-x: hidden;
+  background: var(--workbench-page);
+  color: var(--workbench-ink);
+  font-family: var(--workbench-font-body);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-topbar {
+  min-height: 52px;
+  height: 52px;
+  padding: 0 16px;
+  border: 1px solid var(--workbench-line-strong);
+  border-bottom-color: var(--workbench-line);
+  border-radius: var(--workbench-radius) var(--workbench-radius) 0 0;
+  background: var(--workbench-panel);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-brand {
+  gap: 10px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-back {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-accent);
+  box-shadow: none;
+  font-size: 16px;
+  transition: background-color 0.14s ease-out, border-color 0.14s ease-out, color 0.14s ease-out;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-back:hover,
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-back:focus-visible {
+  border-color: var(--workbench-accent);
+  background: var(--workbench-accent-soft);
+  outline: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .brand-mark {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--workbench-accent);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-accent);
+  color: #ffffff;
+  box-shadow: none;
+  font-size: 15px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-brand h1 {
+  margin: 1px 0 0;
+  color: var(--workbench-ink);
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-brand small,
+  .knowledge-band-head small,
+  .knowledge-sticky-actions small,
+  .search-test-input small
+) {
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-top-status {
+  gap: 6px;
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 9px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-top-status :is(span, b) {
+  padding: 5px 8px;
+  border: 1px solid var(--workbench-line);
+  border-radius: 6px;
+  background: var(--workbench-panel-muted);
+  color: var(--workbench-ink-soft);
+  font-weight: 600;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-top-status span {
+  border-left: 3px solid var(--workbench-accent);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs {
+  top: 8px;
+  z-index: 3;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--workbench-line-strong);
+  border-top: 0;
+  background: var(--workbench-panel);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button {
+  min-width: 104px;
+  height: 43px;
+  padding: 0 16px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--workbench-muted);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background-color 0.14s ease-out, color 0.14s ease-out, border-color 0.14s ease-out;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button:first-child {
+  border-left: 0;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button:hover,
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button:focus-visible {
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-accent);
+  outline: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button.active {
+  border-bottom-color: var(--workbench-accent);
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-switch {
+  gap: 7px;
+  min-width: 220px;
+  margin-left: auto;
+  padding-left: 16px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-switch label {
+  color: var(--workbench-muted);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-switch .select-menu {
+  width: 172px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-main {
+  min-height: calc(100dvh - 104px);
+  padding: 20px;
+  border: 1px solid var(--workbench-line-strong);
+  border-top: 0;
+  border-radius: 0 0 var(--workbench-radius) var(--workbench-radius);
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-sync-status {
+  min-height: 34px;
+  margin: 0 0 14px;
+  padding: 6px 10px !important;
+  gap: 8px !important;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-sync-status .button {
+  margin-left: auto;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(.button, .knowledge-row-actions button, .knowledge-batch-bar button, .knowledge-pagination button) {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  box-shadow: none;
+  font-family: var(--workbench-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  transition: background-color 0.14s ease-out, border-color 0.14s ease-out, color 0.14s ease-out;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(.button, .knowledge-row-actions button, .knowledge-batch-bar button, .knowledge-pagination button):hover:not(:disabled) {
+  border-color: var(--workbench-accent);
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  transform: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .button.primary {
+  border-color: var(--workbench-accent);
+  background: var(--workbench-accent);
+  color: #ffffff;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .button.dark {
+  border-color: var(--workbench-ink);
+  background: var(--workbench-ink);
+  color: #ffffff;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-band-head {
+  min-height: 56px;
+  align-items: center;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--workbench-line-strong);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-band-head h2,
+body[data-ui-theme="atelier"] .knowledge-workspace .search-test-input h2 {
+  margin: 3px 0 0;
+  color: var(--workbench-ink);
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(.botanical-art, .artwork-credits) {
+  display: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-empty {
+  min-height: 280px;
+  padding: 32px;
+  border: 1px dashed var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-band-head + .knowledge-empty {
+  margin-top: 14px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-empty > b {
+  width: 50px;
+  height: 46px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  box-shadow: none;
+  font-family: var(--workbench-font-mono);
+  font-size: 13px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-empty h3 {
+  margin: 16px 0 5px;
+  color: var(--workbench-ink);
+  font-size: 16px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-empty p {
+  margin: 0 0 18px;
+  color: var(--workbench-muted);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-empty.compact {
+  min-height: 150px;
+  border: 1px dashed var(--workbench-line);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-loading {
+  padding: 64px 20px;
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-table-scroll {
+  margin-top: 14px;
+  border: 1px solid var(--workbench-line);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-row {
+  min-height: 54px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--workbench-line-subtle);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-row:last-child {
+  border-bottom: 0;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-row.head {
+  min-height: 36px;
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-row.selected {
+  background: var(--workbench-accent-soft);
+  box-shadow: inset 3px 0 0 var(--workbench-accent);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-name {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-name > b {
+  width: 28px;
+  height: 30px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: 6px;
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-name small,
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-row time {
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-row-actions {
+  gap: 5px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-row-actions button {
+  min-height: 28px;
+  padding: 0 7px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-row-actions button.danger-text {
+  color: var(--workbench-danger);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-state {
+  padding: 3px 6px;
+  border: 1px solid var(--workbench-line);
+  border-radius: 5px;
+  background: var(--workbench-panel-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 9px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-state.enabled {
+  border-left: 3px solid var(--workbench-green);
+  background: var(--workbench-green-soft);
+  color: #4e725e;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-state.disabled {
+  border-left: 3px solid var(--workbench-danger);
+  background: var(--workbench-danger-soft);
+  color: var(--workbench-danger);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-sticky-actions {
+  top: 52px;
+  min-height: 58px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--workbench-line-strong);
+  background: var(--workbench-page);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-sticky-actions > div:first-child {
+  gap: 8px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-sticky-actions strong {
+  color: var(--workbench-ink);
+  font-size: 15px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-sticky-actions span {
+  padding: 3px 6px;
+  border: 1px solid var(--workbench-line);
+  border-radius: 5px;
+  background: var(--workbench-panel);
+  color: var(--workbench-muted);
+  font-size: 9px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-item-tools {
+  gap: 7px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-item-tools input,
+  .search-test-actions input,
+  .knowledge-import-top input,
+  .knowledge-item-editor textarea,
+  .search-test-input textarea
+) {
+  min-height: 34px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: none;
+  font-family: var(--workbench-font-body);
+  font-size: 12px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace :is(
+  .knowledge-item-tools input,
+  .search-test-actions input,
+  .knowledge-import-top input,
+  .knowledge-item-editor textarea,
+  .search-test-input textarea
+):focus {
+  border-color: var(--workbench-accent);
+  box-shadow: 0 0 0 3px var(--workbench-accent-soft);
+  outline: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-batch-bar {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--workbench-line);
+  border-left: 3px solid var(--workbench-accent);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-item-table {
+  background: var(--workbench-panel);
+  color: var(--workbench-ink-soft);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-item-table :is(th, td) {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--workbench-line-subtle);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-item-table th {
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-item-table tr.disabled td {
+  background: var(--workbench-danger-soft);
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-pagination {
+  padding: 12px 0 0;
+  color: var(--workbench-muted);
+  font-family: var(--workbench-font-mono);
+  font-size: 10px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-search-view {
+  grid-template-columns: minmax(300px, 380px) minmax(0, 1fr);
+  gap: 22px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .search-test-input {
+  top: 66px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .search-test-input p {
+  margin: 6px 0 14px;
+  color: var(--workbench-muted);
+  font-size: 11px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .search-test-input textarea {
+  min-height: 150px;
+  padding: 11px;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .search-results {
+  border-top: 1px solid var(--workbench-line-strong);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .search-results-head {
+  padding: 9px 10px;
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-candidate {
+  padding: 13px 10px;
+  border-bottom: 1px solid var(--workbench-line-subtle);
+  background: var(--workbench-panel);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-candidate > b {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: 6px;
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-candidate code {
+  border: 1px solid var(--workbench-line);
+  border-radius: 5px;
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-accent);
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal {
+  background: rgba(38, 56, 71, 0.52);
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal .modal {
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  box-shadow: 0 18px 48px rgba(50, 76, 94, 0.2);
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal .modal > header {
+  border-bottom: 1px solid var(--workbench-line-subtle);
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal :is(.button, .modal-close) {
+  border-radius: var(--workbench-radius-small);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal .button.primary {
+  border-color: var(--workbench-accent);
+  background: var(--workbench-accent);
+  color: #ffffff;
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal .import-metrics,
+body[data-ui-theme="atelier"] .knowledge-import-modal .column-map {
+  border: 1px solid var(--workbench-line-strong);
+  border-radius: var(--workbench-radius-small);
+  overflow: hidden;
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal .import-metrics span,
+body[data-ui-theme="atelier"] .knowledge-import-modal :is(.column-map-head, .column-map-row) {
+  border-color: var(--workbench-line);
+  background: var(--workbench-panel);
+  color: var(--workbench-muted);
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal .column-map-head {
+  background: var(--workbench-panel-tint);
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal .role-options label {
+  border: 1px solid var(--workbench-line);
+  border-radius: 5px;
+  background: var(--workbench-panel-muted);
+  color: var(--workbench-ink-soft);
+}
+
+body[data-ui-theme="atelier"] .knowledge-import-modal .import-errors {
+  border-left-color: var(--workbench-danger);
+  border-radius: var(--workbench-radius-small);
+  background: var(--workbench-danger-soft);
+}
+
+@media (max-width: 900px) {
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-topbar,
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs {
+    padding-inline: 12px;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-main {
+    padding: 16px;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-search-view {
+    grid-template-columns: 1fr;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .search-test-input {
+    position: static;
+  }
+}
+
+@media (max-width: 650px) {
+  body[data-ui-theme="atelier"] .knowledge-workspace {
+    padding: 0;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-topbar {
+    height: 56px;
+    min-height: 56px;
+    border-radius: 0;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-top-status {
+    display: none;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs {
+    top: 0;
+    height: calc(var(--knowledge-tabs-row-height) + var(--knowledge-selector-height));
+    padding: 0;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-tabs > button {
+    flex: 1 0 94px;
+    min-width: 94px;
+    padding-inline: 8px;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-switch {
+    top: var(--knowledge-tabs-row-height);
+    height: var(--knowledge-selector-height);
+    padding: 3px 10px;
+    border-bottom: 1px solid var(--workbench-line);
+    background: var(--workbench-panel);
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-base-switch .select-menu {
+    width: 100%;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-main {
+    min-height: calc(100dvh - 138px);
+    padding: 14px 10px;
+    border-radius: 0;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-sticky-actions {
+    top: calc(var(--knowledge-tabs-row-height) + var(--knowledge-selector-height));
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-item-tools {
+    grid-template-columns: minmax(0, 1fr) minmax(96px, auto);
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-item-tools .button {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  body[data-ui-theme="atelier"] .knowledge-workspace .knowledge-empty {
+    min-height: 220px;
+    padding: 24px 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body[data-ui-theme="atelier"] .knowledge-workspace *,
+  body[data-ui-theme="atelier"] .knowledge-import-modal * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
