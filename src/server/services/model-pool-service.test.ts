@@ -310,6 +310,27 @@ describe("model pool routing", () => {
     ]);
   });
 
+  it("rotates successful requests across eligible free members", async () => {
+    const first = createPoolMember({ model: "first", priority: 1 });
+    const second = createPoolMember({ model: "second", priority: 2 });
+    const third = createPoolMember({ model: "third", priority: 3 });
+    vi.mocked(callVisionModel).mockResolvedValue(success());
+
+    await callModelPool([], { purpose: "text", operation: "rotation-1" });
+    await callModelPool([], { purpose: "text", operation: "rotation-2" });
+    await callModelPool([], { purpose: "text", operation: "rotation-3" });
+    await callModelPool([], { purpose: "text", operation: "rotation-4" });
+
+    expect(vi.mocked(callVisionModel).mock.calls.map((call) => (call[0] as any).model))
+      .toEqual(["first", "second", "third", "first"]);
+    expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(first))
+      .toEqual({ quota_used_tokens: 40 });
+    expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(second))
+      .toEqual({ quota_used_tokens: 20 });
+    expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(third))
+      .toEqual({ quota_used_tokens: 20 });
+  });
+
   it("uses a regular free member before the default free fallback", async () => {
     const fallback = createPoolMember({
       model: "default-fallback",
@@ -323,6 +344,28 @@ describe("model pool routing", () => {
 
     expect(result.model.id).toBe(regular);
     expect(result.model.id).not.toBe(fallback);
+  });
+
+  it("keeps the default free member out of repeated rotation while regular members remain", async () => {
+    createPoolMember({
+      model: "rotation-default",
+      priority: 1,
+      isPurposeDefault: true,
+    });
+    createPoolMember({ model: "rotation-regular-first", priority: 10 });
+    createPoolMember({ model: "rotation-regular-second", priority: 20 });
+    vi.mocked(callVisionModel).mockResolvedValue(success());
+
+    await callModelPool([], { purpose: "text", operation: "rotation-default-1" });
+    await callModelPool([], { purpose: "text", operation: "rotation-default-2" });
+    await callModelPool([], { purpose: "text", operation: "rotation-default-3" });
+
+    expect(vi.mocked(callVisionModel).mock.calls.map((call) => (call[0] as any).model))
+      .toEqual([
+        "rotation-regular-first",
+        "rotation-regular-second",
+        "rotation-regular-first",
+      ]);
   });
 
   it("marks quota exhaustion and switches immediately", async () => {
@@ -383,6 +426,20 @@ describe("model pool routing", () => {
 
     expect(vi.mocked(callVisionModel).mock.calls.map((call) => (call[0] as any).model))
       .toEqual(["transient-first", "transient-first", "transient-second"]);
+  });
+
+  it("switches to the immediate next free member without advancing the rotation twice", async () => {
+    createPoolMember({ model: "switch-first", priority: 1 });
+    createPoolMember({ model: "switch-second", priority: 2 });
+    createPoolMember({ model: "switch-third", priority: 3 });
+    vi.mocked(callVisionModel)
+      .mockRejectedValueOnce(new Error("rate limited (429)"))
+      .mockResolvedValueOnce(success());
+
+    await callModelPool([], { purpose: "text", operation: "three-member-switch" });
+
+    expect(vi.mocked(callVisionModel).mock.calls.map((call) => (call[0] as any).model))
+      .toEqual(["switch-first", "switch-second"]);
   });
 
   it("disables the provider on authentication failure and switches", async () => {

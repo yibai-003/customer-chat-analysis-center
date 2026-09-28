@@ -57,6 +57,35 @@ export function rankPoolCandidates(
   return rankEligibleModelCandidates(members, options);
 }
 
+const roundRobinLastSelected = new Map<ModelPurpose, string>();
+
+function nextPoolCandidate(
+  candidates: ResolvedPoolMember[],
+  purpose: ModelPurpose,
+) {
+  const freeCandidates = candidates.filter((member) => member.billingMode === "free");
+  const billingPool = freeCandidates.length ? freeCandidates : candidates;
+  const regularCandidates = billingPool.filter((member) => !member.isPurposeDefault);
+  const pool = regularCandidates.length ? regularCandidates : billingPool;
+  if (!pool.length) return undefined;
+
+  const previousId = roundRobinLastSelected.get(purpose);
+  const previousIndex = previousId
+    ? pool.findIndex((member) => member.id === previousId)
+    : -1;
+  return pool[(previousIndex + 1) % pool.length];
+}
+
+function selectPoolCandidate(
+  candidates: ResolvedPoolMember[],
+  purpose: ModelPurpose,
+) {
+  const candidate = nextPoolCandidate(candidates, purpose);
+  if (!candidate) return undefined;
+  roundRobinLastSelected.set(purpose, candidate.id);
+  return candidate;
+}
+
 function usageDetails(usage: Usage) {
   const input = Number.isSafeInteger(usage.prompt_tokens) && Number(usage.prompt_tokens) >= 0
     ? Number(usage.prompt_tokens)
@@ -438,7 +467,7 @@ async function routeModelPool(
       allowPaid: paidTokensRemaining() > 0,
       failedMemberIds,
     });
-    const candidate = candidates[0];
+    const candidate = selectPoolCandidate(candidates, options.purpose);
     if (!candidate) {
       const blockedPaid = hasPaidCandidate(allMembers, now, failedMemberIds);
       if (blockedPaid) {
@@ -620,11 +649,12 @@ async function routeModelPool(
     }
 
     failedMemberIds.add(candidate.id);
-    const next = rankPoolCandidates(allMembers, {
+    const nextCandidates = rankPoolCandidates(allMembers, {
       now: Date.now(),
       allowPaid: paidTokensRemaining() > 0,
       failedMemberIds,
-    })[0];
+    });
+    const next = nextPoolCandidate(nextCandidates, options.purpose);
     if (next) {
       insertEvent(candidate, options, {
         type: "switch",
