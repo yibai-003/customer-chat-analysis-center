@@ -941,6 +941,13 @@
       "source_row_number": 198
     },
     {
+      "id": "00a11050-d4f5-4f8a-a11f-91ef3dfa0a28",
+      "knowledge_base_id": "hot-topic-auto-questions",
+      "values_json": "{\"标准问题\":\"3米和3.88米充气游泳池哪个尺寸够用？\",\"来源\":\"AI 自动补充\"}",
+      "is_enabled": 1,
+      "source_row_number": null
+    },
+    {
       "id": "014d8456-8a73-43ef-8e8f-d86de0f1dea3",
       "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
       "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-仓库丢件\",\"三级原因\":\"\"}",
@@ -1298,6 +1305,13 @@
       "source_row_number": 58
     },
     {
+      "id": "220f5e0d-4e8d-49fa-8fe2-7581ae541abd",
+      "knowledge_base_id": "hot-topic-auto-questions",
+      "values_json": "{\"标准问题\":\"充气游泳池3层与4层的区别是什么？\",\"来源\":\"AI 自动补充\"}",
+      "is_enabled": 1,
+      "source_row_number": null
+    },
+    {
       "id": "23246d23-75fd-473c-a06f-264a8151167f",
       "knowledge_base_id": "a470f99b-bddb-4fc2-afe9-5ee3770577e2",
       "values_json": "{\"一级原因\":\"仓储部\",\"二级原因\":\"非品质-错发\",\"三级原因\":\"\"}",
@@ -1436,6 +1450,13 @@
       "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-拍错订单\",\"三级原因\":\"家人已购买过\"}",
       "is_enabled": 1,
       "source_row_number": 328
+    },
+    {
+      "id": "33ddbc7e-8d66-466b-bc64-586873c32dbf",
+      "knowledge_base_id": "hot-topic-auto-questions",
+      "values_json": "{\"标准问题\":\"婴儿游泳圈使用方法？\",\"来源\":\"AI 自动补充\"}",
+      "is_enabled": 1,
+      "source_row_number": null
     },
     {
       "id": "34b525b5-dc39-4088-8160-3f1b43114d57",
@@ -2362,6 +2383,13 @@
       "source_row_number": 35
     },
     {
+      "id": "86099e3e-b61e-40e6-8e71-2eeac2fa5e55",
+      "knowledge_base_id": "hot-topic-auto-questions",
+      "values_json": "{\"标准问题\":\"付款后多久发货及售后问题如何处理？\",\"来源\":\"AI 自动补充\"}",
+      "is_enabled": 1,
+      "source_row_number": null
+    },
+    {
       "id": "86b688df-678d-4c4e-bbe8-a51e755a2751",
       "knowledge_base_id": "hot-topic-auto-questions",
       "values_json": "{\"标准问题\":\"如何退还前两天购买的订单？\",\"来源\":\"AI 自动补充\"}",
@@ -2409,6 +2437,13 @@
       "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-七天无理由\",\"三级原因\":\"认为注水时间过长\"}",
       "is_enabled": 1,
       "source_row_number": 232
+    },
+    {
+      "id": "89b71463-650d-4a7e-889a-415f1b3d3318",
+      "knowledge_base_id": "hot-topic-auto-questions",
+      "values_json": "{\"标准问题\":\"之后需要重新下单吗？\",\"来源\":\"AI 自动补充\"}",
+      "is_enabled": 1,
+      "source_row_number": null
     },
     {
       "id": "8a4ab98e-f03e-4c18-a4ad-2276fe4e7fe7",
@@ -2542,6 +2577,13 @@
       "values_json": "{\"一级原因\":\"工厂问题\",\"二级原因\":\"品质-遮阳棚纤维杆破损-断裂\",\"三级原因\":\"\"}",
       "is_enabled": 1,
       "source_row_number": 212
+    },
+    {
+      "id": "9b45c91c-01a4-4823-b06b-7f636ce0ea9a",
+      "knowledge_base_id": "hot-topic-auto-questions",
+      "values_json": "{\"标准问题\":\"婴儿游泳圈适用月龄？\",\"来源\":\"AI 自动补充\"}",
+      "is_enabled": 1,
+      "source_row_number": null
     },
     {
       "id": "9c70761b-929f-457b-82ad-d183d385da88",
@@ -3431,6 +3473,13 @@
       "values_json": "{\"一级原因\":\"客户原因\",\"二级原因\":\"非品质-尺寸不合适\",\"三级原因\":\"尺寸太高\"}",
       "is_enabled": 1,
       "source_row_number": 312
+    },
+    {
+      "id": "e405ca05-8ca3-425b-91ec-95394b64996a",
+      "knowledge_base_id": "hot-topic-auto-questions",
+      "values_json": "{\"标准问题\":\"运费大概金额是多少\",\"来源\":\"AI 自动补充\"}",
+      "is_enabled": 1,
+      "source_row_number": null
     },
     {
       "id": "e45c78af-e320-4b36-8b07-69a139f180f2",
