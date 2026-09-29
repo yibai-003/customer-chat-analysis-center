@@ -3538,3 +3538,90 @@ body[data-ui-theme="atelier"] .knowledge-import-modal .import-errors {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* Keep the empty import state and shared action dialogs on the workbench theme. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .blank {
+  border: 1px dashed var(--workbench-line-strong);
+  background: var(--workbench-panel);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .upload-art {
+  border: 1px solid var(--workbench-line-strong);
+  background: var(--workbench-blue-soft);
+  color: var(--workbench-accent);
+  box-shadow: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .upload-art::before {
+  border: 1px solid var(--workbench-line);
+  background: var(--workbench-panel);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .upload-art i {
+  border: 1px solid var(--workbench-accent);
+  border-radius: 50%;
+  background: var(--workbench-accent);
+  color: #ffffff;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .import-section-modal .import-preview-summary,
+body[data-ui-theme="atelier"] .knowledge-workspace .import-section-modal .import-preview-summary {
+  border-left: 2px solid var(--workbench-accent);
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .import-section-modal .import-preview-summary strong,
+body[data-ui-theme="atelier"] .knowledge-workspace .import-section-modal .import-preview-summary strong {
+  color: var(--workbench-ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .confirm-action-modal .confirm-dialog {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .confirm-action-modal .confirm-dialog {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .confirm-action-modal .confirm-icon {
+  border: 1px solid var(--workbench-accent);
+  border-radius: 50%;
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  font-family: var(--workbench-font-body);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .confirm-action-modal .confirm-icon {
+  border: 1px solid var(--workbench-accent);
+  border-radius: 50%;
+  background: var(--workbench-accent-soft);
+  color: var(--workbench-accent);
+  font-family: var(--workbench-font-body);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .confirm-action-modal .confirm-icon.danger {
+  border-color: var(--workbench-danger);
+  background: var(--workbench-danger-soft);
+  color: var(--workbench-danger);
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .confirm-action-modal .confirm-icon.danger {
+  border-color: var(--workbench-danger);
+  background: var(--workbench-danger-soft);
+  color: var(--workbench-danger);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .confirm-action-modal .danger-button {
+  border-color: var(--workbench-danger);
+  background: var(--workbench-danger);
+  color: #ffffff;
+}
+
+body[data-ui-theme="atelier"] .knowledge-workspace .confirm-action-modal .danger-button {
+  border-color: var(--workbench-danger);
+  background: var(--workbench-danger);
+  color: #ffffff;
+}

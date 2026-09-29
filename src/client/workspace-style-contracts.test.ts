@@ -351,4 +351,61 @@ describe("workbench style contracts", () => {
     expect(getComputedStyle(emptyState).fontSize).toBe("12px");
     expect(workspaceTheme).toContain("font-variant-numeric: tabular-nums;");
   });
+
+  it("uses the pale-blue workbench surfaces for the empty import state", () => {
+    createStyledWorkbench();
+    const content = document.querySelector(".content")!;
+    content.insertAdjacentHTML(
+      "beforeend",
+      `<div class="blank">
+        <div class="upload-art"><b>XLSX</b><i>+</i></div>
+        <h2>把聊天记录带进来</h2><p>支持带嵌入图片和辅助字段的 .xlsx 文件</p>
+        <button class="button primary large">选择文件</button>
+      </div>`,
+    );
+    const blank = document.querySelector(".blank")!;
+    const upload = document.querySelector(".upload-art")!;
+    const uploadBadge = document.querySelector(".upload-art i")!;
+
+    expect(getComputedStyle(blank).border).toBe("1px dashed var(--workbench-line-strong)");
+    expect(getComputedStyle(upload).border).toBe("1px solid var(--workbench-line-strong)");
+    expect(getComputedStyle(upload).boxShadow).toBe("none");
+    expect(workspaceTheme).toContain("background: var(--workbench-accent);");
+    expect(uploadBadge).toBeTruthy();
+    expect(workspaceTheme).toMatch(
+      /\.app:not\(\.signin-app\) \.blank\s*\{[^}]*border: 1px dashed var\(--workbench-line-strong\);[^}]*background: var\(--workbench-panel\);/s,
+    );
+    expect(workspaceTheme).toMatch(
+      /\.app:not\(\.signin-app\) \.upload-art\s*\{[^}]*background: var\(--workbench-blue-soft\);[^}]*box-shadow: none;/s,
+    );
+  });
+
+  it("aligns import selection and delete confirmation dialog details with the workbench theme", () => {
+    createStyledWorkbench();
+    document.querySelector(".app")!.insertAdjacentHTML(
+      "beforeend",
+      `<div class="backdrop import-section-modal"><div class="modal">
+        <div class="import-preview-summary"><strong>接待质检.xlsx</strong></div>
+      </div></div>
+      <div class="backdrop confirm-action-modal"><div class="modal">
+        <div class="confirm-dialog"><span class="confirm-icon danger">!</span><p>确认删除此文件吗？</p></div>
+      </div></div>`,
+    );
+    const importSummary = document.querySelector(".import-section-modal .import-preview-summary")!;
+    const confirmDialog = document.querySelector(".confirm-action-modal .confirm-dialog")!;
+    const confirmIcon = document.querySelector(".confirm-action-modal .confirm-icon.danger")!;
+
+    expect(importSummary).toBeTruthy();
+    expect(confirmDialog).toBeTruthy();
+    expect(confirmIcon).toBeTruthy();
+    expect(workspaceTheme).toMatch(
+      /\.import-section-modal \.import-preview-summary\s*\{[^}]*border-left: 2px solid var\(--workbench-accent\);[^}]*background: var\(--workbench-panel-tint\);/s,
+    );
+    expect(workspaceTheme).toMatch(
+      /\.confirm-action-modal \.confirm-dialog\s*\{[^}]*color: var\(--workbench-ink\);/s,
+    );
+    expect(workspaceTheme).toMatch(
+      /\.confirm-action-modal \.confirm-icon\.danger\s*\{[^}]*background: var\(--workbench-danger-soft\);[^}]*color: var\(--workbench-danger\);/s,
+    );
+  });
 });

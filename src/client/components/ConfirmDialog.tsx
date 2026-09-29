@@ -13,7 +13,7 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  return <Modal title={title} subtitle="PIXEL OPERATIONS / CONFIRM ACTION" close={onCancel}>
+  return <Modal className="confirm-action-modal" title={title} subtitle="WORKSPACE / CONFIRM ACTION" close={onCancel}>
     <div className="confirm-dialog"><span className="confirm-icon danger">!</span><p>{message}</p></div>
     <div className="modal-actions"><button className="button light" onClick={onCancel}>取消</button><button className="button danger-button" onClick={onConfirm}>{confirmLabel}</button></div>
   </Modal>;

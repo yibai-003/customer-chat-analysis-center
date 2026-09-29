@@ -12,7 +12,7 @@ export function ImportSectionDialog({ file, sections, platforms, busy, error, on
   const [platformId, setPlatformId] = useState("");
   const available = sections.filter((section) => section.parentId && section.isEnabled && section.currentVersionId);
   const availablePlatforms = platforms.filter((platform) => platform.isEnabled);
-  return <Modal title="选择文件所属板块" subtitle="本次选择将绑定到新任务，不受当前查看的任务影响" close={() => { if (!busy) onCancel(); }}>
+  return <Modal className="import-section-modal" title="选择文件所属板块" subtitle="本次选择将绑定到新任务，不受当前查看的任务影响" close={() => { if (!busy) onCancel(); }}>
     <div className="import-preview-summary"><strong>{file.name}</strong></div>
     <div className="form-grid import-section-form"><label>解析板块
       <SelectMenu ariaLabel="文件所属解析板块" value={sectionId} disabled={busy} onChange={setSectionId} options={[
