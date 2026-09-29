@@ -18,6 +18,7 @@ import type {
   ReceptionQualityAnalysis,
 } from "./reception-quality";
 import type { ReceptionBusinessRules } from "./section-business-rules";
+import { SHARED_EXPORT_COLUMNS } from "./section-export-settings";
 
 const EXCEL_CELL_CHARACTER_LIMIT = 32_767;
 
@@ -246,6 +247,17 @@ function valueForColumn(input: {
   return plainCellValue(input.result[input.column.key]);
 }
 
+function exportColumnsForVersion(version: SectionConfigVersion): SectionExportColumn[] {
+  const configuredColumns = version.exportSettings.outputColumns;
+  const configuredKeys = new Set(configuredColumns.map((column) => column.key));
+  return [
+    ...SHARED_EXPORT_COLUMNS
+      .filter((column) => !configuredKeys.has(column.key))
+      .map((column) => ({ ...column })),
+    ...configuredColumns,
+  ];
+}
+
 export async function exportJob(jobId: string) {
   const job = getJob(jobId);
   if (!job) throw new Error("任务不存在");
@@ -262,6 +274,7 @@ export async function exportJob(jobId: string) {
   await workbook.xlsx.readFile(sourcePath);
   const allRecords = listRecords(jobId);
   const rules = boundVersion.businessRules as unknown as ReceptionBusinessRules;
+  const outputColumns = exportColumnsForVersion(boundVersion);
   const writes: Array<{
     worksheet: ExcelJS.Worksheet;
     rowNumber: number;
@@ -276,7 +289,7 @@ export async function exportJob(jobId: string) {
     const headerRow = worksheet.getRow(1);
     const sourceHeaders = Array.from({ length: headerRow.cellCount }, (_, index) =>
       normalizeExcelHeader(headerRow.getCell(index + 1).value));
-    const output = buildOutputPlan(sourceHeaders, boundVersion.exportSettings.outputColumns.map((column) => ({
+    const output = buildOutputPlan(sourceHeaders, outputColumns.map((column) => ({
       key: column.key,
       label: column.outputColumn ?? column.key,
       outputColumn: column.outputColumn ?? undefined,
@@ -296,12 +309,12 @@ export async function exportJob(jobId: string) {
       if (!detail) continue;
       if (boundVersion.exportSettings.rowMode === "screenshot_records" && !detail.imagePath.trim()) continue;
       const result = resultForRecord(detail, boundVersion);
-      const receptionData = boundVersion.exportSettings.outputColumns.some(
+      const receptionData = outputColumns.some(
         (column) => column.source === "reception_quality",
       )
         ? receptionExportData(result["统一质检分析"], record, rules)
         : undefined;
-      for (const column of boundVersion.exportSettings.outputColumns) {
+      for (const column of outputColumns) {
         const target = output.find((item) => item.key === column.key)!;
         const value = valueForColumn({
           column,

@@ -259,7 +259,7 @@ describe("dynamic reason knowledge flow", () => {
       id: sectionId,
       name: "退货分析",
     });
-    attachConversationTestPlatform(job.id);
+    const platform = attachConversationTestPlatform(job.id);
     generatedDirectories.add(path.join(config.dataDir, "jobs", job.id));
     const recordId = (db.prepare(recordIdQuery).get(job.id) as { id: string }).id;
 
@@ -412,6 +412,8 @@ describe("dynamic reason knowledge flow", () => {
     expect(exported.worksheets[0].getRow(2).values).toEqual([
       undefined,
       "面板弹簧片掉落",
+      platform.name,
+      detail.conversationId,
       "工厂问题",
       "品质-面板故障",
       "弹簧片掉落",

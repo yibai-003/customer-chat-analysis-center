@@ -9,8 +9,10 @@ import {
   addRecords,
   createJob,
   listRecords,
+  updateRecord,
   upsertSection,
 } from "../db/repositories";
+import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 import { buildOutputPlan } from "./excel-template-service";
 import { exportColumns, exportJob } from "./excel-export-service";
 import { createFieldRun } from "./field-run-service";
@@ -18,6 +20,7 @@ import { upsertField } from "./field-config-service";
 import {
   createDraftVersion,
   publishSectionVersion,
+  updateDraftSectionVersion,
 } from "./section-config-version-service";
 import { applySectionVersionIntegrity } from "../db/migrations/019-section-version-integrity";
 
@@ -115,17 +118,18 @@ describe("Excel export columns", () => {
     const version = publishSectionVersion(createDraftVersion("task-5-export").id);
     db.prepare(`
       INSERT INTO jobs (
-        id, original_filename, source_path, section_id, section_name, section_config_version_id, status,
+        id, original_filename, source_path, section_id, section_name, section_config_version_id,
+        platform_code, platform_name, status,
         total_records, completed_records, failed_records, created_at, updated_at
       ) VALUES ('task-5-export-job', 'source.xlsx', ?, 'task-5-export', '未成交分析', ?,
-        'ready', 1, 0, 0, ?, ?)
+        'TESTPLATFORM', '测试平台', 'ready', 1, 0, 0, ?, ?)
     `).run(sourcePath, version.id, timestamp, timestamp);
     db.prepare(`
       INSERT INTO records (
         id, job_id, sheet_name, row_number, anchor_json, source_fields_json,
-        image_path, status, review_status, review_note, created_at, updated_at
+        image_path, conversation_id, status, review_status, review_note, created_at, updated_at
       ) VALUES ('task-5-export-record', 'task-5-export-job', 'Sheet1', 2, '{}', '{}',
-        '', 'completed', 'pending', '', ?, ?)
+        '', 'TESTPLATFORM20260916ABC123', 'completed', 'pending', '', ?, ?)
     `).run(timestamp, timestamp);
     createFieldRun({
       recordId: "task-5-export-record",
@@ -181,8 +185,11 @@ describe("Excel export columns", () => {
       expect(headers.filter((item) => item === header)).toHaveLength(1);
     }
     expect(headers).not.toContain("未成交归因");
+    expect(headers).toEqual(expect.arrayContaining(["平台", "会话ID"]));
     expect(cells).toMatchObject({
       订单号: "A-1",
+      平台: "测试平台",
+      会话ID: "TESTPLATFORM20260916ABC123",
       客户原因: "价格超出预算",
       客服原因: "优惠说明不清晰",
       客户产品需求: "",
@@ -302,6 +309,7 @@ describe("Excel export columns", () => {
     expect(headers).toEqual([
       "订单号", "问题点-售前", "问题点-售后", "有无违规-售后",
       "客服问题 识别问题并打标签", "接待流程质检结果", "优化建议-售前",
+      "平台", "会话ID",
     ]);
     expect(headers).not.toContain("截图内容总结");
     expect(headers).not.toContain("统一质检分析");
@@ -415,8 +423,17 @@ describe("Excel export columns", () => {
       outputColumn: "V1结果列",
       imageEnabled: false,
     });
-    publishSectionVersion(createDraftVersion(sectionId).id);
+    const legacyDraft = createDraftVersion(sectionId);
+    updateDraftSectionVersion(legacyDraft.id, {
+      exportSettings: {
+        ...legacyDraft.exportSettings,
+        outputColumns: legacyDraft.exportSettings.outputColumns
+          .filter((column) => column.key !== "platform_name" && column.key !== "conversation_id"),
+      },
+    });
+    publishSectionVersion(legacyDraft.id);
     const job = createJob("version.xlsx", sourcePath, { id: sectionId, name: "版本导出" });
+    const platform = attachConversationTestPlatform(job.id);
     addRecords(job.id, [{
       sheetName: "Sheet1",
       rowNumber: 2,
@@ -425,6 +442,7 @@ describe("Excel export columns", () => {
       imagePath: "",
     }]);
     const record = listRecords(job.id)[0]!;
+    updateRecord(record.id, { status: "completed" });
     createFieldRun({
       recordId: record.id,
       fieldId: field.id,
@@ -451,8 +469,13 @@ describe("Excel export columns", () => {
     const exported = new ExcelJS.Workbook();
     await exported.xlsx.readFile(outputPath);
     const { headers, cells } = worksheetValues(exported, "Sheet1");
+    expect(headers).toEqual(expect.arrayContaining(["平台", "会话ID"]));
     expect(headers).toContain("V1结果列");
     expect(headers).not.toContain("V2结果列");
-    expect(cells["V1结果列"]).toBe("历史结果");
+    expect(cells).toMatchObject({
+      平台: platform.name,
+      会话ID: expect.stringMatching(new RegExp(`^${platform.code}[0-9]{8}[A-Z0-9]{6}$`)),
+      V1结果列: "历史结果",
+    });
   });
 });

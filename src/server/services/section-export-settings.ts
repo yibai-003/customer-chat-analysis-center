@@ -5,9 +5,13 @@ import type {
 } from "../../shared/types";
 import { RECEPTION_V4_SOURCE_FIELDS } from "./reception-quality-v4-prompts";
 
-export const RECEPTION_EXPORT_COLUMNS: SectionExportColumn[] = [
+export const SHARED_EXPORT_COLUMNS: SectionExportColumn[] = [
   { key: "platform_name", outputColumn: "平台", source: "platform_name", format: "value" },
   { key: "conversation_id", outputColumn: "会话ID", source: "conversation_id", format: "value" },
+];
+
+export const RECEPTION_EXPORT_COLUMNS: SectionExportColumn[] = [
+  ...SHARED_EXPORT_COLUMNS,
   { key: "quality_issue_names", outputColumn: "问题", source: "reception_quality", format: "reception_issue_names_csv" },
   { key: "quality_issue_dimensions", outputColumn: "维度", source: "reception_quality", format: "reception_issue_dimensions_csv" },
   { key: "quality_issue_deductions", outputColumn: "扣分", source: "reception_quality", format: "reception_issue_deductions_csv" },
@@ -56,13 +60,16 @@ export function sectionExportSettings(
   }
   return {
     rowMode: "records",
-    outputColumns: fields
-      .filter((field) => field.exportEnabled)
-      .map((field) => ({
-        key: field.key,
-        outputColumn: field.outputColumn ?? null,
-        source: "field_result" as const,
-        format: "value" as const,
-      })),
+    outputColumns: [
+      ...SHARED_EXPORT_COLUMNS.map((column) => ({ ...column })),
+      ...fields
+        .filter((field) => field.exportEnabled)
+        .map((field) => ({
+          key: field.key,
+          outputColumn: field.outputColumn ?? null,
+          source: "field_result" as const,
+          format: "value" as const,
+        })),
+    ],
   };
 }

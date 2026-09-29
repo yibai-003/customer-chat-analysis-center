@@ -342,6 +342,11 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
       needsReview: 0,
       skipped: 0,
     });
+    expect(db.prepare(
+      "SELECT conversation_id FROM records WHERE id = 'task-5-dispatch-record'",
+    ).get()).toEqual({
+      conversation_id: expect.stringMatching(/^TEST[A-Z0-9]+[0-9]{8}[A-Z0-9]{6}$/),
+    });
     expect(vi.mocked(callModelPool).mock.calls.map(([, options]) => options)).toEqual([
       expect.objectContaining({
         purpose: "vision",

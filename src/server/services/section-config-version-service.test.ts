@@ -60,6 +60,11 @@ describe("section configuration version lifecycle", () => {
     expect(draft.fieldsSnapshot).toEqual([
       expect.objectContaining({ key: "result", prompt: "字段提示词" }),
     ]);
+    expect(draft.exportSettings.outputColumns).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "platform_name", outputColumn: "平台", source: "platform_name" }),
+      expect.objectContaining({ key: "conversation_id", outputColumn: "会话ID", source: "conversation_id" }),
+      expect.objectContaining({ key: "result", outputColumn: "结果", source: "field_result" }),
+    ]));
     expect(draft.knowledgeSnapshot).toEqual([
       expect.objectContaining({
         id: `${sectionId}-base`,
