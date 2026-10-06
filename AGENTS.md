@@ -126,6 +126,16 @@ shared -> stable contracts used by both client and server
 
 Run `git status` before starting. Preserve existing user changes. If they affect the current task, explain the interaction and work with them rather than reverting them.
 
+### Branch and test-data baselines
+
+- Create feature and fix branches from the current local `main` commit after checking whether local `main` is ahead of or behind `origin/main`; do not use `origin/main` as an implicit substitute for local `main`.
+- For this project, a valid branch test baseline includes both the code commit and the application data snapshot. Section configuration, prompts, model-provider settings, platform settings, and analysis history are stored in SQLite and must not be replaced with an empty database when testing behavior that depends on them.
+- Create a verified full backup from the intended `main` environment, then restore it into a new branch-specific data directory. Restore the matching managed key under `.secrets/` or provide the matching explicit `ENCRYPTION_KEY`, and keep the backup's `knowledge/catalog.json` at the same baseline.
+- Each branch runtime must use its own `PORT`, `DATA_DIR`, and `DATABASE_PATH`. Never point two running processes at the same SQLite database; a different HTTP port does not isolate database writes.
+- Do not copy a live `app.db` by hand while the service is importing or analyzing. Use the repository backup and restore commands so SQLite, referenced files, exports, and the knowledge snapshot stay consistent.
+- Build `dist` separately in each worktree before testing. Configuration changes made later on `main` require a new branch data snapshot; branch test changes must not be synchronized back to `main` automatically.
+- Keep database backups, `.env` files, `.secrets/`, API keys, and real business files out of Git. Local branch testing with a main-data snapshot must remain an explicitly authorized, controlled environment.
+
 ## 7. TypeScript and Implementation Style
 
 - Follow the existing TypeScript, React, and Express patterns. Do not introduce a new framework or state library because of personal preference.

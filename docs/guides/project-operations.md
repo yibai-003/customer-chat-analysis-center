@@ -69,6 +69,57 @@ npm run start
 
 本机版本读取仓库根目录 `.env`，不要把 `deploy/.env` 复制到这里。默认数据目录是仓库根目录 `data/`，不得改成正式环境的数据路径。
 
+### 修复分支本机验证与数据基线
+
+修复分支的验证不仅需要最新代码，还需要与代码基线匹配的应用数据。板块配置、字段链、提示词、模型服务商、模型 API 配置、平台配置和历史分析任务都保存在 SQLite 或其关联文件中。空数据库只能验证安装流程，不能代表主环境的真实分析行为。
+
+#### 1. 从当前 `main` 创建代码工作树
+
+创建分支前先确认本地 `main` 的提交和未提交改动。若本地 `main` 已有尚未推送但应作为基线的提交，分支必须从本地 `main` 创建，而不是直接从旧的 `origin/main` 创建：
+
+```powershell
+git status
+git switch main
+git rev-parse main
+git worktree add .worktrees/<branch-name> main
+git -C .worktrees/<branch-name> rev-parse HEAD
+```
+
+最后两个提交号必须一致。主工作树中未提交的 `knowledge/catalog.json` 或其他配置改动不会自动进入新分支，是否纳入基线必须明确决定。
+
+#### 2. 从 `main` 生成独立测试数据副本
+
+先暂停主环境正在进行的导入和分析，再在主环境创建经过校验的完整备份：
+
+```powershell
+npm.cmd run backup
+```
+
+将备份恢复到一个全新的、只供该分支使用的目录，并完成恢复校验：
+
+```powershell
+npm.cmd run restore -- "<完整备份目录>" --to "<分支测试数据目录>"
+npm.cmd run restore:verify -- "<分支测试数据目录>"
+```
+
+完整恢复包会带出数据库、数据库引用的原始文件、已生成导出文件和 `knowledge/catalog.json`。恢复后的 `knowledge/catalog.json` 必须与数据库保持同一备份基线。
+
+完整备份不包含 `.env` 和加密密钥。必须安全保留主环境匹配的 `.secrets/app.db.key.json`，放入恢复副本的 `data/.secrets/`，或为分支配置同一个独立的 `ENCRYPTION_KEY`。密钥不能提交 Git，也不能打印到日志或聊天记录。
+
+#### 3. 为分支设置独立运行参数
+
+分支服务必须使用独立的端口、数据目录和数据库路径，例如 `8790` 及该分支专用数据目录。不要把主环境的 `.env` 原样复制到分支；应创建分支专用配置，避免继承主环境端口、路径或其他运行参数。
+
+分支启动后至少检查：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8790/api/health
+Invoke-RestMethod http://127.0.0.1:8790/api/version
+npm.cmd run restore:verify -- "<分支测试数据目录>"
+```
+
+`8788` 和 `8790` 不能使用同一个 `app.db`。测试分支可以使用主库的独立副本，但不能与主服务实时共用或直接覆盖主库。主环境配置更新后，需要重新创建或刷新分支数据快照；分支中的测试修改不会自动同步回 `main`。
+
 ### 局域网测试首次设置
 
 测试 Compose 和模板已与正式栈分离。测试用 HTTP，因此不需要安装正式 HTTPS 根证书；每台需要测试的电脑仍需能把测试主机名解析到服务器内网 IP。
