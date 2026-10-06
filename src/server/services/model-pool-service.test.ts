@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelPurpose } from "../../shared/types";
 import { withModelBudget } from "../ai/model-budget";
 import { callVisionModel } from "../ai/openai-compatible-client";
@@ -289,9 +289,14 @@ describe("pool candidate ranking", () => {
 
 describe("model pool routing", () => {
   beforeEach(() => {
+    vi.useFakeTimers({ now: NOW, toFake: ["Date"] });
     initDb();
     resetPoolData();
     vi.mocked(callVisionModel).mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("returns after the first successful candidate and records free usage", async () => {

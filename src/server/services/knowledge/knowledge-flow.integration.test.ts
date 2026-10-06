@@ -25,6 +25,7 @@ import {
 
 const screenshotPngBase64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=";
+const TEST_NOW = Date.parse("2026-09-16T08:00:00.000Z");
 
 describe("dynamic reason knowledge flow", () => {
   const sectionId = "task-9-reason-flow";
@@ -35,6 +36,7 @@ describe("dynamic reason knowledge flow", () => {
   beforeAll(() => initDb());
 
   beforeEach(() => {
+    vi.useFakeTimers({ now: TEST_NOW, toFake: ["Date"] });
     db.exec(`
       DELETE FROM knowledge_match_snapshots;
       DELETE FROM analysis_field_runs;
@@ -49,6 +51,7 @@ describe("dynamic reason knowledge flow", () => {
   });
 
   afterEach(async () => {
+    vi.useRealTimers();
     vi.restoreAllMocks();
     await Promise.all(
       Array.from(generatedFiles, (filePath) => fs.rm(filePath, { force: true })),
