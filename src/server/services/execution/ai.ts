@@ -4,7 +4,7 @@ import { classifyModelError } from "../../ai/openai-compatible-client";
 import { validateFieldResult } from "../../ai/result-validator";
 import { createFieldRun } from "../field-run-service";
 import { callModelPool } from "../model-pool-service";
-import { dependencyValues, failedRouteSnapshot, imageDataUrl, routedModelSnapshot } from "./support";
+import { dependencyValues, failedRouteSnapshot, imageDataUrl, routedModelSnapshot, sourceValuesForField } from "./support";
 import { registerFieldExecutionHandler } from "./registry";
 
 registerFieldExecutionHandler({
@@ -17,7 +17,7 @@ registerFieldExecutionHandler({
       const messages = buildFieldMessages({
         field,
         sectionName,
-        sourceFields: record.sourceFields,
+        sourceFields: sourceValuesForField(field, record.sourceFields),
         dependencyResults: dependencies,
         imageDataUrl: field.imageEnabled && image ? imageDataUrl(record.imagePath, image) : "",
       });

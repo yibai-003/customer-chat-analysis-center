@@ -1,16 +1,23 @@
 import ExcelJS from "exceljs";
+import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import { initDb } from "../db/client";
-import { createPlatform, listJobs } from "../db/repositories";
+import { createPlatform, getSection, listJobs, listRecords, upsertSection } from "../db/repositories";
 import {
   importWorkbookStreaming,
   parseDrawingAnchors,
   parseWorksheetRows,
   previewWorkbookStreaming,
 } from "./streaming-xlsx-import-service";
+import {
+  createDraftVersion,
+  publishSectionVersion,
+  updateDraftSectionVersion,
+} from "./section-config-version-service";
+import { resolveGenericImportContract } from "./section-import-contract";
 
 const files: string[] = [];
 
@@ -59,6 +66,165 @@ describe("streaming xlsx import", () => {
       sectionName: "退货分析",
       missingHeaders: [],
     });
+  });
+
+  it("uses the published generic import contract without mutating live section inputs", async () => {
+    const sectionId = `streaming-generic-${randomUUID()}`;
+    upsertSection({
+      id: sectionId,
+      name: "流式通用导入",
+      prompt: "根据聊天截图解析",
+      sourceFields: ["平台", "聊天截图"],
+    });
+    const draft = createDraftVersion(sectionId);
+    updateDraftSectionVersion(draft.id, {
+      businessRules: {
+        kind: "generic",
+        importContract: {
+          imageColumn: "聊天截图",
+          requiredColumns: ["平台"],
+          optionalColumns: ["客服"],
+        },
+      },
+    });
+    const version = publishSectionVersion(draft.id);
+    const file = path.join(os.tmpdir(), `streaming-generic-${Date.now()}.xlsx`);
+    files.push(file);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("通用板块");
+    sheet.addRow(["平台", "聊天截图", "额外列"]);
+    sheet.addRow(["测试平台", "", "保留"]);
+    sheet.addImage(workbook.addImage({ base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", extension: "png" }), {
+      tl: { col: 1, row: 1 },
+      ext: { width: 20, height: 20 },
+    });
+    await workbook.xlsx.writeFile(file);
+
+    const section = {
+      id: sectionId,
+      name: "流式通用导入",
+      sourceFields: ["平台", "聊天截图"],
+      sectionConfigVersionId: version.id,
+    };
+    const preview = await previewWorkbookStreaming(file, "通用导入.xlsx", section);
+    expect(preview.missingHeaders).toEqual([]);
+
+    const created = await importWorkbookStreaming(file, "通用导入.xlsx", section);
+    files.push(path.dirname(created.sourcePath));
+    expect(created.totalRecords).toBe(1);
+    expect(listRecords(created.id)[0]?.sourceFields).toMatchObject({
+      平台: "测试平台",
+      "额外列": "保留",
+    });
+    expect(getSection(sectionId)?.sourceFields).toEqual(["平台", "聊天截图"]);
+  });
+
+  it("rejects a draft generic import contract before workbook processing", () => {
+    const sectionId = `streaming-draft-contract-${randomUUID()}`;
+    upsertSection({
+      id: sectionId,
+      name: "草稿导入契约",
+      prompt: "根据聊天截图解析",
+      sourceFields: ["平台", "聊天截图"],
+    });
+    const draft = createDraftVersion(sectionId);
+
+    expect(() => resolveGenericImportContract({
+      id: sectionId,
+      sectionConfigVersionId: draft.id,
+    })).toThrow("必须是已发布版本");
+  });
+
+  it("reports missing required headers while allowing absent optional headers", async () => {
+    const sectionId = `streaming-contract-${randomUUID()}`;
+    upsertSection({
+      id: sectionId,
+      name: "导入契约测试",
+      prompt: "根据聊天截图解析",
+      sourceFields: ["平台", "聊天截图"],
+    });
+    const draft = createDraftVersion(sectionId);
+    updateDraftSectionVersion(draft.id, {
+      businessRules: {
+        kind: "generic",
+        importContract: {
+          imageColumn: "聊天截图",
+          requiredColumns: ["平台"],
+          optionalColumns: ["客服"],
+        },
+      },
+    });
+    const version = publishSectionVersion(draft.id);
+    const file = path.join(os.tmpdir(), `streaming-contract-${Date.now()}.xlsx`);
+    files.push(file);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("缺失必需列");
+    sheet.addRow(["聊天截图", "额外列"]);
+    sheet.addRow(["", "保留"]);
+    sheet.addImage(workbook.addImage({ base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", extension: "png" }), {
+      tl: { col: 0, row: 1 },
+      ext: { width: 20, height: 20 },
+    });
+    await workbook.xlsx.writeFile(file);
+
+    const preview = await previewWorkbookStreaming(file, "缺列.xlsx", {
+      id: sectionId,
+      name: "导入契约测试",
+      sourceFields: ["平台", "聊天截图"],
+      sectionConfigVersionId: version.id,
+    });
+    expect(preview.missingHeaders).toEqual(["平台"]);
+    expect(preview.sheets[0]?.headers).toEqual(["聊天截图", "额外列"]);
+  });
+
+  it("does not combine required headers across worksheets", async () => {
+    const sectionId = `streaming-sheet-contract-${randomUUID()}`;
+    upsertSection({
+      id: sectionId,
+      name: "逐工作表契约测试",
+      prompt: "根据聊天截图解析",
+      sourceFields: ["平台", "聊天截图"],
+    });
+    const draft = createDraftVersion(sectionId);
+    updateDraftSectionVersion(draft.id, {
+      businessRules: {
+        kind: "generic",
+        importContract: {
+          imageColumn: "聊天截图",
+          requiredColumns: ["平台"],
+          optionalColumns: [],
+        },
+      },
+    });
+    const version = publishSectionVersion(draft.id);
+    const file = path.join(os.tmpdir(), `streaming-sheet-contract-${Date.now()}.xlsx`);
+    files.push(file);
+    const workbook = new ExcelJS.Workbook();
+    const first = workbook.addWorksheet("完整表");
+    first.addRow(["平台", "聊天截图"]);
+    first.addRow(["测试平台", ""]);
+    first.addImage(workbook.addImage({ base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", extension: "png" }), {
+      tl: { col: 1, row: 1 },
+      ext: { width: 20, height: 20 },
+    });
+    const second = workbook.addWorksheet("缺平台表");
+    second.addRow(["聊天截图"]);
+    second.addRow([""]);
+    second.addImage(workbook.addImage({ base64: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", extension: "png" }), {
+      tl: { col: 0, row: 1 },
+      ext: { width: 20, height: 20 },
+    });
+    await workbook.xlsx.writeFile(file);
+    const section = {
+      id: sectionId,
+      name: "逐工作表契约测试",
+      sectionConfigVersionId: version.id,
+    };
+
+    const preview = await previewWorkbookStreaming(file, "多工作表.xlsx", section);
+    expect(preview.missingHeaders).toContain("平台");
+    await expect(importWorkbookStreaming(file, "多工作表.xlsx", section))
+      .rejects.toThrow(/缺平台表.*平台/);
   });
 
   it("normalizes a shared-string header that preserves trailing whitespace", async () => {

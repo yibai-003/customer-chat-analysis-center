@@ -13,40 +13,76 @@ function isLostDealAttribution(field: AnalysisField) {
     && field.executionType === "lost_deal_attribution";
 }
 
-export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, sourceFields = [], sectionId, onValidationChange }: {
+export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, onMove, sourceFields = [], sectionId, onValidationChange, allowInputSources = false }: {
   fields: AnalysisField[];
   onChange: (index: number, patch: Partial<AnalysisField>) => void;
   onAdd: () => void;
   onRemove: (index: number) => void;
+  onMove?: (fromIndex: number, toIndex: number) => void;
   sourceFields?: string[];
   sectionId?: string;
   onValidationChange?: (fieldId: string, error: string) => void;
+  allowInputSources?: boolean;
 }) {
   const [expandedDependencies, setExpandedDependencies] = useState<Record<string, boolean>>({});
-  const availableSourceFields = sourceFields.filter((sourceField) => !fields.some((field) => field.outputColumn === sourceField));
   const effectiveSectionId = sectionId || fields[0]?.sectionId;
   const changeExecutionType = (index: number, field: AnalysisField, executionType: AnalysisField["executionType"]) => {
     const setting = executionSetting(executionType);
     onChange(index, { executionType: setting.type, ...setting.selectionPatch?.(field) });
   };
   return <div className="field-config-editor">
-    <div className="schema-toolbar"><strong>字段解析链</strong><button onClick={onAdd} disabled={!availableSourceFields.length}>＋ 选择解析字段</button></div>
+    <div className="schema-toolbar"><strong>字段解析链</strong><button type="button" onClick={onAdd}>＋ 新增普通字段</button></div>
     {fields.map((field, index) => {
       const setting = executionSetting(field.executionType);
+      const fieldName = field.label || "未命名字段";
       return <div className="field-editor" key={field.id}>
-        <div className="field-editor-head"><b>{String(index + 1).padStart(2, "0")}</b><strong>{field.label || "未命名字段"}</strong><button className="danger-text" onClick={() => onRemove(index)}>删除</button></div>
+        <div className="field-editor-head">
+          <b>{String(index + 1).padStart(2, "0")}</b>
+          <strong>{fieldName}</strong>
+          {onMove && <button
+            type="button"
+            className="field-order-button"
+            aria-label={`上移字段 ${fieldName}`}
+            title="上移字段"
+            disabled={index === 0}
+            onClick={() => onMove(index, index - 1)}
+          >↑</button>}
+          {onMove && <button
+            type="button"
+            className="field-order-button"
+            aria-label={`下移字段 ${fieldName}`}
+            title="下移字段"
+            disabled={index === fields.length - 1}
+            onClick={() => onMove(index, index + 1)}
+          >↓</button>}
+          <button type="button" className="danger-text" onClick={() => onRemove(index)}>删除</button>
+        </div>
         <div className="field-editor-grid">
           <label>解析方式<div className="execution-type-switch" role="group" aria-label="解析方式">
             {SELECTABLE_EXECUTION_SETTINGS.map((option) => <button type="button" key={option.type} aria-pressed={setting.type === option.type} className={setting.type === option.type ? "active" : ""} onClick={() => changeExecutionType(index, field, option.type)}>{option.label}</button>)}
           </div></label>
-          {setting.showTargetColumn && <label>目标 Excel 字段<SelectMenu ariaLabel="目标 Excel 字段" value={field.outputColumn ?? ""} onChange={(target) => {
-            onChange(index, { label: target || field.label, key: target || field.key, outputColumn: target });
-          }} options={[{ value: "", label: "请选择表头字段" }, ...sourceFields.map((sourceField) => ({ value: sourceField, label: sourceField }))]} /></label>}
+          {setting.showTargetColumn && <label>目标 Excel 字段<input
+            aria-label="目标 Excel 字段"
+            value={field.outputColumn ?? ""}
+            placeholder="例如：客户意向"
+            onChange={(event) => onChange(index, { outputColumn: event.target.value })}
+          /></label>}
           <label>字段名称<input aria-label="字段名称" value={field.label} onChange={(event) => onChange(index, { label: event.target.value })} /></label>
           <label>字段 Key<input aria-label="字段 Key" value={field.key} onChange={(event) => onChange(index, { key: event.target.value })} /></label>
           <label>字段类型<SelectMenu ariaLabel="字段类型" value={field.type} onChange={(value) => onChange(index, { type: value as AnalysisFieldType })} options={[{ value: "string", label: "文本" }, { value: "number", label: "数字" }, { value: "boolean", label: "布尔" }, { value: "object", label: "结构化对象" }]} /></label>
           {setting.showTargetColumn && <label>Excel 输出列<input aria-label="Excel 输出列" value={field.outputColumn ?? ""} readOnly /> </label>}
         </div>
+        {allowInputSources && sourceFields.length > 0 && <label>输入字段
+          <textarea
+            aria-label="字段输入来源"
+            rows={2}
+            value={(field.inputSources ?? sourceFields).join(", ")}
+            placeholder="默认使用全部板块输入字段"
+            onChange={(event) => onChange(index, {
+              inputSources: [...new Set(event.target.value.split(",").map((item) => item.trim()).filter(Boolean))],
+            })}
+          />
+        </label>}
         <div className="field-mode-label">当前方式：{setting.label}</div>
         {isHotTopicField(field) && <div className="hot-topic-capture">
           <div><strong>高频问题知识沉淀</strong><p>优先匹配本板块已启用的问题库；无匹配时自动补充到「热点话题问题库」。</p></div>

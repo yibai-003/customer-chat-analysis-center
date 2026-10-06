@@ -51,6 +51,8 @@
 - [Agent 协作规则](../AGENTS.md)
 - [项目工作约定](project-work-agreement.md)
 - [项目目录结构与后续开发规范](project-structure-and-development-guidelines.md)
+- [配置化板块与普通字段规格](work-items/config-driven-sections/spec.md)
+- [配置化板块与普通字段实施计划](superpowers/plans/2026-09-30-config-driven-sections.md)
 - [CI 质量闸门与发布工件](guides/ci-quality-gates.md)
 - [服务端输入约束](guides/server-input-validation.md)
 - [取消链路与模型请求总预算](guides/cancellation-and-model-budget.md)

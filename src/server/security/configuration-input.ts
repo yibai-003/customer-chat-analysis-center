@@ -50,7 +50,7 @@ export const knowledgeItemInput = z.object({ id: id.optional(), knowledgeBaseId:
 const sectionVersionSectionInput = sectionInput.extend({
   id,
   parentId: id.nullable(),
-  outputSchema: z.array(output).max(200),
+  outputSchema: z.array(output),
   sourceFields: z.array(safeName).max(100),
   sortOrder: z.number().int().min(0).max(100000),
   isEnabled: z.boolean(),
@@ -64,6 +64,7 @@ const sectionVersionFieldInput = fieldInput.extend({
   required: z.boolean(),
   imageEnabled: z.boolean(),
   dependsOn: z.array(safeName).max(50),
+  inputSources: z.array(safeName).max(100).optional(),
   sortOrder: z.number().int().min(0).max(100000),
   isEnabled: z.boolean(),
   executionType: z.enum(ANALYSIS_EXECUTION_TYPES),
@@ -98,7 +99,7 @@ const sectionVersionKnowledgeBaseInput = z.object({
 }).strict();
 export const sectionConfigVersionPatchInput = z.object({
   sectionSnapshot: sectionVersionSectionInput.partial().optional(),
-  fieldsSnapshot: z.array(sectionVersionFieldInput).max(200).optional(),
+  fieldsSnapshot: z.array(sectionVersionFieldInput).optional(),
   exportSettings: z.object({
     rowMode: z.enum(["records", "screenshot_records"]).optional(),
     outputColumns: z.array(z.object({
@@ -126,14 +127,23 @@ export const sectionConfigVersionPatchInput = z.object({
         "reception_start_time",
         "reception_round_count",
       ]).optional(),
-    }).strict()).max(200),
+    }).strict()),
   }).strict().optional(),
   dependenciesSnapshot: z.array(z.object({
     key: safeName,
     dependsOn: z.array(safeName).max(50),
-  }).strict()).max(200).optional(),
+  }).strict()).optional(),
   knowledgeSnapshot: z.array(sectionVersionKnowledgeBaseInput).max(200).optional(),
   businessRules: z.record(z.string(), z.unknown()).optional(),
+}).strict();
+export const genericBusinessRulesInput = z.object({
+  kind: z.literal("generic"),
+  importContract: z.object({
+    imageColumn: safeName,
+    imageColumnRequired: z.boolean().optional(),
+    requiredColumns: z.array(safeName),
+    optionalColumns: z.array(safeName),
+  }).strict(),
 }).strict();
 const receptionIssueRuleInput = z.object({
   id: safeName,

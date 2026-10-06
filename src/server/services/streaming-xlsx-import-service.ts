@@ -5,7 +5,7 @@ import path from "node:path";
 import { pipeline } from "node:stream/promises";
 import unzipper from "unzipper";
 import { XMLParser } from "fast-xml-parser";
-import { addRecords, createJob, deleteJob, mergeSectionSourceFields, updateJobSourcePath } from "../db/repositories";
+import { addRecords, createJob, deleteJob, updateJobSourcePath } from "../db/repositories";
 import { config } from "../config";
 import { normalizeUploadedFilename } from "../utils/encoding";
 import { normalizeImageAnchor } from "./excel-import-service";
@@ -16,6 +16,10 @@ import {
   normalizeExcelHeader,
 } from "./excel-template-service";
 import { getSectionVersion } from "./section-config-version-service";
+import {
+  missingGenericImportHeadersBySheet,
+  resolveGenericImportContract,
+} from "./section-import-contract";
 import type { ReceptionImportContract } from "./section-business-rules";
 import {
   inspectReceptionResultRow,
@@ -337,6 +341,14 @@ export async function previewWorkbookStreaming(
   const imageCount = summaries.reduce((sum, sheet) => sum + sheet.imageCount, 0);
   const headers = new Set(summaries.flatMap((sheet) => sheet.headers));
   const conflicts = platformConflicts(sheetData, platform);
+  const genericContract = resolveGenericImportContract(section);
+  const genericMissing = genericContract
+    ? missingGenericImportHeadersBySheet(summaries.map((sheet, index) => ({
+      name: sheet.name,
+      headers: sheet.headers,
+      hasImageAnchors: sheetData[index]?.anchors.length > 0,
+    })), genericContract)
+    : [];
   return {
     originalFilename: normalizeUploadedFilename(originalFilename),
     sheetCount: summaries.length,
@@ -355,7 +367,9 @@ export async function previewWorkbookStreaming(
     missingHeaders: contract
       ? [contract.imageColumn].filter((field) =>
         !summaries.some((sheet) => sheet.headers.some((header) => receptionHeaderMatches(header, field))))
-      : (section?.sourceFields ?? []).filter((field) => !headers.has(field)),
+      : genericContract
+        ? [...new Set(genericMissing.flatMap((sheet) => sheet.headers))]
+        : (section?.sourceFields ?? []).filter((field) => !headers.has(field)),
     sheets: summaries,
   };
 }
@@ -404,8 +418,21 @@ export async function importWorkbookStreaming(
     sheetData.push({ ...sheet, rows: parseWorksheetRows(sheetXml, sharedStrings), anchors });
   }
   const contract = resolveReceptionContract(section);
+  const genericContract = resolveGenericImportContract(section);
   const reception = inspectReceptionSheets(sheetData, contract);
   const supportedImages = sheetData.flatMap((sheet) => anchorsForContract(sheet, contract));
+  const genericMissing = genericContract
+    ? missingGenericImportHeadersBySheet(sheetData.map((sheet) => ({
+      name: sheet.name,
+      headers: Object.values(sheet.rows.get(1) ?? {}).map(normalizeExcelHeader).filter(Boolean),
+      hasImageAnchors: sheet.anchors.length > 0,
+    })), genericContract)
+    : [];
+  if (genericMissing.length) {
+    throw new Error(`工作簿缺少必需表头：${genericMissing
+      .map((sheet) => `${sheet.sheetName} 缺少 ${sheet.headers.join("、")}`)
+      .join("；")}`);
+  }
   if (!supportedImages.length) throw new Error(contract
     ? `工作簿中没有识别到“${contract.imageColumn}”列的聊天截图`
     : "工作簿中没有识别到嵌入图片");
@@ -434,11 +461,6 @@ export async function importWorkbookStreaming(
     await pipeline(fs.createReadStream(filePath), reservedFileWriter(path.join(stagingDir, "source.xlsx"), reservation));
     onProgress?.({ totalImages: imagesToImport.length, processedImages: 0, currentSheet: "", currentRow: 0 });
     const imported: Array<{ sheetName: string; rowNumber: number; anchor: unknown; sourceFields: Record<string, string>; imagePath: string }> = [];
-    if (section) {
-      const importedHeaders = [...new Set(sheetData.flatMap((sheet) =>
-        Object.values(sheet.rows.get(1) ?? {}).map(normalizeExcelHeader).filter(Boolean)))];
-      mergeSectionSourceFields(section.id, importedHeaders);
-    }
     for (const sheet of sheetData) {
       const pendingByRow = new Map(reception.pending
         .filter((item) => item.sheetName === sheet.name)

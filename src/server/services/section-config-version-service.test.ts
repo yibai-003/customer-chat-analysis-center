@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { beforeAll, describe, expect, it } from "vitest";
 import { db, initDb } from "../db/client";
 import { upsertSection } from "../db/repositories";
-import { upsertField } from "./field-config-service";
+import { getField, upsertField } from "./field-config-service";
 import { upsertKnowledgeBase, upsertKnowledgeItem } from "./knowledge/knowledge-repository";
 import {
   activateSectionVersion,
@@ -105,6 +105,120 @@ describe("section configuration version lifecycle", () => {
     expect(second.versionNumber).toBe(2);
   });
 
+  it("creates a new draft from the published configuration snapshot", () => {
+    const sectionId = createConfigFixture();
+    const first = createDraftVersion(sectionId);
+    updateDraftSectionVersion(first.id, {
+      sectionSnapshot: { prompt: "已发布提示词" },
+      fieldsSnapshot: first.fieldsSnapshot.map((field) => ({ ...field, prompt: "已发布字段提示词" })),
+    });
+    publishSectionVersion(first.id);
+
+    upsertSection({ id: sectionId, name: "旧实时板块", prompt: "旧实时提示词", sourceFields: ["旧输入"] });
+    upsertField({
+      id: getField(first.fieldsSnapshot[0].id)!.id,
+      sectionId,
+      key: "result",
+      label: "旧实时字段",
+      type: "string",
+      prompt: "旧实时字段提示词",
+      outputColumn: "旧实时列",
+      dependsOn: [],
+    });
+
+    const next = createDraftVersion(sectionId);
+    expect(next.sectionSnapshot).toMatchObject({ name: "版本测试板块", prompt: "已发布提示词" });
+    expect(next.fieldsSnapshot[0]).toMatchObject({ label: "结果", prompt: "已发布字段提示词" });
+    expect(next.knowledgeSnapshot).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: `${sectionId}-base` }),
+    ]));
+  });
+
+  it("projects newly published fields into the runtime field registry", () => {
+    const sectionId = createConfigFixture();
+    const draft = createDraftVersion(sectionId);
+    const added = {
+      ...draft.fieldsSnapshot[0],
+      id: `${sectionId}-new-field`,
+      key: "new_result",
+      label: "新结果",
+      outputColumn: "新结果",
+    };
+    updateDraftSectionVersion(draft.id, {
+      fieldsSnapshot: [added],
+    });
+    publishSectionVersion(draft.id);
+
+    expect(db.prepare(
+      "SELECT section_id, key, label, output_column, is_enabled FROM analysis_fields WHERE id = ?",
+    ).get(added.id)).toEqual({
+      section_id: sectionId,
+      key: "new_result",
+      label: "新结果",
+      output_column: "新结果",
+      is_enabled: 1,
+    });
+    expect(db.prepare(
+      "SELECT is_enabled FROM analysis_fields WHERE id = ?",
+    ).get(draft.fieldsSnapshot[0].id)).toEqual({ is_enabled: 0 });
+  });
+
+  it("reprojects the runtime field registry when activating a historical version", () => {
+    const sectionId = createConfigFixture();
+    const firstDraft = createDraftVersion(sectionId);
+    const firstPublished = publishSectionVersion(firstDraft.id);
+    const secondDraft = createDraftVersion(sectionId);
+    const added = {
+      ...secondDraft.fieldsSnapshot[0],
+      id: `${sectionId}-historical-field`,
+      key: "historical_result",
+      label: "历史版本结果",
+      outputColumn: "历史版本结果",
+    };
+    updateDraftSectionVersion(secondDraft.id, {
+      fieldsSnapshot: [...secondDraft.fieldsSnapshot, added],
+    });
+    publishSectionVersion(secondDraft.id);
+
+    expect(db.prepare(
+      "SELECT is_enabled FROM analysis_fields WHERE id = ?",
+    ).get(added.id)).toEqual({ is_enabled: 1 });
+
+    activateSectionVersion(firstPublished.id);
+
+    expect(db.prepare(
+      "SELECT is_enabled FROM analysis_fields WHERE id = ?",
+    ).get(added.id)).toEqual({ is_enabled: 0 });
+    expect(db.prepare(
+      "SELECT is_enabled FROM analysis_fields WHERE id = ?",
+    ).get(firstDraft.fieldsSnapshot[0].id)).toEqual({ is_enabled: 1 });
+    expect(createDraftVersion(sectionId).fieldsSnapshot.map((field) => field.key))
+      .not.toContain("historical_result");
+  });
+
+  it("rejects changing a live field identity or reusing its key with a new field ID", () => {
+    const sectionId = createConfigFixture();
+    const draft = createDraftVersion(sectionId);
+    expect(() => {
+      updateDraftSectionVersion(draft.id, {
+        fieldsSnapshot: [{
+          ...draft.fieldsSnapshot[0],
+          id: `${sectionId}-replacement`,
+          key: draft.fieldsSnapshot[0].key,
+        }],
+      });
+      publishSectionVersion(draft.id);
+    }).toThrow("字段 Key 已被其他字段占用");
+
+    const secondDraft = createDraftVersion(sectionId);
+    expect(() => updateDraftSectionVersion(secondDraft.id, {
+      fieldsSnapshot: [{
+        ...secondDraft.fieldsSnapshot[0],
+        key: "changed-key",
+      }],
+    })).toThrow("字段 Key 不可通过原字段 ID 修改");
+  });
+
   it("allows draft edits and deletion but rejects both operations after publication", () => {
     const sectionId = createConfigFixture();
     const draft = createDraftVersion(sectionId);
@@ -122,6 +236,54 @@ describe("section configuration version lifecycle", () => {
     expect(() => updateDraftSectionVersion(publishedDraft.id, { businessRules: { threshold: 20 } }))
       .toThrow("只有草稿版本可以编辑");
     expect(() => deleteDraftSectionVersion(publishedDraft.id)).toThrow("只有草稿版本可以删除");
+  });
+
+  it("accepts a configurable ordinary-field collection beyond the legacy fixed limit", () => {
+    const sectionId = createConfigFixture();
+    const draft = createDraftVersion(sectionId);
+    const fields = Array.from({ length: 201 }, (_, index) => ({
+      ...draft.fieldsSnapshot[0],
+      id: `${sectionId}-field-${index}`,
+      key: `field_${index}`,
+      label: `字段 ${index}`,
+      outputColumn: `输出 ${index}`,
+      sortOrder: index,
+    }));
+    const updated = updateDraftSectionVersion(draft.id, {
+      fieldsSnapshot: fields,
+      businessRules: {
+        kind: "generic",
+        importContract: {
+          imageColumn: "聊天截图",
+          requiredColumns: ["平台"],
+          optionalColumns: ["客服"],
+        },
+      },
+      dependenciesSnapshot: fields.map((field) => ({ key: field.key, dependsOn: field.dependsOn })),
+    });
+
+    expect(updated.fieldsSnapshot).toHaveLength(201);
+    expect(updated.businessRules).toMatchObject({
+      kind: "generic",
+      importContract: {
+        imageColumn: "聊天截图",
+        requiredColumns: ["平台"],
+        optionalColumns: ["客服"],
+      },
+    });
+  });
+
+  it("validates optional field input sources against the version source fields", () => {
+    const sectionId = createConfigFixture();
+    const draft = createDraftVersion(sectionId);
+    const updated = updateDraftSectionVersion(draft.id, {
+      fieldsSnapshot: [{ ...draft.fieldsSnapshot[0], inputSources: ["平台"] }],
+    });
+    expect(updated.fieldsSnapshot[0].inputSources).toEqual(["平台"]);
+
+    expect(() => updateDraftSectionVersion(draft.id, {
+      fieldsSnapshot: [{ ...draft.fieldsSnapshot[0], inputSources: ["不存在的输入"] }],
+    })).toThrow("字段输入来源不存在");
   });
 
   it("snapshots the current reception issue catalog and grade thresholds", () => {

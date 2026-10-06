@@ -5,6 +5,7 @@ import {
   type ReceptionIssueRule,
 } from "./reception-quality-rules";
 import { RECEPTION_V4_RESULT_FIELDS } from "./reception-quality-v4-prompts";
+import type { GenericImportContract } from "../../shared/types";
 
 export interface ReceptionImportContract {
   imageColumn: string;
@@ -21,8 +22,22 @@ export interface ReceptionBusinessRules {
   importContract: ReceptionImportContract;
 }
 
+function genericImportContract(sourceFields: string[]): GenericImportContract {
+  const imageColumn = sourceFields.find((field) => field === "聊天截图" || field.includes("(chat_screenshot)"))
+    ?? "聊天截图";
+  return {
+    imageColumn,
+    imageColumnRequired: sourceFields.some((field) => field === imageColumn),
+    requiredColumns: sourceFields.filter((field) => field !== imageColumn),
+    optionalColumns: [],
+  };
+}
+
 export function sectionBusinessRules(sectionId: string, sourceFields: string[] = []): Record<string, unknown> {
-  if (sectionId !== "reception") return {};
+  if (sectionId !== "reception") {
+    const contract = genericImportContract(sourceFields);
+    return { kind: "generic", importContract: contract };
+  }
   const modernTemplate = sourceFields.some((field) => field.includes("(conversation_id)"));
   return {
     kind: "reception_quality",

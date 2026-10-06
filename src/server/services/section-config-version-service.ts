@@ -10,6 +10,7 @@ import type {
 } from "../../shared/types";
 import {
   parseConfiguration,
+  genericBusinessRulesInput,
   receptionBusinessRulesInput,
   sectionConfigVersionPatchInput,
 } from "../security/configuration-input";
@@ -53,13 +54,8 @@ function mapField(row: any): AnalysisField {
   };
 }
 
-function buildCurrentSnapshot(sectionId: string, businessRulesOverride?: Record<string, unknown>) {
-  const section = db.prepare("SELECT * FROM analysis_sections WHERE id = ?").get(sectionId) as any;
-  if (!section) throw new Error("板块不存在");
-  const fields = (db.prepare(
-    "SELECT * FROM analysis_fields WHERE section_id = ? AND is_enabled = 1 ORDER BY sort_order, key",
-  ).all(sectionId) as any[]).map(mapField);
-  const knowledge = (db.prepare(
+function buildKnowledgeSnapshot(sectionId: string) {
+  return (db.prepare(
     "SELECT * FROM knowledge_bases WHERE section_id = ? ORDER BY id",
   ).all(sectionId) as any[]).map((base) => ({
     id: base.id,
@@ -86,6 +82,15 @@ function buildCurrentSnapshot(sectionId: string, businessRulesOverride?: Record<
       updatedAt: item.updated_at,
     })),
   }));
+}
+
+function buildCurrentSnapshot(sectionId: string, businessRulesOverride?: Record<string, unknown>) {
+  const section = db.prepare("SELECT * FROM analysis_sections WHERE id = ?").get(sectionId) as any;
+  if (!section) throw new Error("板块不存在");
+  const fields = (db.prepare(
+    "SELECT * FROM analysis_fields WHERE section_id = ? AND is_enabled = 1 ORDER BY sort_order, key",
+  ).all(sectionId) as any[]).map(mapField);
+  const knowledge = buildKnowledgeSnapshot(sectionId);
   const sectionSnapshot = {
       id: section.id,
       parentId: section.parent_id ?? null,
@@ -97,13 +102,50 @@ function buildCurrentSnapshot(sectionId: string, businessRulesOverride?: Record<
       sortOrder: section.sort_order,
       isEnabled: section.is_enabled !== 0,
     };
+  const defaultBusinessRules = sectionBusinessRules(sectionId, sectionSnapshot.sourceFields);
+  const businessRules = businessRulesOverride && Object.keys(businessRulesOverride).length
+    ? businessRulesOverride
+    : defaultBusinessRules;
   return {
     sectionSnapshot,
     fieldsSnapshot: fields,
     exportSettings: sectionExportSettings(sectionId, fields, sectionSnapshot.sourceFields),
     dependenciesSnapshot: fields.map((field) => ({ key: field.key, dependsOn: field.dependsOn })),
     knowledgeSnapshot: knowledge,
-    businessRules: businessRulesOverride ?? sectionBusinessRules(sectionId, sectionSnapshot.sourceFields),
+    businessRules,
+  };
+}
+
+function buildDraftSnapshot(sectionId: string) {
+  const currentRow = db.prepare(`
+    SELECT * FROM analysis_section_versions
+    WHERE section_id = ? AND status = 'published' AND is_current = 1
+  `).get(sectionId) as any;
+  if (!currentRow) return buildCurrentSnapshot(sectionId);
+  // The migration-created V1 is a compatibility baseline for legacy live configuration.
+  // Let the first editable draft absorb that runtime projection once.
+  if (currentRow.id === `section-version-${sectionId}-v1`) return buildCurrentSnapshot(sectionId);
+  const current = mapVersion(currentRow);
+  const liveFields = buildCurrentSnapshot(sectionId).fieldsSnapshot;
+  const currentFieldIds = new Set(current.fieldsSnapshot.map((field) => field.id));
+  const legacyAddedFields = liveFields.filter((field) => !currentFieldIds.has(field.id));
+  if (legacyAddedFields.length) {
+    const fieldsSnapshot = [...current.fieldsSnapshot, ...legacyAddedFields]
+      .toSorted((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.key.localeCompare(right.key));
+    return {
+      ...current,
+      fieldsSnapshot,
+      exportSettings: sectionExportSettings(sectionId, fieldsSnapshot, current.sectionSnapshot.sourceFields),
+      dependenciesSnapshot: fieldsSnapshot.map((field) => ({ key: field.key, dependsOn: field.dependsOn })),
+    };
+  }
+  return {
+    sectionSnapshot: current.sectionSnapshot,
+    fieldsSnapshot: current.fieldsSnapshot,
+    exportSettings: current.exportSettings,
+    dependenciesSnapshot: current.dependenciesSnapshot,
+    knowledgeSnapshot: buildKnowledgeSnapshot(sectionId),
+    businessRules: current.businessRules,
   };
 }
 
@@ -142,6 +184,26 @@ function assertNoRuntimeState(value: unknown, path = "version"): void {
   }
 }
 
+function validateRuntimeFieldIdentity(sectionId: string, fieldsSnapshot: AnalysisField[]): void {
+  for (const field of fieldsSnapshot) {
+    const existing = db.prepare(
+      "SELECT section_id, key FROM analysis_fields WHERE id = ?",
+    ).get(field.id) as { section_id: string; key: string } | undefined;
+    if (existing && existing.section_id !== sectionId) {
+      throw new Error(`字段 ID 已属于其他板块：${field.id}`);
+    }
+    if (existing && existing.key !== field.key) {
+      throw new Error(`字段 Key 不可通过原字段 ID 修改：${existing.key} -> ${field.key}`);
+    }
+    const keyOwner = db.prepare(
+      "SELECT id FROM analysis_fields WHERE section_id = ? AND key = ? AND id != ?",
+    ).get(sectionId, field.key, field.id) as { id: string } | undefined;
+    if (keyOwner) {
+      throw new Error(`字段 Key 已被其他字段占用：${field.key}`);
+    }
+  }
+}
+
 function validateVersionSnapshot(version: Pick<
   SectionConfigVersion,
   "sectionId" | "sectionSnapshot" | "fieldsSnapshot" | "exportSettings" | "dependenciesSnapshot" | "knowledgeSnapshot" | "businessRules"
@@ -154,11 +216,20 @@ function validateVersionSnapshot(version: Pick<
     if (field.sectionId !== version.sectionId) throw new Error(`字段不属于当前板块：${field.key}`);
     if (fieldIds.has(field.id)) throw new Error(`字段 ID 重复：${field.id}`);
     if (fieldKeys.has(field.key)) throw new Error(`字段 Key 重复：${field.key}`);
+    if (field.inputSources && new Set(field.inputSources).size !== field.inputSources.length) {
+      throw new Error(`字段输入来源重复：${field.key}`);
+    }
     fieldIds.add(field.id);
     fieldKeys.add(field.key);
   }
   const allowedDependencies = new Set([...fieldKeys, ...(sectionSnapshot.sourceFields ?? [])]);
+  const allowedInputSources = new Set(sectionSnapshot.sourceFields ?? []);
   for (const field of fieldsSnapshot) {
+    for (const inputSource of field.inputSources ?? []) {
+      if (!allowedInputSources.has(inputSource)) {
+        throw new Error(`字段输入来源不存在：${field.key} -> ${inputSource}`);
+      }
+    }
     if (field.dependsOn.includes(field.key)) throw new Error(`字段不能依赖自身：${field.key}`);
     for (const dependency of field.dependsOn) {
       if (!allowedDependencies.has(dependency)) throw new Error(`依赖字段不存在：${field.key} -> ${dependency}`);
@@ -184,6 +255,7 @@ function validateVersionSnapshot(version: Pick<
     }
   }
   if (dependencyMap.size !== fieldsSnapshot.length) throw new Error("字段依赖快照存在重复或多余项目");
+  validateRuntimeFieldIdentity(version.sectionId, fieldsSnapshot);
   const exportKeys = new Set(exportSettings.outputColumns.map((item) => item.key));
   if (exportKeys.size !== exportSettings.outputColumns.length) throw new Error("导出字段 Key 重复");
   const exportHeaders = new Set<string>();
@@ -296,8 +368,104 @@ function validateVersionSnapshot(version: Pick<
     ]) {
       if (!sourceColumns.has(required)) throw new Error(`接待质检导出契约缺少字段：${required}`);
     }
+  } else if (businessRules.kind === "generic") {
+    const generic = parseConfiguration(genericBusinessRulesInput, businessRules);
+    const requiredColumns = new Set(generic.importContract.requiredColumns);
+    const optionalColumns = new Set(generic.importContract.optionalColumns);
+    if (requiredColumns.has(generic.importContract.imageColumn)
+      || optionalColumns.has(generic.importContract.imageColumn)) {
+      throw new Error("通用导入契约的截图列不能重复声明为输入列");
+    }
+    if (requiredColumns.size !== generic.importContract.requiredColumns.length) {
+      throw new Error("通用导入契约必需表头重复");
+    }
+    if (optionalColumns.size !== generic.importContract.optionalColumns.length) {
+      throw new Error("通用导入契约可选表头重复");
+    }
+    if ([...requiredColumns].some((column) => optionalColumns.has(column))) {
+      throw new Error("通用导入契约表头不能同时为必需和可选");
+    }
   }
   assertNoRuntimeState(version);
+}
+
+function syncPublishedRuntimeProjection(version: Pick<
+  SectionConfigVersion,
+  "sectionId" | "sectionSnapshot" | "fieldsSnapshot"
+>): void {
+  const timestamp = now();
+  db.prepare(`UPDATE analysis_sections
+    SET parent_id = ?, name = ?, prompt = ?, output_schema_json = ?,
+        source_fields_json = ?, sort_order = ?, is_enabled = ?,
+        image_enabled = ?, updated_at = ?
+    WHERE id = ?`).run(
+    version.sectionSnapshot.parentId,
+    version.sectionSnapshot.name,
+    version.sectionSnapshot.prompt,
+    JSON.stringify(version.sectionSnapshot.outputSchema ?? []),
+    JSON.stringify(version.sectionSnapshot.sourceFields ?? []),
+    version.sectionSnapshot.sortOrder,
+    version.sectionSnapshot.isEnabled ? 1 : 0,
+    version.sectionSnapshot.imageEnabled ? 1 : 0,
+    timestamp,
+    version.sectionId,
+  );
+  const fieldIds = new Set<string>();
+  const upsert = db.prepare(`INSERT INTO analysis_fields (
+    id, section_id, key, label, field_type, prompt, options_json, output_column,
+    is_required, image_enabled, depends_on_json, sort_order, execution_type,
+    export_enabled, knowledge_base_id, candidate_limit, match_field_key,
+    knowledge_column, knowledge_sync_enabled, knowledge_capture_limit,
+    is_enabled, created_at, updated_at
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT(id) DO UPDATE SET
+    section_id = excluded.section_id, key = excluded.key, label = excluded.label,
+    field_type = excluded.field_type, prompt = excluded.prompt, options_json = excluded.options_json,
+    output_column = excluded.output_column, is_required = excluded.is_required,
+    image_enabled = excluded.image_enabled, depends_on_json = excluded.depends_on_json,
+    sort_order = excluded.sort_order, execution_type = excluded.execution_type,
+    export_enabled = excluded.export_enabled, knowledge_base_id = excluded.knowledge_base_id,
+    candidate_limit = excluded.candidate_limit, match_field_key = excluded.match_field_key,
+    knowledge_column = excluded.knowledge_column, knowledge_sync_enabled = excluded.knowledge_sync_enabled,
+    knowledge_capture_limit = excluded.knowledge_capture_limit, is_enabled = excluded.is_enabled,
+    updated_at = excluded.updated_at`);
+  for (const field of version.fieldsSnapshot) {
+    fieldIds.add(field.id);
+    upsert.run(
+      field.id,
+      version.sectionId,
+      field.key,
+      field.label,
+      field.type,
+      field.prompt,
+      JSON.stringify(field.options ?? []),
+      field.outputColumn ?? null,
+      field.required ? 1 : 0,
+      field.imageEnabled ? 1 : 0,
+      JSON.stringify(field.dependsOn),
+      field.sortOrder,
+      field.executionType ?? "ai",
+      field.exportEnabled === false ? 0 : 1,
+      field.knowledgeBaseId ?? null,
+      field.candidateLimit ?? 15,
+      field.matchFieldKey ?? null,
+      field.knowledgeColumn ?? null,
+      field.knowledgeSyncEnabled ? 1 : 0,
+      field.knowledgeCaptureLimit ?? 2,
+      field.isEnabled ? 1 : 0,
+      timestamp,
+      timestamp,
+    );
+  }
+  if (!fieldIds.size) {
+    db.prepare("UPDATE analysis_fields SET is_enabled = 0, updated_at = ? WHERE section_id = ?")
+      .run(timestamp, version.sectionId);
+  } else {
+    const placeholders = [...fieldIds].map(() => "?").join(", ");
+    db.prepare(`UPDATE analysis_fields SET is_enabled = 0, updated_at = ?
+      WHERE section_id = ? AND id NOT IN (${placeholders})`)
+      .run(timestamp, version.sectionId, ...fieldIds);
+  }
 }
 
 export function listSectionVersions(sectionId: string): SectionConfigVersion[] {
@@ -325,15 +493,7 @@ export function getJobSectionConfigVersion(jobId: string): SectionConfigVersion 
 
 export function createDraftVersion(sectionId: string): SectionConfigVersion {
   return db.transaction(() => {
-    const current = db.prepare(`
-      SELECT business_rules_json
-      FROM analysis_section_versions
-      WHERE section_id = ? AND is_current = 1
-    `).get(sectionId) as { business_rules_json: string } | undefined;
-    const inheritedBusinessRules = current
-      ? parseJson<Record<string, unknown>>(current.business_rules_json, {})
-      : undefined;
-    const snapshot = buildCurrentSnapshot(sectionId, inheritedBusinessRules);
+    const snapshot = buildDraftSnapshot(sectionId);
     const next = db.prepare(
       "SELECT COALESCE(MAX(version_number), 0) + 1 AS version_number FROM analysis_section_versions WHERE section_id = ?",
     ).get(sectionId) as { version_number: number };
@@ -366,6 +526,7 @@ export function publishSectionVersion(id: string): SectionConfigVersion {
     if (!version) throw new Error("配置版本不存在");
     if (version.status !== "draft") throw new Error("只有草稿版本可以发布");
     validateVersionSnapshot(version);
+    syncPublishedRuntimeProjection(version);
     const timestamp = now();
     db.prepare("UPDATE analysis_section_versions SET is_current = 0, updated_at = ? WHERE section_id = ? AND is_current = 1")
       .run(timestamp, version.sectionId);
@@ -387,7 +548,7 @@ export function updateDraftSectionVersion(id: string, patch: SectionConfigVersio
     const fieldsSnapshot = patch.fieldsSnapshot ?? version.fieldsSnapshot;
     const exportSettings = patch.exportSettings
       ?? (patch.fieldsSnapshot
-        ? sectionExportSettings(version.sectionId, fieldsSnapshot)
+        ? sectionExportSettings(version.sectionId, fieldsSnapshot, sectionSnapshot.sourceFields)
         : version.exportSettings);
     const dependenciesSnapshot = patch.dependenciesSnapshot ?? (patch.fieldsSnapshot
       ? fieldsSnapshot.map((field) => ({ key: field.key, dependsOn: field.dependsOn }))
@@ -467,6 +628,7 @@ export function activateSectionVersion(id: string): SectionConfigVersion {
       .run(timestamp, version.sectionId);
     db.prepare("UPDATE analysis_section_versions SET is_current = 1, updated_at = ? WHERE id = ?")
       .run(timestamp, id);
+    syncPublishedRuntimeProjection(version);
     return getSectionVersion(id)!;
   })();
 }

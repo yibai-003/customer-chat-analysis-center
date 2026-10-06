@@ -12,13 +12,14 @@ export function useImportWorkflow(options: ImportOptions) {
   const [selectingImportFile, setSelectingImportFile] = useState<File | null>(null);
   const [importJobId, setImportJobId] = useState<string | null>(null);
   const pendingImportOriginRef = useRef<JobOperationToken | null>(null);
-  const commitImport = async (file: File, sectionId: string, platformId: string) => {
+  const commitImport = async (file: File, sectionId: string, platformId: string, sectionConfigVersionId?: string) => {
     const operation = captureJobOperation();
     startBusyOperation(operation); setNotice("");
     try {
       const form = new FormData(); form.append("file", file);
       form.append("sectionId", sectionId);
       form.append("platformId", platformId);
+      if (sectionConfigVersionId) form.append("sectionConfigVersionId", sectionConfigVersionId);
       const created = await api<ImportJob>("/api/jobs/import", { method: "POST", body: form });
       if (!isJobOperationCurrent(operation)) return;
       pendingImportOriginRef.current = operation;
@@ -36,7 +37,7 @@ export function useImportWorkflow(options: ImportOptions) {
     setPendingImportFile(null);
     setSelectingImportFile(file);
   };
-  const previewImport = async (file: File, sectionId: string, platformId: string) => {
+  const previewImport = async (file: File, sectionId: string, platformId: string, sectionConfigVersionId?: string) => {
     previewAbortRef.current?.abort();
     const request = new AbortController(); previewAbortRef.current = request;
     const operation = captureJobOperation();
@@ -45,6 +46,7 @@ export function useImportWorkflow(options: ImportOptions) {
       const form = new FormData(); form.append("file", file);
       form.append("sectionId", sectionId);
       form.append("platformId", platformId);
+      if (sectionConfigVersionId) form.append("sectionConfigVersionId", sectionConfigVersionId);
       const preview = await api<WorkbookPreview>("/api/jobs/import-preview", { method: "POST", body: form, signal: request.signal });
       if (request.signal.aborted || !isJobOperationCurrent(operation)) return;
       setSelectingImportFile(null);

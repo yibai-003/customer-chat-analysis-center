@@ -6,10 +6,15 @@ import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { diskReservations, reservedFileWriter } from "../security/disk-reservations";
-import { createJob, addRecords, deleteJob, mergeSectionSourceFields, updateJobSourcePath } from "../db/repositories";
+import { createJob, addRecords, deleteJob, updateJobSourcePath } from "../db/repositories";
 import { config } from "../config";
 import { normalizeUploadedFilename } from "../utils/encoding";
 import { normalizeExcelHeader } from "./excel-template-service";
+import {
+  missingGenericImportHeadersBySheet,
+  resolveGenericImportContract,
+  type SectionImportContractInput,
+} from "./section-import-contract";
 
 export function normalizeImageAnchor(range: any) {
   const startRow = Number(range?.tl?.nativeRow ?? range?.tl?.row ?? 0) + 1;
@@ -19,7 +24,7 @@ export function normalizeImageAnchor(range: any) {
   return { startRow, startColumn, endRow, endColumn };
 }
 
-export async function previewWorkbook(filePath: string, originalFilename: string, section?: { id: string; name: string; sourceFields?: string[] }) {
+export async function previewWorkbook(filePath: string, originalFilename: string, section?: SectionImportContractInput & { name: string }) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
   const sheets = workbook.worksheets.map((worksheet) => {
@@ -35,11 +40,21 @@ export async function previewWorkbook(filePath: string, originalFilename: string
   });
   const imageCount = sheets.reduce((sum, sheet) => sum + sheet.imageCount, 0);
   const headers = new Set(sheets.flatMap((sheet) => sheet.headers));
-  const missingHeaders = (section?.sourceFields ?? []).filter((field) => !headers.has(field));
+  const genericContract = resolveGenericImportContract(section);
+  const genericMissing = genericContract
+    ? missingGenericImportHeadersBySheet(sheets.map((sheet) => ({
+      name: sheet.name,
+      headers: sheet.headers,
+      hasImageAnchors: sheet.imageCount > 0,
+    })), genericContract)
+    : [];
+  const missingHeaders = genericContract
+    ? [...new Set(genericMissing.flatMap((sheet) => sheet.headers))]
+    : (section?.sourceFields ?? []).filter((field) => !headers.has(field));
   return { originalFilename: normalizeUploadedFilename(originalFilename), sheetCount: sheets.length, imageCount, sectionId: section?.id, sectionName: section?.name, missingHeaders, sheets };
 }
 
-export async function importWorkbook(filePath: string, originalFilename: string, section?: { id: string; name: string }, onProgress?: (progress: { totalImages?: number; processedImages: number; currentSheet: string; currentRow: number }) => void) {
+export async function importWorkbook(filePath: string, originalFilename: string, section?: SectionImportContractInput & { name: string }, onProgress?: (progress: { totalImages?: number; processedImages: number; currentSheet: string; currentRow: number }) => void) {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(filePath);
   const stagingDir = path.join(config.dataDir, "job-staging", crypto.randomUUID());
@@ -55,13 +70,20 @@ export async function importWorkbook(filePath: string, originalFilename: string,
   const reservation = diskReservations.reserve((await fs.stat(filePath)).size + imageBytes);
   try {
     const imported: Array<{ sheetName: string; rowNumber: number; anchor: unknown; sourceFields: Record<string, string>; imagePath: string }> = [];
-    if (section) {
-      const importedHeaders = [...new Set(workbook.worksheets.flatMap((worksheet) => {
+    const genericContract = resolveGenericImportContract(section);
+    if (genericContract) {
+      const missing = missingGenericImportHeadersBySheet(workbook.worksheets.map((worksheet) => {
         const headers: string[] = [];
-        worksheet.getRow(1).eachCell((cell, index) => { headers[index - 1] = normalizeExcelHeader(cell.value); });
-        return headers;
-      }))];
-      mergeSectionSourceFields(section.id, importedHeaders);
+        worksheet.getRow(1).eachCell((cell, index) => { headers[index - 1] = normalizeExcelHeader(cell.value ?? `字段${index}`); });
+        return {
+          name: worksheet.name,
+          headers: headers.filter(Boolean),
+          hasImageAnchors: (worksheet.getImages?.() ?? []).length > 0,
+        };
+      }), genericContract);
+      if (missing.length) {
+        throw new Error(`工作簿缺少必需表头：${missing.map((sheet) => `${sheet.sheetName} 缺少 ${sheet.headers.join("、")}`).join("；")}`);
+      }
     }
     await fs.mkdir(stagingImageDir, { recursive: true });
     await pipeline(createReadStream(filePath), reservedFileWriter(path.join(stagingDir, "source.xlsx"), reservation));
@@ -86,7 +108,13 @@ export async function importWorkbook(filePath: string, originalFilename: string,
       }
     }
     if (!imported.length) throw new Error("工作簿中没有识别到嵌入图片");
-    const job = createJob(normalizeUploadedFilename(originalFilename), path.join(stagingDir, "source.xlsx"), section);
+    const job = createJob(
+      normalizeUploadedFilename(originalFilename),
+      path.join(stagingDir, "source.xlsx"),
+      section,
+      undefined,
+      section?.sectionConfigVersionId,
+    );
     jobId = job.id;
     const targetJobDir = path.join(config.dataDir, "jobs", job.id);
     finalJobDir = targetJobDir;

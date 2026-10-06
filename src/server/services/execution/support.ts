@@ -14,6 +14,17 @@ export function dependencyValues(
   return Object.fromEntries(field.dependsOn.map((key) => [key, context[key] ?? sourceFields[key]]));
 }
 
+export function sourceValuesForField(
+  field: AnalysisField,
+  sourceFields: Record<string, string>,
+) {
+  if (!field.inputSources) return sourceFields;
+  const selected = new Set(field.inputSources);
+  return Object.fromEntries(
+    Object.entries(sourceFields).filter(([key]) => selected.has(key)),
+  );
+}
+
 export function routedModelSnapshot(routed: Awaited<ReturnType<typeof callModelPool>>) {
   return {
     id: routed.model.id,

@@ -253,6 +253,12 @@ export interface Platform {
 export type SectionConfigVersionStatus = "draft" | "published" | "archived";
 
 export type SectionExportRowMode = "records" | "screenshot_records";
+export interface GenericImportContract {
+  imageColumn: string;
+  imageColumnRequired?: boolean;
+  requiredColumns: string[];
+  optionalColumns: string[];
+}
 export type SectionExportColumnSource =
   | "field_result"
   | "platform_name"
@@ -294,7 +300,7 @@ export interface SectionConfigVersion {
   };
   dependenciesSnapshot: Array<{ key: string; dependsOn: string[] }>;
   knowledgeSnapshot: Array<Record<string, unknown>>;
-  businessRules: Record<string, unknown>;
+  businessRules: Record<string, unknown> & Partial<GenericImportContract>;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -307,7 +313,7 @@ export interface SectionConfigVersionPatch {
   exportSettings?: SectionConfigVersion["exportSettings"];
   dependenciesSnapshot?: SectionConfigVersion["dependenciesSnapshot"];
   knowledgeSnapshot?: SectionConfigVersion["knowledgeSnapshot"];
-  businessRules?: Record<string, unknown>;
+  businessRules?: Record<string, unknown> & Partial<GenericImportContract>;
 }
 
 export interface OutputField {
@@ -433,6 +439,7 @@ export interface AnalysisField {
   prompt: string;
   required: boolean;
   imageEnabled: boolean;
+  inputSources?: string[];
   dependsOn: string[];
   sortOrder: number;
   isEnabled: boolean;

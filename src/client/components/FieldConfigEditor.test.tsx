@@ -2,7 +2,7 @@
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AnalysisField, AnalysisSection, KnowledgeBase, KnowledgeColumn } from "../../shared/types";
+import type { AnalysisField, AnalysisSection, KnowledgeBase, KnowledgeColumn, SectionConfigVersion } from "../../shared/types";
 import { knowledgeApi } from "../api/knowledge-api";
 import { FieldConfigEditor } from "./FieldConfigEditor";
 import { SectionConfigDialog } from "./SectionConfigDialog";
@@ -195,6 +195,206 @@ describe("FieldConfigEditor knowledge modes", () => {
     expect(control("必填")).toBeTruthy();
     expect(button("显示选择")).toBeTruthy();
     expect(listBases).not.toHaveBeenCalled();
+  });
+
+  it("keeps the stable field key when the export header changes", async () => {
+    const onChange = vi.fn();
+    await renderUi(<FieldConfigEditor
+      fields={[field({ key: "stable_reason", outputColumn: "最终原因" })]}
+      sourceFields={section.sourceFields}
+      onChange={onChange}
+      onAdd={vi.fn()}
+      onRemove={vi.fn()}
+    />);
+
+    await change(control("目标 Excel 字段"), "客服备注");
+
+    expect(onChange).toHaveBeenCalledWith(0, { outputColumn: "客服备注" });
+  });
+
+  it("allows an ordinary field to select its configured input sources", async () => {
+    const onChange = vi.fn();
+    await renderUi(<FieldConfigEditor
+      fields={[field()]}
+      sourceFields={["平台", "店铺"]}
+      allowInputSources
+      onChange={onChange}
+      onAdd={vi.fn()}
+      onRemove={vi.fn()}
+    />);
+
+    await change(control("字段输入来源"), "平台");
+
+    expect(onChange).toHaveBeenCalledWith(0, { inputSources: ["平台"] });
+  });
+
+  it("allows adding a field after all source columns are already used", async () => {
+    const onAdd = vi.fn();
+    await renderUi(<FieldConfigEditor
+      fields={[field({ outputColumn: "最终原因" }), field({ id: "field-2", key: "note", outputColumn: "客服备注" })]}
+      sourceFields={["最终原因", "客服备注"]}
+      onChange={vi.fn()}
+      onAdd={onAdd}
+      onRemove={vi.fn()}
+    />);
+
+    await click(button("＋ 新增普通字段"));
+    expect(onAdd).toHaveBeenCalledTimes(1);
+  });
+
+  it("exposes field sorting controls with boundary states", async () => {
+    const onMove = vi.fn();
+    const first = field({ key: "first", label: "第一字段" });
+    const second = field({ id: "field-2", key: "second", label: "第二字段" });
+    await renderUi(<FieldConfigEditor
+      fields={[first, second]}
+      onChange={vi.fn()}
+      onAdd={vi.fn()}
+      onRemove={vi.fn()}
+      onMove={onMove}
+    />);
+
+    expect(button("上移字段 第一字段").disabled).toBe(true);
+    expect(button("下移字段 第一字段").disabled).toBe(false);
+    expect(button("上移字段 第二字段").disabled).toBe(false);
+    expect(button("下移字段 第二字段").disabled).toBe(true);
+
+    await click(button("下移字段 第一字段"));
+    expect(onMove).toHaveBeenCalledWith(0, 1);
+    await click(button("上移字段 第二字段"));
+    expect(onMove).toHaveBeenCalledWith(1, 0);
+  });
+
+  it("edits a draft version snapshot through one version patch", async () => {
+    const draft: SectionConfigVersion = {
+      id: "version-draft",
+      sectionId: section.id,
+      versionNumber: 3,
+      status: "draft",
+      isCurrent: false,
+      sectionSnapshot: section,
+      fieldsSnapshot: [field({ key: "stable_reason", outputColumn: "最终原因" })],
+      exportSettings: {
+        rowMode: "records",
+        outputColumns: [
+          { key: "platform_name", outputColumn: "平台", source: "platform_name", format: "value" },
+          { key: "conversation_id", outputColumn: "会话ID", source: "conversation_id", format: "value" },
+          { key: "stable_reason", outputColumn: "最终原因", source: "field_result", format: "value" },
+        ],
+      },
+      dependenciesSnapshot: [{ key: "stable_reason", dependsOn: [] }],
+      knowledgeSnapshot: [],
+      businessRules: {
+        kind: "generic",
+        importContract: {
+          imageColumn: "聊天截图",
+          requiredColumns: [],
+          optionalColumns: [],
+        },
+      },
+      createdAt: "2026-09-30T00:00:00.000Z",
+      updatedAt: "2026-09-30T00:00:00.000Z",
+    };
+    const requests: Array<{ url: string; method: string; body?: Record<string, unknown> }> = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? "GET";
+      const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : undefined;
+      requests.push({ url, method, body });
+      if (url === `/api/sections/${section.id}/versions`) return { ok: true, json: async () => ({ success: true, data: [draft] }) };
+      if (url === `/api/section-config-versions/${draft.id}` && method === "PATCH") {
+        return { ok: true, json: async () => ({ success: true, data: { ...draft, ...body } }) };
+      }
+      throw new Error(`未处理请求：${method} ${url}`);
+    }));
+
+    await renderUi(<SectionConfigDialog
+      sections={[{ ...section, id: "after-sales", parentId: null }, section]}
+      close={vi.fn()}
+      saved={vi.fn()}
+    />);
+    await waitFor(() => expect(button("保存草稿配置")).toBeTruthy());
+    await click(button("＋ 新增普通字段"));
+    await change(control("字段名称"), "更新后的结果");
+    await click(button("保存草稿配置"));
+
+    const patches = requests.filter((request) => request.method === "PATCH");
+    expect(patches).toHaveLength(1);
+    expect(patches[0].url).toBe(`/api/section-config-versions/${draft.id}`);
+    expect(patches[0].body).toMatchObject({
+      fieldsSnapshot: [expect.objectContaining({
+        key: "stable_reason",
+        label: "更新后的结果",
+        outputColumn: "最终原因",
+      }), expect.objectContaining({
+        key: "field_2",
+        candidateLimit: 15,
+        knowledgeSyncEnabled: false,
+        knowledgeCaptureLimit: 2,
+      })],
+    });
+  });
+
+  it("shows the current published snapshot when no draft exists", async () => {
+    const createPublishedVersion = (
+      id: string,
+      versionNumber: number,
+      isCurrent: boolean,
+      label: string,
+    ): SectionConfigVersion => ({
+      id,
+      sectionId: section.id,
+      versionNumber,
+      status: "published",
+      isCurrent,
+      sectionSnapshot: { ...section, prompt: `${label}板块说明` },
+      fieldsSnapshot: [field({
+        key: `${id}-field`,
+        label: `${label}字段`,
+        prompt: `${label}提示词`,
+      })],
+      exportSettings: { rowMode: "records", outputColumns: [] },
+      dependenciesSnapshot: [],
+      knowledgeSnapshot: [],
+      businessRules: {
+        kind: "generic",
+        importContract: {
+          imageColumn: "聊天截图",
+          requiredColumns: [],
+          optionalColumns: [],
+        },
+      },
+      createdAt: "2026-09-30T00:00:00.000Z",
+      updatedAt: "2026-09-30T00:00:00.000Z",
+    });
+    const previous = createPublishedVersion("version-8", 8, false, "历史");
+    const current = createPublishedVersion("version-9", 9, true, "当前发布");
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      requests.push(`${init?.method ?? "GET"} ${url}`);
+      if (url === `/api/sections/${section.id}/versions`) {
+        return { ok: true, json: async () => ({ success: true, data: [previous, current] }) };
+      }
+      throw new Error(`未处理请求：${init?.method ?? "GET"} ${url}`);
+    }));
+
+    await renderUi(<SectionConfigDialog
+      sections={[{ ...section, id: "after-sales", parentId: null }, section]}
+      close={vi.fn()}
+      saved={vi.fn()}
+    />);
+
+    await waitFor(() => {
+      expect(button("基于当前版本创建草稿").disabled).toBe(false);
+      expect(host.textContent).toContain("V9");
+      expect(host.textContent).toContain("当前发布字段");
+      expect(host.textContent).toContain("当前发布提示词");
+    });
+    expect(host.textContent).toContain("当前发布板块说明");
+    expect(host.textContent).not.toContain("历史字段");
+    expect(host.textContent).not.toContain("创建中...");
+    expect(requests).toEqual([`GET /api/sections/${section.id}/versions`]);
   });
 
   it("shows knowledge base, candidate count, prompt, dependencies, and export toggle for match fields", async () => {

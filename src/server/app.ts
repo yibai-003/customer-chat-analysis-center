@@ -55,6 +55,20 @@ interface AppDependencies {
   readinessProvider?: () => ReadinessStatus;
 }
 
+function resolveImportSection(sectionId: unknown, requestedVersionId: unknown) {
+  const id = typeof sectionId === "string" ? sectionId : "";
+  const section = listSections().find((item) => item.id === id && item.isEnabled && item.parentId);
+  if (!section) throw new Error("请选择一个启用的解析板块");
+  const requested = typeof requestedVersionId === "string" && requestedVersionId.trim()
+    ? requestedVersionId.trim()
+    : section.currentVersionId ?? "";
+  const version = requested ? getSectionVersion(requested) : undefined;
+  if (!version || version.sectionId !== section.id || version.status !== "published") {
+    throw new Error("请选择一个有效的已发布解析板块配置版本");
+  }
+  return { section, version };
+}
+
 export function createApp(dependencies: AppDependencies = {}) {
   fs.mkdirSync(config.dataDir, { recursive: true });
   const knowledgeSync = dependencies.knowledgeSync ?? (process.env.NODE_ENV === "test" ? undefined : initializeKnowledgeSync());
@@ -180,8 +194,7 @@ export function createApp(dependencies: AppDependencies = {}) {
     try {
       await validateXlsx(req.file.path, req.file.originalname);
       const filename = normalizeUploadedFilename(req.file.originalname);
-      const section = req.body.sectionId ? listSections().find((item) => item.id === req.body.sectionId && item.isEnabled && item.parentId && item.currentVersionId) : undefined;
-      if (!section) return fail(res, "请选择一个有当前已发布版本的启用解析板块");
+      const { section, version } = resolveImportSection(req.body.sectionId, req.body.sectionConfigVersionId);
       const platform = req.body.platformId ? getPlatform(req.body.platformId) : undefined;
       if (!platform || !platform.isEnabled) return fail(res, "请选择一个启用的平台");
       const importJob = createImportJob({
@@ -189,7 +202,7 @@ export function createApp(dependencies: AppDependencies = {}) {
         sourcePath: req.file.path,
         sectionId: section.id,
         sectionName: section.name,
-        sectionConfigVersionId: section.currentVersionId ?? undefined,
+        sectionConfigVersionId: version.id,
         platform,
       });
       const durableDir = path.join(config.dataDir, "imports", importJob.id);
@@ -214,14 +227,13 @@ export function createApp(dependencies: AppDependencies = {}) {
     }
     try {
       await validateXlsx(req.file.path, req.file.originalname);
-      const section = req.body.sectionId ? listSections().find((item) => item.id === req.body.sectionId && item.isEnabled && item.parentId && item.currentVersionId) : undefined;
-      if (!section) return fail(res, "请选择一个有当前已发布版本的启用解析板块");
+      const { section, version } = resolveImportSection(req.body.sectionId, req.body.sectionConfigVersionId);
       const platform = req.body.platformId ? getPlatform(req.body.platformId) : undefined;
       if (!platform || !platform.isEnabled) return fail(res, "请选择一个启用的平台");
       return ok(res, await previewWorkbookStreaming(
         req.file.path,
         req.file.originalname,
-        { id: section.id, name: section.name, sourceFields: section.sourceFields, sectionConfigVersionId: section.currentVersionId ?? undefined, sectionVersionNumber: section.currentVersionNumber ?? undefined },
+        { id: section.id, name: section.name, sourceFields: version.sectionSnapshot.sourceFields, sectionConfigVersionId: version.id, sectionVersionNumber: version.versionNumber },
         platform,
       ));
     } catch (error) { return fail(res, error); }

@@ -6,7 +6,7 @@ import { SelectMenu } from "./SelectMenu";
 export function ImportSectionDialog({ file, sections, platforms, busy, error, onConfirm, onCancel }: {
   file: File; sections: AnalysisSection[]; platforms: Platform[]; busy: boolean;
   error?: string;
-  onConfirm: (sectionId: string, platformId: string) => void; onCancel: () => void;
+  onConfirm: (sectionId: string, platformId: string, sectionConfigVersionId: string) => void; onCancel: () => void;
 }) {
   const [sectionId, setSectionId] = useState("");
   const [platformId, setPlatformId] = useState("");
@@ -28,6 +28,6 @@ export function ImportSectionDialog({ file, sections, platforms, busy, error, on
     {!available.length && <p role="status">暂无已启用的子板块，请先在板块配置中添加。</p>}
     {!availablePlatforms.length && <p role="status">暂无已启用的平台，请先维护平台字典。</p>}
     {error && <p className="form-error" role="alert">{error}</p>}
-    <div className="modal-actions"><button className="button light" disabled={busy} onClick={onCancel}>取消</button><button className="button dark" disabled={busy || !available.some((section) => section.id === sectionId) || !availablePlatforms.some((platform) => platform.id === platformId)} onClick={() => onConfirm(sectionId, platformId)}>{busy ? "读取预览中..." : "下一步：预览文件"}</button></div>
+    <div className="modal-actions"><button className="button light" disabled={busy} onClick={onCancel}>取消</button><button className="button dark" disabled={busy || !available.some((section) => section.id === sectionId) || !availablePlatforms.some((platform) => platform.id === platformId)} onClick={() => onConfirm(sectionId, platformId, available.find((section) => section.id === sectionId)?.currentVersionId ?? "")}>{busy ? "读取预览中..." : "下一步：预览文件"}</button></div>
   </Modal>;
 }

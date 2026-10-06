@@ -470,8 +470,8 @@ function Workspace({ session }: { session: CurrentSession }) {
         })}
       />}
       {previewImage && <ImagePreviewDialog {...previewImage} onClose={closePreviewImage} />}
-      {selectingImportFile && <ImportSectionDialog file={selectingImportFile} sections={sections} platforms={platforms} busy={busy} error={notice} onCancel={() => setSelectingImportFile(null)} onConfirm={(sectionId, platformId) => void previewImport(selectingImportFile, sectionId, platformId)} />}
-      {importPreview && pendingImportFile && <ImportPreviewDialog preview={importPreview} busy={busy} onCancel={() => { const file = pendingImportFile; setImportPreview(null); setPendingImportFile(null); setSelectingImportFile(file); }} onConfirm={async () => { const file = pendingImportFile; const sectionId = importPreview.sectionId; const platformId = importPreview.platformId; if (!sectionId || !platformId) return; setImportPreview(null); setPendingImportFile(null); await commitImport(file, sectionId, platformId); }} />}
+      {selectingImportFile && <ImportSectionDialog file={selectingImportFile} sections={sections} platforms={platforms} busy={busy} error={notice} onCancel={() => setSelectingImportFile(null)} onConfirm={(sectionId, platformId, sectionConfigVersionId) => void previewImport(selectingImportFile, sectionId, platformId, sectionConfigVersionId)} />}
+      {importPreview && pendingImportFile && <ImportPreviewDialog preview={importPreview} busy={busy} onCancel={() => { const file = pendingImportFile; setImportPreview(null); setPendingImportFile(null); setSelectingImportFile(file); }} onConfirm={async () => { const file = pendingImportFile; const sectionId = importPreview.sectionId; const platformId = importPreview.platformId; if (!sectionId || !platformId) return; setImportPreview(null); setPendingImportFile(null); await commitImport(file, sectionId, platformId, importPreview.sectionConfigVersionId); }} />}
       {importJobId && <ImportProgressDialog importJobId={importJobId} onCompleted={handleImportCompleted} onClose={() => setImportJobId(null)} />}
     </div>
   );

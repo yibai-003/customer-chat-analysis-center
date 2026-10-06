@@ -303,6 +303,27 @@ describe("job repository", () => {
     })).toThrow("没有当前启用的已发布配置版本");
   });
 
+  it("rejects draft versions when binding jobs or import jobs", () => {
+    const sectionId = "job-draft-version";
+    upsertSection({ id: sectionId, name: "草稿版本", prompt: "" });
+    const draft = createDraftVersion(sectionId);
+
+    expect(() => createJob(
+      "draft-version.xlsx",
+      "draft-version.xlsx",
+      { id: sectionId, name: "草稿版本" },
+      undefined,
+      draft.id,
+    )).toThrow("必须是已发布版本");
+    expect(() => createImportJob({
+      filename: "draft-version.xlsx",
+      sourcePath: "draft-version.xlsx",
+      sectionId,
+      sectionName: "草稿版本",
+      sectionConfigVersionId: draft.id,
+    })).toThrow("必须是已发布版本");
+  });
+
   it("can bind a legacy unbound job on first analysis", () => {
     const job = createJob("legacy.xlsx", "legacy.xlsx");
     expect(() => assertJobSection(job.id, "refund")).not.toThrow();

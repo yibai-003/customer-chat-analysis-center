@@ -188,6 +188,14 @@ export function deleteSection(id: string) {
   db.prepare("DELETE FROM analysis_sections WHERE id = ?").run(id);
 }
 
+function assertPublishedSectionVersion(sectionId: string, versionId: string): void {
+  const version = db.prepare(
+    "SELECT section_id, status FROM analysis_section_versions WHERE id = ?",
+  ).get(versionId) as { section_id: string; status: string } | undefined;
+  if (!version || version.section_id !== sectionId) throw new Error("解析板块配置版本不匹配");
+  if (version.status !== "published") throw new Error("解析板块配置版本必须是已发布版本");
+}
+
 export function createJob(
   filename: string,
   sourcePath: string,
@@ -198,10 +206,7 @@ export function createJob(
   const id = crypto.randomUUID(), timestamp = now();
   const versionId = section ? sectionConfigVersionId ?? currentSectionVersionId(section.id) : null;
   if (section && !versionId) throw new Error("解析板块没有当前启用的已发布配置版本");
-  if (section && sectionConfigVersionId) {
-    const version = db.prepare("SELECT section_id FROM analysis_section_versions WHERE id = ?").get(sectionConfigVersionId) as { section_id: string } | undefined;
-    if (!version || version.section_id !== section.id) throw new Error("解析板块配置版本不匹配");
-  }
+  if (section && versionId) assertPublishedSectionVersion(section.id, versionId);
   const resolvedPlatform = platform ? enabledPlatformBinding(platform) : undefined;
   db.prepare(`INSERT INTO jobs
     (id,original_filename,source_path,section_id,section_name,section_config_version_id,platform_id,platform_code,platform_name,status,total_records,completed_records,failed_records,created_at,updated_at)
@@ -235,10 +240,7 @@ export function createImportJob(input: {
   const timestamp = now();
   const versionId = input.sectionId ? input.sectionConfigVersionId ?? currentSectionVersionId(input.sectionId) : null;
   if (input.sectionId && !versionId) throw new Error("解析板块没有当前启用的已发布配置版本");
-  if (input.sectionId && input.sectionConfigVersionId) {
-    const version = db.prepare("SELECT section_id FROM analysis_section_versions WHERE id = ?").get(input.sectionConfigVersionId) as { section_id: string } | undefined;
-    if (!version || version.section_id !== input.sectionId) throw new Error("解析板块配置版本不匹配");
-  }
+  if (input.sectionId && versionId) assertPublishedSectionVersion(input.sectionId, versionId);
   const resolvedPlatform = input.platform ? enabledPlatformBinding(input.platform) : undefined;
   db.prepare(`INSERT INTO import_jobs
     (id, filename, source_path, job_id, section_id, section_name, section_config_version_id, platform_id, platform_code, platform_name, status, total_images, total_records, created_at, updated_at)
