@@ -134,6 +134,105 @@ describe("section configuration version lifecycle", () => {
     ]));
   });
 
+  it("keeps disabled fields in editable snapshots without exporting them", () => {
+    const sectionId = createConfigFixture();
+    const disabled = upsertField({
+      sectionId,
+      key: "disabled_result",
+      label: "停用结果",
+      type: "string",
+      prompt: "停用字段提示词",
+      outputColumn: "停用结果",
+      isEnabled: false,
+    });
+
+    const draft = createDraftVersion(sectionId);
+
+    expect(draft.fieldsSnapshot).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: disabled.id, key: "disabled_result", isEnabled: false }),
+    ]));
+    expect(draft.exportSettings.outputColumns)
+      .not.toEqual(expect.arrayContaining([expect.objectContaining({ key: "disabled_result" })]));
+  });
+
+  it("rejects export columns for disabled or non-exportable generic fields", () => {
+    const sectionId = createConfigFixture();
+    const draft = createDraftVersion(sectionId);
+    const field = draft.fieldsSnapshot[0];
+
+    expect(() => updateDraftSectionVersion(draft.id, {
+      fieldsSnapshot: [{ ...field, exportEnabled: false }],
+      exportSettings: {
+        ...draft.exportSettings,
+        outputColumns: [
+          ...draft.exportSettings.outputColumns.filter((column) => column.key !== field.key),
+          { key: field.key, outputColumn: field.outputColumn ?? "结果", source: "field_result", format: "value" },
+        ],
+      },
+    })).toThrow("导出字段未启用");
+
+    const secondDraft = createDraftVersion(sectionId);
+    const secondField = secondDraft.fieldsSnapshot[0];
+    expect(() => updateDraftSectionVersion(secondDraft.id, {
+      fieldsSnapshot: [{ ...secondField, isEnabled: false }],
+      exportSettings: {
+        ...secondDraft.exportSettings,
+        outputColumns: [
+          ...secondDraft.exportSettings.outputColumns.filter((column) => column.key !== secondField.key),
+          { key: secondField.key, outputColumn: secondField.outputColumn ?? "结果", source: "field_result", format: "value" },
+        ],
+      },
+    })).toThrow("导出字段未启用");
+  });
+
+  it("rejects an enabled field that depends on a disabled field", () => {
+    const sectionId = createConfigFixture();
+    const disabled = upsertField({
+      sectionId,
+      key: "disabled_source",
+      label: "停用来源",
+      type: "string",
+      prompt: "停用来源提示词",
+      isEnabled: false,
+    });
+    const draft = createDraftVersion(sectionId);
+    const enabled = draft.fieldsSnapshot.find((field) => field.key === "result")!;
+    const disabledSnapshot = {
+      ...enabled,
+      id: disabled.id,
+      key: disabled.key,
+      label: disabled.label,
+      prompt: disabled.prompt,
+      outputColumn: disabled.outputColumn,
+      isEnabled: false,
+      dependsOn: [],
+    };
+
+    expect(() => updateDraftSectionVersion(draft.id, {
+      fieldsSnapshot: [{ ...enabled, dependsOn: [disabled.key] }, disabledSnapshot],
+      dependenciesSnapshot: [
+        { key: enabled.key, dependsOn: [disabled.key] },
+        { key: disabled.key, dependsOn: [] },
+      ],
+    })).toThrow("依赖字段已停用");
+  });
+
+  it("does not resurrect a deleted field when creating a later draft", () => {
+    const sectionId = createConfigFixture();
+    const first = publishSectionVersion(createDraftVersion(sectionId).id);
+    const secondDraft = createDraftVersion(sectionId);
+    updateDraftSectionVersion(secondDraft.id, {
+      fieldsSnapshot: [],
+      dependenciesSnapshot: [],
+    });
+    publishSectionVersion(secondDraft.id);
+
+    const laterDraft = createDraftVersion(sectionId);
+
+    expect(laterDraft.fieldsSnapshot).toEqual([]);
+    expect(first.fieldsSnapshot).toHaveLength(1);
+  });
+
   it("projects newly published fields into the runtime field registry", () => {
     const sectionId = createConfigFixture();
     const draft = createDraftVersion(sectionId);

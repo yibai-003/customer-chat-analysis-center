@@ -63,7 +63,7 @@ export function sectionExportSettings(
     outputColumns: [
       ...SHARED_EXPORT_COLUMNS.map((column) => ({ ...column })),
       ...fields
-        .filter((field) => field.exportEnabled)
+        .filter((field) => field.isEnabled && field.exportEnabled)
         .map((field) => ({
           key: field.key,
           outputColumn: field.outputColumn ?? null,

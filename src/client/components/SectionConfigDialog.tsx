@@ -9,10 +9,19 @@ import { Modal } from "./Modal";
 import { FieldConfigEditor } from "./FieldConfigEditor";
 import { executionTypeLabel } from "./execution-registry";
 
+class ApiRequestError extends Error {
+  constructor(public readonly status: number, message: string) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
 const api = async <T,>(url: string, options?: RequestInit): Promise<T> => {
   const response = await fetch(url, options);
   const body = await response.json().catch(() => ({}));
-  if (!response.ok || body.success === false) throw new Error(body.error || "请求失败");
+  if (!response.ok || body.success === false) {
+    throw new ApiRequestError(response.status, body.error || "请求失败");
+  }
   return body.data as T;
 };
 
@@ -62,20 +71,38 @@ function newField(sectionId: string, fields: AnalysisField[]): AnalysisField {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isSectionVersion(value: unknown): value is SectionConfigVersion {
+  if (!isRecord(value)) return false;
+  const candidate = value as Partial<SectionConfigVersion>;
+  const exportSettings = candidate.exportSettings;
+  return typeof candidate.id === "string"
+    && typeof candidate.sectionId === "string"
+    && typeof candidate.versionNumber === "number"
+    && Number.isFinite(candidate.versionNumber)
+    && ["draft", "published", "archived"].includes(candidate.status ?? "")
+    && typeof candidate.isCurrent === "boolean"
+    && isRecord(candidate.sectionSnapshot)
+    && Array.isArray(candidate.fieldsSnapshot)
+    && isRecord(exportSettings)
+    && Array.isArray(exportSettings.outputColumns)
+    && Array.isArray(candidate.dependenciesSnapshot)
+    && Array.isArray(candidate.knowledgeSnapshot)
+    && isRecord(candidate.businessRules)
+    && typeof candidate.createdAt === "string"
+    && typeof candidate.updatedAt === "string";
+}
+
 function isSectionVersionList(value: unknown): value is SectionConfigVersion[] {
-  return Array.isArray(value) && value.every((item) => {
-    if (!item || typeof item !== "object") return false;
-    const candidate = item as Partial<SectionConfigVersion>;
-    return typeof candidate.id === "string"
-      && typeof candidate.status === "string"
-      && Array.isArray(candidate.fieldsSnapshot)
-      && Boolean(candidate.sectionSnapshot);
-  });
+  return Array.isArray(value) && value.every(isSectionVersion);
 }
 
 function genericContractForVersion(version: SectionConfigVersion): GenericImportContract {
   const sourceFields = version.sectionSnapshot.sourceFields ?? [];
-  const rules = version.businessRules as {
+  const rules = (version.businessRules ?? {}) as {
     kind?: unknown;
     importContract?: Partial<GenericImportContract>;
   };
@@ -208,8 +235,15 @@ export function SectionConfigDialog({
           setLoading(false);
           return;
         }
-      } catch {
+        throw new Error("配置版本响应格式无效");
+      } catch (reason) {
         if (controller.signal.aborted || currentRequestId !== requestId.current) return;
+        if (!(reason instanceof ApiRequestError) || ![404, 405].includes(reason.status)) {
+          setError(reason instanceof Error ? reason.message : "配置版本加载失败");
+          setMode("version");
+          setLoading(false);
+          return;
+        }
       }
 
       try {

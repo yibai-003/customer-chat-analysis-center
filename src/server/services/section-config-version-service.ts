@@ -88,7 +88,7 @@ function buildCurrentSnapshot(sectionId: string, businessRulesOverride?: Record<
   const section = db.prepare("SELECT * FROM analysis_sections WHERE id = ?").get(sectionId) as any;
   if (!section) throw new Error("板块不存在");
   const fields = (db.prepare(
-    "SELECT * FROM analysis_fields WHERE section_id = ? AND is_enabled = 1 ORDER BY sort_order, key",
+    "SELECT * FROM analysis_fields WHERE section_id = ? ORDER BY sort_order, key",
   ).all(sectionId) as any[]).map(mapField);
   const knowledge = buildKnowledgeSnapshot(sectionId);
   const sectionSnapshot = {
@@ -128,7 +128,7 @@ function buildDraftSnapshot(sectionId: string) {
   const current = mapVersion(currentRow);
   const liveFields = buildCurrentSnapshot(sectionId).fieldsSnapshot;
   const currentFieldIds = new Set(current.fieldsSnapshot.map((field) => field.id));
-  const legacyAddedFields = liveFields.filter((field) => !currentFieldIds.has(field.id));
+  const legacyAddedFields = liveFields.filter((field) => field.isEnabled && !currentFieldIds.has(field.id));
   if (legacyAddedFields.length) {
     const fieldsSnapshot = [...current.fieldsSnapshot, ...legacyAddedFields]
       .toSorted((left, right) => (left.sortOrder ?? 0) - (right.sortOrder ?? 0) || left.key.localeCompare(right.key));
@@ -224,6 +224,7 @@ function validateVersionSnapshot(version: Pick<
   }
   const allowedDependencies = new Set([...fieldKeys, ...(sectionSnapshot.sourceFields ?? [])]);
   const allowedInputSources = new Set(sectionSnapshot.sourceFields ?? []);
+  const byKey = new Map(fieldsSnapshot.map((field) => [field.key, field]));
   for (const field of fieldsSnapshot) {
     for (const inputSource of field.inputSources ?? []) {
       if (!allowedInputSources.has(inputSource)) {
@@ -233,9 +234,12 @@ function validateVersionSnapshot(version: Pick<
     if (field.dependsOn.includes(field.key)) throw new Error(`字段不能依赖自身：${field.key}`);
     for (const dependency of field.dependsOn) {
       if (!allowedDependencies.has(dependency)) throw new Error(`依赖字段不存在：${field.key} -> ${dependency}`);
+      const dependencyField = byKey.get(dependency);
+      if (field.isEnabled && dependencyField && !dependencyField.isEnabled) {
+        throw new Error(`字段依赖字段已停用：${field.key} -> ${dependency}`);
+      }
     }
   }
-  const byKey = new Map(fieldsSnapshot.map((field) => [field.key, field]));
   const visiting = new Set<string>();
   const visited = new Set<string>();
   const visit = (key: string) => {
@@ -266,8 +270,12 @@ function validateVersionSnapshot(version: Pick<
     if (!header) throw new Error(`导出字段缺少目标表头：${column.key}`);
     if (exportHeaders.has(header)) throw new Error(`导出目标表头重复：${header}`);
     exportHeaders.add(header);
-    if (source === "field_result" && !fieldKeys.has(column.key)) {
-      throw new Error(`导出字段不存在：${column.key}`);
+    if (source === "field_result") {
+      const field = byKey.get(column.key);
+      if (!field) throw new Error(`导出字段不存在：${column.key}`);
+      if (!field.isEnabled || field.exportEnabled === false) {
+        throw new Error(`导出字段未启用：${column.key}`);
+      }
     }
     if (source !== "reception_quality" && format !== "value") {
       throw new Error(`导出字段格式与来源不匹配：${column.key}`);

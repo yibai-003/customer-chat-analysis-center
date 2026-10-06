@@ -212,6 +212,24 @@ describe("FieldConfigEditor knowledge modes", () => {
     expect(onChange).toHaveBeenCalledWith(0, { outputColumn: "客服备注" });
   });
 
+  it("keeps persisted field keys read-only while allowing new field keys to be edited", async () => {
+    await renderUi(<FieldConfigEditor
+      fields={[field({ id: "persisted-field" }), field({
+        id: "new-field",
+        key: "field_2",
+        label: "新字段",
+      })]}
+      sourceFields={section.sourceFields}
+      onChange={vi.fn()}
+      onAdd={vi.fn()}
+      onRemove={vi.fn()}
+    />);
+
+    const keys = host.querySelectorAll<HTMLInputElement>('input[aria-label="字段 Key"]');
+    expect(keys[0]?.readOnly).toBe(true);
+    expect(keys[1]?.readOnly).toBe(false);
+  });
+
   it("allows an ordinary field to select its configured input sources", async () => {
     const onChange = vi.fn();
     await renderUi(<FieldConfigEditor
@@ -397,6 +415,96 @@ describe("FieldConfigEditor knowledge modes", () => {
     expect(requests).toEqual([`GET /api/sections/${section.id}/versions`]);
   });
 
+  it("does not fall back to legacy field CRUD when version loading fails", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === `/api/sections/${section.id}/versions`) {
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ success: false, error: "版本服务故障" }),
+        } as Response;
+      }
+      throw new Error(`不应请求旧接口：${url}`);
+    }));
+
+    await renderUi(<SectionConfigDialog
+      sections={[{ ...section, id: "after-sales", parentId: null }, section]}
+      close={vi.fn()}
+      saved={vi.fn()}
+    />);
+
+    await waitFor(() => expect(host.textContent).toContain("版本服务故障"));
+    expect(requests).toEqual([`/api/sections/${section.id}/versions`]);
+    expect(host.querySelector('[aria-label="字段 Key"]')).toBeNull();
+  });
+
+  it("shows a version error instead of rendering a malformed version snapshot", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === `/api/sections/${section.id}/versions`) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            data: [{
+              id: "malformed-version",
+              sectionId: section.id,
+              versionNumber: 1,
+              status: "draft",
+              isCurrent: false,
+              sectionSnapshot: section,
+              fieldsSnapshot: [],
+            }],
+          }),
+        } as Response;
+      }
+      throw new Error(`不应请求旧接口：${url}`);
+    }));
+
+    await renderUi(<SectionConfigDialog
+      sections={[{ ...section, id: "after-sales", parentId: null }, section]}
+      close={vi.fn()}
+      saved={vi.fn()}
+    />);
+
+    await waitFor(() => expect(host.textContent).toContain("配置版本响应格式无效"));
+    expect(requests).toEqual([`/api/sections/${section.id}/versions`]);
+    expect(host.querySelector('[aria-label="字段 Key"]')).toBeNull();
+  });
+
+  it("keeps legacy field CRUD as an explicit missing-endpoint fallback", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === `/api/sections/${section.id}/versions`) {
+        return { ok: false, status: 404, json: async () => ({ success: false, error: "未找到" }) } as Response;
+      }
+      if (url === `/api/sections/${section.id}/fields`) {
+        return { ok: true, status: 200, json: async () => ({ success: true, data: [field()] }) } as Response;
+      }
+      throw new Error(`未处理请求：${url}`);
+    }));
+
+    await renderUi(<SectionConfigDialog
+      sections={[{ ...section, id: "after-sales", parentId: null }, section]}
+      close={vi.fn()}
+      saved={vi.fn()}
+    />);
+
+    await waitFor(() => expect(host.querySelector('[aria-label="字段 Key"]')).not.toBeNull());
+    expect(requests).toEqual([
+      `/api/sections/${section.id}/versions`,
+      `/api/sections/${section.id}/fields`,
+    ]);
+  });
+
   it("shows knowledge base, candidate count, prompt, dependencies, and export toggle for match fields", async () => {
     const listBases = vi.spyOn(knowledgeApi, "listBases").mockResolvedValue([base]);
     await renderUi(<FieldConfigEditor
@@ -476,6 +584,9 @@ describe("FieldConfigEditor knowledge modes", () => {
       const method = init?.method ?? "GET";
       const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
       requests.push({ url, method, body });
+      if (url.endsWith("/versions")) {
+        return { ok: false, status: 404, json: async () => ({ success: false, error: "未找到" }) } as Response;
+      }
       const data = url.endsWith("/fields") && method === "GET"
         ? [internalMatch]
         : url.endsWith("/knowledge-bases")
@@ -636,7 +747,15 @@ describe("FieldConfigEditor knowledge modes", () => {
         ok: false,
         json: async () => ({ success: false, error: "aborted" }),
       } as Response), { once: true });
-      return url.includes("/refund/") ? first : second;
+      if (url.endsWith("/versions")) {
+        if (url.includes("/refund/")) return first;
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          json: async () => ({ success: false, error: "未找到" }),
+        } as Response);
+      }
+      return second;
     }));
     await renderUi(<SectionConfigDialog
       sections={[
@@ -671,6 +790,9 @@ describe("FieldConfigEditor knowledge modes", () => {
     const extract = field({ id: "extract", key: "extract", executionType: "knowledge_extract", matchFieldKey: matchOne.key, knowledgeColumn: "一级原因", outputColumn: "最终原因" });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith("/versions")) {
+        return { ok: false, status: 404, json: async () => ({ success: false, error: "未找到" }) } as Response;
+      }
       if (url.endsWith("/fields") && url.includes("/refund/")) return { ok: true, json: async () => ({ success: true, data: [matchOne, matchTwo, extract] }) };
       if (url.endsWith("/fields")) return { ok: true, json: async () => ({ success: true, data: [] }) };
       return { ok: true, json: async () => ({ success: true, data: init?.body ? JSON.parse(String(init.body)) : {} }) };
@@ -695,6 +817,9 @@ describe("FieldConfigEditor knowledge modes", () => {
     const extract = field({ id: "extract", key: "extract", executionType: "knowledge_extract", matchFieldKey: matchOne.key, knowledgeColumn: "一级原因", outputColumn: "最终原因" });
     vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.endsWith("/versions")) {
+        return { ok: false, status: 404, json: async () => ({ success: false, error: "未找到" }) } as Response;
+      }
       if (url.endsWith("/fields")) return { ok: true, json: async () => ({ success: true, data: [matchOne, matchTwo, extract] }) };
       return { ok: true, json: async () => ({ success: true, data: init?.body ? JSON.parse(String(init.body)) : {} }) };
     }));

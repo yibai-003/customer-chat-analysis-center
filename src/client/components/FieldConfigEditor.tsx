@@ -68,7 +68,12 @@ export function FieldConfigEditor({ fields, onChange, onAdd, onRemove, onMove, s
             onChange={(event) => onChange(index, { outputColumn: event.target.value })}
           /></label>}
           <label>字段名称<input aria-label="字段名称" value={field.label} onChange={(event) => onChange(index, { label: event.target.value })} /></label>
-          <label>字段 Key<input aria-label="字段 Key" value={field.key} onChange={(event) => onChange(index, { key: event.target.value })} /></label>
+          <label>字段 Key<input
+            aria-label="字段 Key"
+            readOnly={!field.id.startsWith("new-")}
+            value={field.key}
+            onChange={(event) => onChange(index, { key: event.target.value })}
+          /></label>
           <label>字段类型<SelectMenu ariaLabel="字段类型" value={field.type} onChange={(value) => onChange(index, { type: value as AnalysisFieldType })} options={[{ value: "string", label: "文本" }, { value: "number", label: "数字" }, { value: "boolean", label: "布尔" }, { value: "object", label: "结构化对象" }]} /></label>
           {setting.showTargetColumn && <label>Excel 输出列<input aria-label="Excel 输出列" value={field.outputColumn ?? ""} readOnly /> </label>}
         </div>
