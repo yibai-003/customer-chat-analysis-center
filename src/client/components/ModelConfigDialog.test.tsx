@@ -361,43 +361,34 @@ describe("ModelConfigDialog", () => {
     expect(within(exhaustedConflictRow.cells[10]!).queryByText("能力验证失败")).toBeNull();
   });
 
-  it("installs presets, reports created count, and verifies every required ID in safe batches", async () => {
-    const created = Array.from({ length: 51 }, (_, index) => `new-${index + 1}`);
-    const existing = Array.from({ length: 52 }, (_, index) => `existing-${index + 1}`);
-    responseFor = (url) => {
-      if (url === "/api/model-pools/qianwen-free/install") {
-        return {
-          created,
-          updated: existing,
-          needsVerification: [...existing, ...created],
-        };
-      }
-      if (url === "/api/model-pools/qianwen-free/verify") return [];
-      return defaultData(url);
-    };
-
+  it("shows a copyable local Bailian sync command and preview confirmation guidance", async () => {
     await renderDialog();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "安装/更新千问免费池" }));
+
+    const command = await screen.findByLabelText("百炼免费池同步命令") as HTMLTextAreaElement;
+    expect(command.value).toBe("npm run pool:sync:bailian -- -BaseUrl <local-or-https-url>");
+    expect(screen.getByText(/预览后确认/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /安装|更新.*免费池/ })).toBeNull();
+    expect(requests.some((request) => request.url.includes("/install"))).toBe(false);
+  });
+
+  it("keeps paid purpose defaults at the end while preserving priority order within groups", async () => {
+    const paidDefault = member({
+      id: "paid-default",
+      name: "付费默认",
+      billingMode: "paid",
+      isPurposeDefault: true,
+      priority: 1,
     });
+    const freeLowPriority = member({ id: "free-low", name: "免费低优先级", priority: 20 });
+    const freeHighPriority = member({ id: "free-high", name: "免费高优先级", priority: 5 });
+    await renderDialog([paidDefault, freeLowPriority, freeHighPriority]);
 
-    await waitFor(() => expect(
-      requests.filter((request) => request.url === "/api/model-pools/qianwen-free/verify"),
-    ).toHaveLength(4));
-    expect(screen.getByRole("status").textContent).toContain("新建 51");
-
-    const verificationBodies = requests
-      .filter((request) => request.url === "/api/model-pools/qianwen-free/verify")
-      .map((request) => JSON.parse(String(request.init?.body)));
-    expect(verificationBodies).toEqual([
-      { ids: existing.slice(0, 50), enablePassed: false },
-      { ids: existing.slice(50), enablePassed: false },
-      { ids: created.slice(0, 50), enablePassed: true },
-      { ids: created.slice(50), enablePassed: true },
+    const rows = Array.from(document.querySelectorAll(".model-pool-table tbody tr"));
+    expect(rows.map((row) => row.querySelector("strong")?.textContent)).toEqual([
+      "免费低优先级",
+      "免费高优先级",
+      "付费默认",
     ]);
-    const verifiedIds = verificationBodies.flatMap((body) => body.ids);
-    expect(verifiedIds).toHaveLength(103);
-    expect(new Set(verifiedIds).size).toBe(103);
   });
 
   it("never places an existing full API key into the provider password field", async () => {
@@ -719,6 +710,23 @@ describe("ModelConfigDialog", () => {
     expect(screen.getByText("可调用")).toBeTruthy();
   });
 
+  it("shows automatic Bailian sync disable reasons separately from manual removal", async () => {
+    const syncDisabled = member({
+      id: "sync-disabled",
+      name: "同步停用模型",
+      poolEnabled: false,
+      capabilityEligible: false,
+      poolRemovedReason: "sync_unavailable",
+      poolRemovedNote: "bailian-sync:expired",
+    });
+    await renderDialog([syncDisabled]);
+
+    const row = (await screen.findByText("同步停用模型")).closest("tr")!;
+    expect(within(row).getByText("同步自动停用")).toBeTruthy();
+    expect(within(row).getByText("同步原因：expired")).toBeTruthy();
+    expect(within(row).queryByText("人工维护")).toBeNull();
+  });
+
   it("verifies blocked default members from the pool readiness action", async () => {
     const pendingVision = member({
       id: "pending-default",
@@ -739,7 +747,7 @@ describe("ModelConfigDialog", () => {
       capabilityStatus: { text: true, json: true, vision: false },
     });
     responseFor = (url) => {
-      if (url === "/api/model-pools/qianwen-free/verify") {
+      if (url === "/api/model-pool-members/verify") {
         return [{
           id: "pending-default",
           model: "qwen3-vl-plus",
@@ -762,14 +770,14 @@ describe("ModelConfigDialog", () => {
       return defaultData(url);
     };
     await renderDialog([pendingVision, readyText]);
-    expect(requests.some((request) => request.url === "/api/model-pools/qianwen-free/verify")).toBe(false);
+    expect(requests.some((request) => request.url === "/api/model-pool-members/verify")).toBe(false);
 
     fireEvent.click(await screen.findByRole("button", { name: "验证默认模型" }));
 
     await waitFor(() => expect(
-      requests.filter((request) => request.url === "/api/model-pools/qianwen-free/verify"),
+      requests.filter((request) => request.url === "/api/model-pool-members/verify"),
     ).toHaveLength(1));
-    const verifyRequest = requests.find((request) => request.url === "/api/model-pools/qianwen-free/verify")!;
+    const verifyRequest = requests.find((request) => request.url === "/api/model-pool-members/verify")!;
     expect(JSON.parse(String(verifyRequest.init?.body))).toEqual({
       ids: ["pending-default"],
       enablePassed: true,
@@ -788,7 +796,7 @@ describe("ModelConfigDialog", () => {
       capabilityStatus: undefined,
     });
     responseFor = (url) => {
-      if (url === "/api/model-pools/qianwen-free/verify") return failure("验证服务不可用");
+      if (url === "/api/model-pool-members/verify") return failure("验证服务不可用");
       if (url === "/api/model-pools") {
         return {
           members: [pendingVision],
@@ -807,7 +815,7 @@ describe("ModelConfigDialog", () => {
 
     await screen.findAllByText("验证服务不可用");
     expect(screen.getByRole("button", { name: "验证默认模型" })).toBeTruthy();
-    expect(requests.filter((request) => request.url === "/api/model-pools/qianwen-free/verify")).toHaveLength(1);
+    expect(requests.filter((request) => request.url === "/api/model-pool-members/verify")).toHaveLength(1);
   });
 
   it("bulk-verifies selected members with enablePassed and reports per-member results", async () => {

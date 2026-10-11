@@ -260,7 +260,7 @@ describe("model provider credentials", () => {
       WHERE id=?`).run(capability, Date.now(), paidDefault.id);
     db.prepare(`UPDATE model_configs SET pool_enabled=1, billing_mode='free',
       is_purpose_default=0, priority=20, quota_total_tokens=1000000,
-      quota_used_tokens=0, quota_expires_at='2026-10-08T23:59:59+08:00',
+      quota_used_tokens=0, quota_expires_at='2099-10-08T23:59:59+08:00',
       capability_json=?, capability_checked_at=? WHERE id=?`)
       .run(capability, Date.now(), free.id);
     vi.mocked(requestModel).mockResolvedValueOnce({
@@ -300,7 +300,7 @@ describe("model provider credentials", () => {
     const capability = JSON.stringify({ text: true, json: true, vision: false });
     const prepareMember = db.prepare(`UPDATE model_configs SET pool_enabled=1,
       billing_mode='free', priority=?, quota_total_tokens=1000000,
-      quota_used_tokens=0, quota_expires_at='2026-10-08T23:59:59+08:00',
+      quota_used_tokens=0, quota_expires_at='2099-10-08T23:59:59+08:00',
       capability_json=?, capability_checked_at=? WHERE id=?`);
     prepareMember.run(10, capability, Date.now(), first.id);
     prepareMember.run(20, capability, Date.now(), second.id);

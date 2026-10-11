@@ -9,6 +9,7 @@ import { createApp } from "../app";
 import { db, initDb } from "../db/client";
 import { bootstrapFirstAdmin, createUser } from "./identity-service";
 import { upsertKnowledgeBase } from "../services/knowledge/knowledge-repository";
+import { createModelConfig } from "../services/model-config-service";
 import type { UserRole } from "../../shared/types";
 
 interface RoleAccount {
@@ -414,20 +415,21 @@ describe("configuration, model pool, account and audit authorization", () => {
       body: { ids: [] },
     })).status).toBe(400);
 
-    const installed = await request("/api/model-pools/qianwen-free/install", { cookie: cookieFor("config"), method: "POST" });
-    expect(installed.status).toBe(200);
-    const [first, second] = installed.body.data.created as string[];
+    const first = createModelConfig({ name: "动态文本", baseUrl: provider.body.data.baseUrl,
+      providerId, model: "dynamic-text", purpose: "text", supportsVision: false });
+    const second = createModelConfig({ name: "动态视觉", baseUrl: provider.body.data.baseUrl,
+      providerId, model: "dynamic-vision", purpose: "vision", supportsVision: true });
 
     const removed = await request("/api/model-pool-members/remove", {
       cookie: cookieFor("config"),
       method: "POST",
-      body: { ids: [first, second], reason: "quota", note: "额度耗尽" },
+      body: { ids: [first.id, second.id], reason: "quota", note: "额度耗尽" },
     });
     expect(removed.status).toBe(200);
     expect((await request("/api/model-pool-members/restore", {
       cookie: cookieFor("config"),
       method: "POST",
-      body: { ids: [first] },
+      body: { ids: [first.id] },
     })).status).toBe(200);
 
     const settings = await request("/api/model-pool-settings", {
@@ -437,7 +439,7 @@ describe("configuration, model pool, account and audit authorization", () => {
     });
     expect(settings.status).toBe(200);
 
-    for (const action of ["pool.create_provider", "pool.update_provider", "pool.install_preset", "pool.remove", "pool.restore", "pool.update_settings"]) {
+    for (const action of ["pool.create_provider", "pool.update_provider", "pool.remove", "pool.restore", "pool.update_settings"]) {
       expect(auditEvents({ action, since: poolMarker }).length, action).toBeGreaterThan(0);
     }
     const poolAudits = JSON.stringify(auditEvents({ action: "pool.update_provider", since: poolMarker }));

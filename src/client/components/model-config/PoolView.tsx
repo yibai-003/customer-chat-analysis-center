@@ -37,32 +37,30 @@ type EditState = {
   poolEnabled: boolean;
 };
 
-type InstallResult = {
-  created: string[];
-  updated: string[];
-  needsVerification: string[];
-};
+type RemovalReason = "verify_failed" | "unstable" | "quota" | "maintenance" | "sync_unavailable";
 
-type RemovalReason = "verify_failed" | "unstable" | "quota" | "maintenance";
+const bailianSyncCommand = "npm run pool:sync:bailian -- -BaseUrl <local-or-https-url>";
 
 const removalReasonLabels: Record<RemovalReason, string> = {
   verify_failed: "验证失败",
   unstable: "稳定性差",
   quota: "额度/限流",
+  sync_unavailable: "同步时不可用",
   maintenance: "人工维护",
 };
+
+function removalLabel(reason: RemovalReason) {
+  return reason === "sync_unavailable" ? "同步自动停用" : removalReasonLabels[reason];
+}
+
+function syncRemovalReason(note?: string) {
+  const prefix = "bailian-sync:";
+  return note?.startsWith(prefix) ? note.slice(prefix.length) : undefined;
+}
 
 function eligibleForRouting(model: ModelConfig) {
   return model.isEnabled && model.poolEnabled && model.capabilityEligible
     && !model.quotaBlocked && !model.cooldownUntil;
-}
-
-function chunk<T>(items: T[], size: number) {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size));
-  }
-  return result;
 }
 
 function localDateTime(value?: string) {
@@ -154,7 +152,6 @@ export function PoolView({
   const [purpose, setPurpose] = useState<ModelPurpose>("vision");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
-  const [installing, setInstalling] = useState(false);
   const [verifyingDefaults, setVerifyingDefaults] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -167,7 +164,13 @@ export function PoolView({
   useEffect(() => setSettingsForm(settings), [settings]);
 
   const members = useMemo(
-    () => pool.members.filter((model) => model.purpose === purpose),
+    () => pool.members
+      .filter((model) => model.purpose === purpose)
+      .toSorted((left, right) => {
+        const leftIsPaidDefault = left.isPurposeDefault && left.billingMode === "paid";
+        const rightIsPaidDefault = right.isPurposeDefault && right.billingMode === "paid";
+        return Number(leftIsPaidDefault) - Number(rightIsPaidDefault);
+      }),
     [pool.members, purpose],
   );
   const summary = pool.summary[purpose];
@@ -235,58 +238,6 @@ export function PoolView({
     }
   };
 
-  const install = async () => {
-    setInstalling(true);
-    setMessage("正在安装或更新千问免费池...");
-    let mutated = false;
-    try {
-      const result = await api<InstallResult>("/api/model-pools/qianwen-free/install", {
-        method: "POST",
-      });
-      mutated = true;
-      markDirty();
-      const createdSet = new Set(result.created);
-      const preExisting = result.needsVerification.filter((id) => !createdSet.has(id));
-      const created = result.needsVerification.filter((id) => createdSet.has(id));
-      const batches = [
-        ...chunk(preExisting, 50).map((ids) => ({ ids, enablePassed: false })),
-        ...chunk(created, 50).map((ids) => ({ ids, enablePassed: true })),
-      ];
-      let verified = 0;
-      setMessage(
-        `新建 ${result.created.length}，更新 ${result.updated.length}，待验证 ${result.needsVerification.length}`,
-      );
-      for (const batch of batches) {
-        await api("/api/model-pools/qianwen-free/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(batch),
-        });
-        verified += batch.ids.length;
-        setMessage(
-          `新建 ${result.created.length}，更新 ${result.updated.length}，已验证 ${verified}/${result.needsVerification.length}`,
-        );
-      }
-      setMessage(
-        `新建 ${result.created.length}，更新 ${result.updated.length}，验证完成 ${verified}/${result.needsVerification.length}`,
-      );
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "千问免费池安装失败";
-      setMessage(text);
-      reportError(text);
-    } finally {
-      setInstalling(false);
-    }
-    if (!mutated) return;
-    try {
-      await refreshPool();
-    } catch (error) {
-      reportError(`千问免费池已变更，但列表刷新失败：${
-        error instanceof Error ? error.message : "刷新失败"
-      }`);
-    }
-  };
-
   const verifyDefaults = async () => {
     const ids = pendingDefaults.map((model) => model.id);
     if (!ids.length) return;
@@ -295,7 +246,7 @@ export function PoolView({
     let mutated = false;
     try {
       const results = await api<Array<{ id: string; passed: boolean; error?: string }>>(
-        "/api/model-pools/qianwen-free/verify",
+        "/api/model-pool-members/verify",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -480,14 +431,21 @@ export function PoolView({
             受限 {summary.blocked}
           </p>
         </div>
-        <button
-          className="model-console-command primary"
-          type="button"
-          disabled={installing}
-          onClick={() => void install()}
-        >
-          安装/更新千问免费池
-        </button>
+      </div>
+
+      <div className="pool-sync-guide" role="region" aria-label="百炼免费池同步">
+        <div>
+          <strong>百炼免费模型池同步</strong>
+          <p>在已登录百炼 CLI 的本机 PowerShell 终端执行命令。命令只采集额度和模型目录，预览后确认才会应用。</p>
+        </div>
+        <textarea
+          aria-label="百炼免费池同步命令"
+          readOnly
+          rows={1}
+          value={bailianSyncCommand}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+        <p>应用完成后刷新列表，再选择新成员执行“验证已选”；能力验证通过后才会参与路由。</p>
       </div>
 
       <div className="model-purpose-tabs" role="tablist" aria-label="模型用途">
@@ -758,8 +716,16 @@ export function PoolView({
                     <span className={`model-status ${status.tone}`}>{status.text}</span>
                     {model.poolRemovedReason && (
                       <small className="model-status-note">
-                        已剔除：{removalReasonLabels[model.poolRemovedReason]}
+                        {model.poolRemovedReason === "sync_unavailable"
+                          ? removalLabel(model.poolRemovedReason)
+                          : <>已剔除：{removalReasonLabels[model.poolRemovedReason]}</>}
                         {model.poolRemovedAt ? ` · ${displayDate(model.poolRemovedAt)}` : ""}
+                      </small>
+                    )}
+                    {model.poolRemovedReason === "sync_unavailable"
+                      && syncRemovalReason(model.poolRemovedNote) && (
+                      <small className="model-status-note">
+                        同步原因：{syncRemovalReason(model.poolRemovedNote)}
                       </small>
                     )}
                     {model.consecutiveFailures > 0 && (

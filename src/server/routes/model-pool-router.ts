@@ -11,7 +11,6 @@ import {
 import {
   getModelPoolSettings,
   getPoolSummary,
-  installQianwenFreePool,
   listModelUsageEvents,
   listPoolMembers,
   POOL_REMOVAL_REASONS,
@@ -21,6 +20,7 @@ import {
   updatePoolMember,
   verifyPoolMembers,
 } from "../services/model-pool-admin-service";
+import { applyBailianFreePool, previewBailianFreePool } from "../services/bailian-free-pool-sync-service";
 import { requireCapability } from "../auth/capabilities";
 import { auditRequest } from "../auth/audit";
 import { createRouteResponders } from "../http/route-response";
@@ -113,11 +113,11 @@ function errorStatus(error: unknown) {
 export function createModelPoolRouter(): express.Router {
   const router = express.Router();
   const canReadPool = requireCapability("config:manage", "config.pool_read", "model_pool");
+  const canSyncPool = requireCapability("config:manage", "pool.bailian_sync", "model_pool");
   const canCreateProvider = requireCapability("config:manage", "pool.create_provider", "model_provider");
   const canUpdateProvider = requireCapability("config:manage", "pool.update_provider", "model_provider");
   const canTestProvider = requireCapability("config:manage", "pool.test_provider", "model_provider");
   const canUpdateMember = requireCapability("config:manage", "pool.update_member", "model_pool_member");
-  const canInstallPreset = requireCapability("config:manage", "pool.install_preset", "model_pool");
   const canVerify = requireCapability("config:manage", "pool.verify", "model_pool_member");
   const canRemove = requireCapability("config:manage", "pool.remove", "model_pool_member");
   const canRestore = requireCapability("config:manage", "pool.restore", "model_pool_member");
@@ -216,15 +216,54 @@ export function createModelPoolRouter(): express.Router {
     }
   });
 
-  router.post("/model-pools/qianwen-free/install", canInstallPreset, (req, res) => {
+  router.post("/model-pools/bailian-free/preview", canSyncPool, (req, res) => {
     try {
-      const result = installQianwenFreePool();
-      auditRequest(req, { action: "pool.install_preset", targetType: "model_pool", metadata: { preset: "qianwen_free" } });
+      const user = req.currentUser;
+      if (!user) return fail(res, new Error("未登录或会话已失效"), 401);
+      const result = previewBailianFreePool(req.body, user.id, Date.now());
+      auditRequest(req, {
+        action: "pool.bailian_preview",
+        targetType: "model_pool",
+        targetId: result.previewId,
+        metadata: { providerId: req.body?.providerId, ...result.summary } as Record<string, unknown>,
+      });
       return ok(res, result);
     } catch (error) {
-      const missingProvider = error instanceof Error
-        && error.message === "请先配置并启用千问服务商凭证";
-      return fail(res, error, missingProvider ? 409 : errorStatus(error));
+      auditRequest(req, {
+        action: "pool.bailian_preview",
+        outcome: "failure",
+        targetType: "model_pool",
+        metadata: {},
+      });
+      return fail(res, error, error instanceof Error && /服务商|模型已由手工配置|跨用途冲突|重复记录|额度存在重复|目录存在重复/.test(error.message) ? 409 : undefined);
+    }
+  });
+
+  router.post("/model-pools/bailian-free/apply", canSyncPool, (req, res) => {
+    try {
+      const user = req.currentUser;
+      if (!user) return fail(res, new Error("未登录或会话已失效"), 401);
+      const body = z.object({
+        previewId: idSchema,
+        confirmation: z.string().max(80),
+      }).strict().parse(req.body);
+      const result = applyBailianFreePool(body.previewId, user.id, body.confirmation, Date.now());
+      auditRequest(req, {
+        action: "pool.bailian_apply",
+        targetType: "model_pool",
+        targetId: body.previewId,
+        metadata: { ...result.summary } as Record<string, unknown>,
+      });
+      return ok(res, result);
+    } catch (error) {
+      auditRequest(req, {
+        action: "pool.bailian_apply",
+        outcome: "failure",
+        targetType: "model_pool",
+        metadata: {},
+      });
+      const status = error instanceof Error && /不存在|过期|已发生变化|服务商|必须输入|确认口令/.test(error.message) ? 409 : undefined;
+      return fail(res, error, status);
     }
   });
 
