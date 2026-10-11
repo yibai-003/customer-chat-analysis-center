@@ -96,7 +96,6 @@ function ConvertFrom-BailianModelDetailJson {
     try { $envelope = ConvertFrom-Json -InputObject $Json -AsHashtable -Depth 30 -NoEnumerate -DateKind String -ErrorAction Stop }
     catch { throw 'Bailian model detail output is not valid JSON.' }
     if ($envelope -isnot [System.Collections.IDictionary]) { throw 'Bailian model detail output must be an object.' }
-    if ($envelope['model'] -cne $ExpectedModel) { throw 'Bailian model detail envelope does not match the requested model.' }
     $items = $envelope['items']
     if ($items -isnot [System.Collections.IList] -or $items -is [string]) { throw 'Bailian model detail items must be an array.' }
     if ($items.Count -gt $script:MaxRecords) { throw 'Bailian model detail output exceeds 500 records.' }
@@ -159,12 +158,11 @@ function New-BailianFreePoolSnapshot {
 
     $models = [System.Collections.Generic.List[object]]::new()
     $seen = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
-    foreach ($json in $ModelDetails) {
+    for ($index = 0; $index -lt $ModelDetails.Count; $index++) {
+        $json = $ModelDetails[$index]
         if ([string]::IsNullOrWhiteSpace($json)) { throw 'Bailian model detail output is empty.' }
-        try { $outer = ConvertFrom-Json -InputObject $json -AsHashtable -Depth 30 -NoEnumerate -DateKind String -ErrorAction Stop }
-        catch { throw 'Bailian model detail output is not valid JSON.' }
-        $modelId = $outer['model']
-        if ($modelId -isnot [string] -or -not $seen.Add($modelId)) { throw 'Bailian model detail output contains a duplicate or invalid model ID.' }
+        $modelId = [string]$quotas[$index].model
+        if (-not $seen.Add($modelId)) { throw 'Bailian model detail output contains a duplicate model ID.' }
         $models.Add((ConvertFrom-BailianModelDetailJson -Json $json -ExpectedModel $modelId))
     }
     foreach ($quota in $quotas) {

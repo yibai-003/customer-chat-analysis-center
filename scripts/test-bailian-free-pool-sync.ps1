@@ -65,7 +65,7 @@ $quotaJson = @'
 '@
 $modelDetails = @(
     @'
- {"model":"qwen-plus-2026-01-01","name":"Qwen Family","items":[{"model":"qwen-plus-2026-01-01","name":"Qwen Plus Exact Version","provider":"Alibaba","capabilities":["TG"],"features":["structured-outputs"],"modalities":{"input":["Text"],"output":["Text"]},"offline":false,"upcomingOfflineAt":null}]}
+ {"model":"qwen-plus","name":"Qwen Family","items":[{"model":"qwen-plus-2026-01-01","name":"Qwen Plus Exact Version","provider":"Alibaba","capabilities":["TG"],"features":["structured-outputs"],"modalities":{"input":["Text"],"output":["Text"]},"offline":false,"upcomingOfflineAt":null},{"model":"qwen-vl-plus-2026-01-01","name":"Another Quota Model In Family Response","provider":"Alibaba","capabilities":["VU"],"features":["structured-outputs"],"modalities":{"input":["Image"],"output":["Text"]},"offline":false,"upcomingOfflineAt":null}]}
 '@,
     @'
  {"model":"qwen-vl-plus-2026-01-01","name":"Qwen VL Family","items":[{"model":"qwen-vl-plus-2026-01-01","name":"Qwen VL Exact Version","provider":"Alibaba","capabilities":["VU"],"features":["structured-outputs"],"modalities":{"input":["Text","Image"],"output":["Text"]},"offline":false,"upcomingOfflineAt":null}]}
