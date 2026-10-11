@@ -108,11 +108,9 @@ function ConvertFrom-BailianModelDetailJson {
     $capabilities = @()
     if ($item['capabilities'] -isnot [System.Collections.IList] -or $item['capabilities'] -is [string]) { throw 'Bailian model capabilities must be an array.' }
     $capabilities = @($item['capabilities'] | ForEach-Object { if ($_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_)) { throw 'Bailian model capability must be non-empty text.' }; $_ })
-    if ($capabilities.Count -eq 0) { throw 'Bailian model capabilities must not be empty.' }
     $features = @()
     if ($item['features'] -isnot [System.Collections.IList] -or $item['features'] -is [string]) { throw 'Bailian model features must be an array.' }
     $features = @($item['features'] | ForEach-Object { if ($_ -isnot [string] -or [string]::IsNullOrWhiteSpace($_)) { throw 'Bailian model feature must be non-empty text.' }; $_ })
-    if ($features.Count -eq 0 -or -not ($features -ccontains 'structured-outputs')) { throw 'Bailian model detail is missing structured-outputs support.' }
     $modalities = $item['modalities']
     if ($modalities -isnot [System.Collections.IDictionary]) { throw 'Bailian model modalities must be an object.' }
     foreach ($direction in @('input', 'output')) {
@@ -122,9 +120,9 @@ function ConvertFrom-BailianModelDetailJson {
         foreach ($modality in $modalities[$direction]) {
             if ($modality -isnot [string] -or [string]::IsNullOrWhiteSpace($modality)) { throw 'Bailian model modality must be non-empty text.' }
         }
-        if (@($modalities[$direction]).Count -eq 0) { throw "Bailian model modalities.$direction must not be empty." }
     }
-    if ($item['offline'] -isnot [bool]) { throw 'Bailian model offline value must be boolean.' }
+    $offline = $item['offline']
+    if ($null -ne $offline -and $offline -isnot [bool]) { throw 'Bailian model offline value must be boolean when present.' }
     $upcoming = $item['upcomingOfflineAt']
     if ($null -ne $upcoming -and $upcoming -isnot [string]) { throw 'Bailian model upcomingOfflineAt value must be text or null.' }
 
@@ -135,7 +133,7 @@ function ConvertFrom-BailianModelDetailJson {
         capabilities = $capabilities
         modalities = [ordered]@{ input = @($modalities['input']); output = @($modalities['output']) }
         features = $features
-        offline = [bool]$item['offline']
+        offline = if ($null -eq $offline) { $false } else { [bool]$offline }
         upcomingOfflineAt = $upcoming
     }
 }

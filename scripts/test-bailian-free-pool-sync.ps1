@@ -94,9 +94,13 @@ Assert-Throws { ConvertFrom-BailianQuotaJson -Json '[{"model":"m","type":"Text",
 Assert-Throws { ConvertFrom-BailianQuotaJson -Json '[{"model":"m","type":"Text","remaining":1,"total":2,"expires":"2099-02-30","autoStop":true}]' } 'Impossible quota expiry dates must fail.'
 Assert-Throws { ConvertFrom-BailianModelDetailJson -Json $modelDetails[0] -ExpectedModel 'qwen-max' } 'Mismatched detail model IDs must fail.'
 Assert-Throws { ConvertFrom-BailianModelDetailJson -Json '{"model":"m","name":"M","items":[]}' -ExpectedModel 'm' } 'Missing exact detail items must fail.'
-Assert-Throws { ConvertFrom-BailianModelDetailJson -Json '{"model":"m","items":[{"model":"m","name":"M","provider":"P","capabilities":[],"features":["structured-outputs"],"modalities":{"input":["Text"],"output":["Text"]},"offline":false}]}' -ExpectedModel 'm' } 'Missing candidate capabilities must fail.'
-Assert-Throws { ConvertFrom-BailianModelDetailJson -Json '{"model":"m","items":[{"model":"m","name":"M","provider":"P","capabilities":["TG"],"features":[],"modalities":{"input":["Text"],"output":["Text"]},"offline":false}]}' -ExpectedModel 'm' } 'Missing structured output metadata must fail.'
-Assert-Throws { ConvertFrom-BailianModelDetailJson -Json '{"model":"m","items":[{"model":"m","name":"M","provider":"P","capabilities":["TG"],"features":["structured-outputs"],"modalities":{"input":["Text"],"output":["Text"]}]}' -ExpectedModel 'm' } 'Missing offline metadata must fail.'
+$insufficientCapabilities = ConvertFrom-BailianModelDetailJson -Json '{"model":"m","items":[{"model":"m","name":"M","provider":"P","capabilities":[],"features":["structured-outputs"],"modalities":{"input":[],"output":[]},"offline":false}]}' -ExpectedModel 'm'
+Assert-Equal $insufficientCapabilities.capabilities.Count 0 'A valid empty capability list should reach server exclusion policy.'
+Assert-Equal $insufficientCapabilities.modalities.input.Count 0 'Valid empty modalities should reach server exclusion policy.'
+$missingStructuredOutputs = ConvertFrom-BailianModelDetailJson -Json '{"model":"m","items":[{"model":"m","name":"M","provider":"P","capabilities":["TG"],"features":[],"modalities":{"input":["Text"],"output":["Text"]},"offline":false}]}' -ExpectedModel 'm'
+Assert-Equal $missingStructuredOutputs.features.Count 0 'A valid feature list without structured outputs should reach server exclusion policy.'
+$onlineWithoutOfflineFlag = ConvertFrom-BailianModelDetailJson -Json '{"model":"m-family","items":[{"model":"m","name":"M","provider":"P","capabilities":["TG"],"features":["structured-outputs"],"modalities":{"input":["Text"],"output":["Text"]}}]}' -ExpectedModel 'm'
+Assert-Equal $onlineWithoutOfflineFlag.offline $false 'The official CLI omits offline for online models; the normalizer should emit false.'
 
 $snapshot = New-BailianFreePoolSnapshot -ProviderId 'provider-1' -QuotaJson $quotaJson -ModelDetails $modelDetails -AccountMatchConfirmed
 Assert-Equal $snapshot.providerId 'provider-1' 'Snapshot should associate the selected provider.'
