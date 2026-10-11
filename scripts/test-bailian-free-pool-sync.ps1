@@ -59,29 +59,44 @@ Assert-Contains $launcherSource "'/d'" 'Launcher source must disable cmd AutoRun
 Assert-Contains $launcherSource 'ArgumentList' 'Launcher source must preserve argument boundaries.'
 
 $script:jsonAttempts = 0
+$script:jsonRetryDelays = [System.Collections.Generic.List[int]]::new()
 $retriedJson = Invoke-BailianJsonRetry -Operation 'offline fixture' -Attempt {
     $script:jsonAttempts += 1
     if ($script:jsonAttempts -eq 1) { return 'temporary non-json response' }
     return '{"ok":true}'
+} -Delay {
+    param([int]$attemptNumber)
+    $script:jsonRetryDelays.Add($attemptNumber)
 }
 Assert-Equal $script:jsonAttempts 2 'Invalid JSON should trigger exactly one bounded retry.'
+Assert-Equal @($script:jsonRetryDelays) @(1) 'A retry should apply one delay after the first invalid response.'
 Assert-Equal (($retriedJson | ConvertFrom-Json).ok) $true 'The retry helper should return the valid second response.'
 $script:jsonAttempts = 0
+$script:jsonRetryDelays.Clear()
 Assert-Throws {
     Invoke-BailianJsonRetry -Operation 'offline fixture' -Attempt {
         $script:jsonAttempts += 1
         return 'still not json'
+    } -Delay {
+        param([int]$attemptNumber)
+        $script:jsonRetryDelays.Add($attemptNumber)
     }
-} 'Two invalid JSON responses must fail.'
-Assert-Equal $script:jsonAttempts 2 'Invalid JSON retry must remain bounded to two attempts.'
+} 'Three invalid JSON responses must fail.'
+Assert-Equal $script:jsonAttempts 3 'Invalid JSON retry must remain bounded to three attempts.'
+Assert-Equal @($script:jsonRetryDelays) @(1, 2) 'Invalid JSON retries should delay only between attempts.'
 $script:jsonAttempts = 0
+$script:jsonRetryDelays.Clear()
 Assert-Throws {
     Invoke-BailianJsonRetry -Operation 'offline fixture' -Attempt {
         $script:jsonAttempts += 1
         throw 'process failure'
+    } -Delay {
+        param([int]$attemptNumber)
+        $script:jsonRetryDelays.Add($attemptNumber)
     }
 } 'Process failures must not be retried as JSON errors.'
 Assert-Equal $script:jsonAttempts 1 'Process failures should be propagated immediately.'
+Assert-Equal $script:jsonRetryDelays.Count 0 'Process failures must not enter the JSON retry delay path.'
 
 $quotaJson = @'
 [

@@ -228,18 +228,26 @@ function Invoke-BailianJsonRetry {
     param(
         [Parameter(Mandatory)][scriptblock]$Attempt,
         [Parameter(Mandatory)][string]$Operation,
-        [object]$AttemptArguments
+        [object]$AttemptArguments,
+        [scriptblock]$Delay = { param([int]$attemptNumber) Start-Sleep -Seconds $attemptNumber }
     )
 
-    for ($attemptNumber = 1; $attemptNumber -le 2; $attemptNumber++) {
+    for ($attemptNumber = 1; $attemptNumber -le 3; $attemptNumber++) {
         $output = [string](& $Attempt $AttemptArguments $Operation)
         try {
             $null = ConvertFrom-Json -InputObject $output -AsHashtable -NoEnumerate -Depth 30 -DateKind String -ErrorAction Stop
             return $output
         } catch {
-            if ($attemptNumber -eq 2) {
-                throw "Bailian CLI $Operation returned invalid JSON after 2 attempts."
+            if ($attemptNumber -eq 3) {
+                $trimmed = $output.Trim()
+                $first = if ($trimmed.Length) { [int][char]$trimmed[0] } else { -1 }
+                $last = if ($trimmed.Length) { [int][char]$trimmed[$trimmed.Length - 1] } else { -1 }
+                $hasJsonStart = $trimmed.StartsWith('{') -or $trimmed.StartsWith('[')
+                $hasJsonEnd = $trimmed.EndsWith('}') -or $trimmed.EndsWith(']')
+                $hasAnsi = $output.Contains([char]27)
+                throw "Bailian CLI $Operation returned invalid JSON after 3 attempts (chars=$($output.Length), first=$first, last=$last, jsonStart=$hasJsonStart, jsonEnd=$hasJsonEnd, ansi=$hasAnsi)."
             }
+            & $Delay $attemptNumber
         }
     }
     throw "Bailian CLI $Operation returned invalid JSON."
