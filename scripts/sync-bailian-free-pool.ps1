@@ -224,7 +224,28 @@ function Resolve-BailianCliLauncher {
     return [pscustomobject]@{ FileName = $fileName; Arguments = @($launcherArguments.ToArray()) }
 }
 
-function Invoke-BlJson {
+function Invoke-BailianJsonRetry {
+    param(
+        [Parameter(Mandatory)][scriptblock]$Attempt,
+        [Parameter(Mandatory)][string]$Operation,
+        [object]$AttemptArguments
+    )
+
+    for ($attemptNumber = 1; $attemptNumber -le 2; $attemptNumber++) {
+        $output = [string](& $Attempt $AttemptArguments $Operation)
+        try {
+            $null = ConvertFrom-Json -InputObject $output -AsHashtable -NoEnumerate -Depth 30 -DateKind String -ErrorAction Stop
+            return $output
+        } catch {
+            if ($attemptNumber -eq 2) {
+                throw "Bailian CLI $Operation returned invalid JSON after 2 attempts."
+            }
+        }
+    }
+    throw "Bailian CLI $Operation returned invalid JSON."
+}
+
+function Invoke-BlJsonAttempt {
     param([string[]]$Arguments, [string]$Operation)
     $command = @(Get-Command bl -All -ErrorAction SilentlyContinue | Where-Object {
         $_.CommandType -in @('Application', 'ExternalScript')
@@ -265,6 +286,15 @@ function Invoke-BlJson {
         throw "Bailian CLI $Operation returned empty output or exceeded the 5 MiB limit."
     }
     return $output
+}
+
+function Invoke-BlJson {
+    param([string[]]$Arguments, [string]$Operation)
+    $attempt = {
+        param([string[]]$attemptArguments, [string]$attemptOperation)
+        Invoke-BlJsonAttempt -Arguments $attemptArguments -Operation $attemptOperation
+    }
+    return Invoke-BailianJsonRetry -Attempt $attempt -Operation $Operation -AttemptArguments @($Arguments)
 }
 
 function Select-BailianProvider {

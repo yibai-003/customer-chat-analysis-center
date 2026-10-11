@@ -33,8 +33,10 @@ $syncAst = [System.Management.Automation.Language.Parser]::ParseFile($syncPath, 
 if ($parseErrors.Count -gt 0) { throw 'The sync script has PowerShell parse errors.' }
 $functionAsts = @($syncAst.FindAll({ param($node) $node -is [System.Management.Automation.Language.FunctionDefinitionAst] }, $true))
 $launcherAst = $functionAsts | Where-Object Name -eq 'Resolve-BailianCliLauncher' | Select-Object -First 1
-if (-not $launcherAst) { throw 'Launcher helper function was not found in the sync script.' }
+$jsonRetryAst = $functionAsts | Where-Object Name -eq 'Invoke-BailianJsonRetry' | Select-Object -First 1
+if (-not $launcherAst -or -not $jsonRetryAst) { throw 'Sync helper functions were not found in the sync script.' }
 . ([scriptblock]::Create($launcherAst.Extent.Text))
+. ([scriptblock]::Create($jsonRetryAst.Extent.Text))
 $psLauncher = Resolve-BailianCliLauncher -Command ([pscustomobject]@{ Path = 'C:\Users\tester\AppData\Roaming\npm\bl.ps1' }) -Arguments @('model', 'list', '--model', 'qwen-plus')
 Assert-Equal ([IO.Path]::GetExtension($psLauncher.FileName).ToLowerInvariant()) '.exe' 'bl.ps1 should launch through a PowerShell executable.'
 Assert-Equal $psLauncher.Arguments[0] '-NoProfile' 'bl.ps1 launcher should disable profile loading.'
@@ -55,6 +57,31 @@ Assert-Contains $launcherSource "'.cmd', '.bat'" 'Launcher source must handle cm
 Assert-Contains $launcherSource "'-NoProfile'" 'Launcher source must isolate PowerShell CLI execution.'
 Assert-Contains $launcherSource "'/d'" 'Launcher source must disable cmd AutoRun commands.'
 Assert-Contains $launcherSource 'ArgumentList' 'Launcher source must preserve argument boundaries.'
+
+$script:jsonAttempts = 0
+$retriedJson = Invoke-BailianJsonRetry -Operation 'offline fixture' -Attempt {
+    $script:jsonAttempts += 1
+    if ($script:jsonAttempts -eq 1) { return 'temporary non-json response' }
+    return '{"ok":true}'
+}
+Assert-Equal $script:jsonAttempts 2 'Invalid JSON should trigger exactly one bounded retry.'
+Assert-Equal (($retriedJson | ConvertFrom-Json).ok) $true 'The retry helper should return the valid second response.'
+$script:jsonAttempts = 0
+Assert-Throws {
+    Invoke-BailianJsonRetry -Operation 'offline fixture' -Attempt {
+        $script:jsonAttempts += 1
+        return 'still not json'
+    }
+} 'Two invalid JSON responses must fail.'
+Assert-Equal $script:jsonAttempts 2 'Invalid JSON retry must remain bounded to two attempts.'
+$script:jsonAttempts = 0
+Assert-Throws {
+    Invoke-BailianJsonRetry -Operation 'offline fixture' -Attempt {
+        $script:jsonAttempts += 1
+        throw 'process failure'
+    }
+} 'Process failures must not be retried as JSON errors.'
+Assert-Equal $script:jsonAttempts 1 'Process failures should be propagated immediately.'
 
 $quotaJson = @'
 [
