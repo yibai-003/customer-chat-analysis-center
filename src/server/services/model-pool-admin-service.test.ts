@@ -282,7 +282,7 @@ describe("model pool administration", () => {
       .toEqual([expect.objectContaining({ id: "newer", eventType: "success", accountedTokens: 12 })]);
   });
 
-  it("places paid purpose defaults after free members while preserving free priority", () => {
+  it("places paid purpose defaults at the end while preserving member priority", () => {
     const provider = createDashScopeProvider();
     const free = createPoolMember(provider.id, { purpose: "text", poolEnabled: true });
     const paid = createModelConfig({

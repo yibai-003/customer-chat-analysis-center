@@ -216,13 +216,13 @@ export function createModelPoolRouter(): express.Router {
     }
   });
 
-  router.post("/model-pools/bailian-free/preview", canSyncPool, (req, res) => {
+  router.post("/model-pools/bailian-qwen-paid/preview", canSyncPool, (req, res) => {
     try {
       const user = req.currentUser;
       if (!user) return fail(res, new Error("未登录或会话已失效"), 401);
       const result = previewBailianFreePool(req.body, user.id, Date.now());
       auditRequest(req, {
-        action: "pool.bailian_preview",
+        action: "pool.bailian_qwen_paid_preview",
         targetType: "model_pool",
         targetId: result.previewId,
         metadata: { providerId: req.body?.providerId, ...result.summary } as Record<string, unknown>,
@@ -230,16 +230,16 @@ export function createModelPoolRouter(): express.Router {
       return ok(res, result);
     } catch (error) {
       auditRequest(req, {
-        action: "pool.bailian_preview",
+        action: "pool.bailian_qwen_paid_preview",
         outcome: "failure",
         targetType: "model_pool",
         metadata: {},
       });
-      return fail(res, error, error instanceof Error && /服务商|模型已由手工配置|跨用途冲突|重复记录|额度存在重复|目录存在重复/.test(error.message) ? 409 : undefined);
+      return fail(res, error, error instanceof Error && /服务商|模型已由手工配置|跨用途冲突|重复记录|目录存在重复/.test(error.message) ? 409 : undefined);
     }
   });
 
-  router.post("/model-pools/bailian-free/apply", canSyncPool, (req, res) => {
+  router.post("/model-pools/bailian-qwen-paid/apply", canSyncPool, (req, res) => {
     try {
       const user = req.currentUser;
       if (!user) return fail(res, new Error("未登录或会话已失效"), 401);
@@ -249,7 +249,7 @@ export function createModelPoolRouter(): express.Router {
       }).strict().parse(req.body);
       const result = applyBailianFreePool(body.previewId, user.id, body.confirmation, Date.now());
       auditRequest(req, {
-        action: "pool.bailian_apply",
+        action: "pool.bailian_qwen_paid_apply",
         targetType: "model_pool",
         targetId: body.previewId,
         metadata: { ...result.summary } as Record<string, unknown>,
@@ -257,7 +257,7 @@ export function createModelPoolRouter(): express.Router {
       return ok(res, result);
     } catch (error) {
       auditRequest(req, {
-        action: "pool.bailian_apply",
+        action: "pool.bailian_qwen_paid_apply",
         outcome: "failure",
         targetType: "model_pool",
         metadata: {},

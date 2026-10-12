@@ -2,17 +2,7 @@ export interface BailianPoolSnapshot {
   providerId: string;
   capturedAt: string;
   accountMatchConfirmed: true;
-  quotas: BailianQuotaRecord[];
   models: BailianCatalogModel[];
-}
-
-export interface BailianQuotaRecord {
-  model: string;
-  type: string;
-  remaining: number;
-  total: number;
-  expires: string;
-  autoStop: boolean;
 }
 
 export interface BailianCatalogModel {
@@ -31,9 +21,6 @@ export interface BailianPoolCandidate {
   purpose: "text" | "vision";
   name: string;
   provider: string;
-  quotaTotalTokens: number;
-  quotaUsedTokens: number;
-  quotaExpiresAt: string;
   supportsVision: boolean;
   qualityTier: "A";
   thinkingMode: false;
@@ -42,17 +29,12 @@ export interface BailianPoolCandidate {
 
 export type BailianExclusionReason =
   | "unsupported_type"
-  | "missing_catalog"
   | "duplicate_catalog"
-  | "duplicate_quota"
   | "offline"
   | "missing_structured_outputs"
   | "missing_capabilities"
-  | "auto_stop_disabled"
-  | "invalid_quota"
-  | "expired"
   | "invalid_expiry"
-  | "low_safety_margin";
+  | "expired";
 
 export interface BailianExcludedModel {
   model: string;

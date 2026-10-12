@@ -4,13 +4,14 @@ import type { BailianPoolSnapshot, BailianPoolCandidate, BailianExcludedModel } 
 import { selectBailianPoolCandidates } from "./model-pool-sync-policy";
 import { db } from "../db/client";
 
-const PRESET_KEY = "bailian-free-pool";
+const PRESET_KEY = "bailian-qwen-paid-pool";
 const LEGACY_PRESET_KEY = "qianwen-free-pool";
-const PRESET_VERSION = 1;
+const LEGACY_BAILIAN_KEY = "bailian-free-pool";
+const PRESET_VERSION = 2;
 const PREVIEW_TTL_MS = 5 * 60_000;
 const MAX_PREVIEWS = 20;
-const CONFIRM = "APPLY BAILIAN FREE POOL";
-const STOP_CONFIRM = "STOP ALL MANAGED FREE MODELS";
+const CONFIRM = "APPLY BAILIAN QWEN PAID POOL";
+const STOP_CONFIRM = "STOP ALL MANAGED QWEN MODELS";
 
 function modelPurposeKey(model: string, purpose: "text" | "vision") {
   return `${model}\0${purpose}`;
@@ -20,14 +21,6 @@ const snapshotSchema = z.object({
   providerId: z.string().min(1).max(200),
   capturedAt: z.string().datetime({ offset: true }),
   accountMatchConfirmed: z.literal(true),
-  quotas: z.array(z.object({
-    model: z.string().regex(/^[A-Za-z0-9._:/-]{1,200}$/),
-    type: z.string().max(40),
-    remaining: z.number().int().safe().nonnegative(),
-    total: z.number().int().safe().positive(),
-    expires: z.string().min(1).max(80),
-    autoStop: z.boolean(),
-  }).strict()).max(500),
   models: z.array(z.object({
     model: z.string().regex(/^[A-Za-z0-9._:/-]{1,200}$/),
     name: z.string().min(1).max(300),
@@ -35,7 +28,7 @@ const snapshotSchema = z.object({
     capabilities: z.array(z.string().max(80)).max(100),
     modalities: z.object({ input: z.array(z.string().max(80)).max(30), output: z.array(z.string().max(80)).max(30) }).strict(),
     features: z.array(z.string().max(80)).max(100),
-    offline: z.boolean(),
+    offline: z.boolean().optional(),
     upcomingOfflineAt: z.string().max(80).nullable().optional(),
   }).strict()).max(500),
 }).strict();
@@ -140,20 +133,20 @@ function providerFor(id: string): DbRow {
 }
 
 function managedRows(providerId: string): DbRow[] {
-  return db.prepare(`SELECT * FROM model_configs WHERE provider_id=? AND billing_mode='free'
-    AND is_purpose_default=0 AND preset_key IN (?,?) ORDER BY created_at,id`).all(
-    providerId, PRESET_KEY, LEGACY_PRESET_KEY,
+  return db.prepare(`SELECT * FROM model_configs WHERE provider_id=? AND is_purpose_default=0
+    AND preset_key IN (?,?,?) ORDER BY created_at,id`).all(
+    providerId, PRESET_KEY, LEGACY_PRESET_KEY, LEGACY_BAILIAN_KEY,
   ) as DbRow[];
 }
 
 function assertNoManagedDuplicates(providerId: string) {
   const duplicate = db.prepare(`SELECT model,purpose,COUNT(*) count FROM model_configs
-    WHERE provider_id=? AND billing_mode='free' AND is_purpose_default=0 AND preset_key IN (?,?)
-    GROUP BY model,purpose HAVING COUNT(*) > 1 LIMIT 1`).get(providerId, PRESET_KEY, LEGACY_PRESET_KEY) as Pick<DbRow, "model"> | undefined;
+    WHERE provider_id=? AND is_purpose_default=0 AND preset_key IN (?,?,?)
+    GROUP BY model,purpose HAVING COUNT(*) > 1 LIMIT 1`).get(providerId, PRESET_KEY, LEGACY_PRESET_KEY, LEGACY_BAILIAN_KEY) as Pick<DbRow, "model"> | undefined;
   if (duplicate) throw new Error(`托管模型存在重复记录: ${duplicate.model}`);
   const crossPurpose = db.prepare(`SELECT model,COUNT(DISTINCT purpose) count FROM model_configs
-    WHERE provider_id=? AND is_purpose_default=0 AND preset_key IN (?,?)
-    GROUP BY model HAVING COUNT(DISTINCT purpose) > 1 LIMIT 1`).get(providerId, PRESET_KEY, LEGACY_PRESET_KEY) as { model: string } | undefined;
+    WHERE provider_id=? AND is_purpose_default=0 AND preset_key IN (?,?,?)
+    GROUP BY model HAVING COUNT(DISTINCT purpose) > 1 LIMIT 1`).get(providerId, PRESET_KEY, LEGACY_PRESET_KEY, LEGACY_BAILIAN_KEY) as { model: string } | undefined;
   if (crossPurpose) throw new Error(`托管模型跨用途冲突: ${crossPurpose.model}`);
 }
 
@@ -161,20 +154,14 @@ function assertNoManualCollisions(providerId: string, changes: BailianPoolChange
   for (const change of changes) {
     if (change.type === "disable") continue;
     const manual = db.prepare(`SELECT id FROM model_configs WHERE provider_id=? AND model=? AND purpose=?
-      AND (preset_key IS NULL OR preset_key NOT IN (?,?))`).get(
-      providerId, change.model, change.purpose, PRESET_KEY, LEGACY_PRESET_KEY,
+      AND (preset_key IS NULL OR preset_key NOT IN (?,?,?))`).get(
+      providerId, change.model, change.purpose, PRESET_KEY, LEGACY_PRESET_KEY, LEGACY_BAILIAN_KEY,
     ) as { id: string } | undefined;
     if (manual) throw new Error(`模型已由手工配置占用: ${change.model}`);
   }
 }
 
 function buildPlan(snapshot: BailianPoolSnapshot, now: number) {
-  const quotaIds = new Set<string>();
-  for (const quota of snapshot.quotas) {
-    if (quotaIds.has(quota.model)) throw new Error(`百炼额度存在重复模型: ${quota.model}`);
-    quotaIds.add(quota.model);
-    if (quota.remaining > quota.total) throw new Error(`百炼额度范围无效: ${quota.model}`);
-  }
   const catalogIds = new Set<string>();
   for (const model of snapshot.models) {
     if (catalogIds.has(model.model)) throw new Error(`百炼目录存在重复模型: ${model.model}`);
@@ -182,15 +169,18 @@ function buildPlan(snapshot: BailianPoolSnapshot, now: number) {
   }
   const selected = selectBailianPoolCandidates(snapshot, now);
   const invalidSnapshotReasons = new Set([
-    "missing_catalog", "duplicate_catalog", "duplicate_quota", "invalid_expiry",
-    "missing_capabilities", "missing_structured_outputs",
+    "duplicate_catalog", "invalid_expiry", "missing_capabilities", "missing_structured_outputs",
   ]);
   const invalid = selected.excluded.find((item) => invalidSnapshotReasons.has(item.reason));
   if (invalid) throw new Error(`百炼快照不完整或无效: ${invalid.model}`);
-  const candidates = selected.candidates.toSorted((left, right) =>
-    left.quotaExpiresAt.localeCompare(right.quotaExpiresAt) || left.model.localeCompare(right.model));
+  const candidates = selected.candidates.toSorted((left, right) => left.model.localeCompare(right.model));
   const excluded = selected.excluded;
   const rows = managedRows(snapshot.providerId);
+  for (const row of rows) {
+    if (!/^qwen/i.test(row.model) && !excluded.some((item) => item.model === row.model)) {
+      excluded.push({ model: row.model, reason: "unsupported_type" });
+    }
+  }
   const byKey = new Map<string, DbRow[]>();
   for (const row of rows) {
     const key = modelPurposeKey(row.model, row.purpose);
@@ -204,8 +194,8 @@ function buildPlan(snapshot: BailianPoolSnapshot, now: number) {
     const existing = byKey.get(key) ?? [];
     if (existing.length > 1) throw new Error(`托管模型存在重复记录: ${candidate.model}`);
     const manual = db.prepare(`SELECT id FROM model_configs WHERE provider_id=? AND model=? AND purpose=?
-      AND (preset_key IS NULL OR preset_key NOT IN (?,?))`).all(
-      snapshot.providerId, candidate.model, candidate.purpose, PRESET_KEY, LEGACY_PRESET_KEY,
+      AND (preset_key IS NULL OR preset_key NOT IN (?,?,?))`).all(
+      snapshot.providerId, candidate.model, candidate.purpose, PRESET_KEY, LEGACY_PRESET_KEY, LEGACY_BAILIAN_KEY,
     ) as Array<{ id: string }>;
     if (manual.length) throw new Error(`模型已由手工配置占用: ${candidate.model}`);
     const otherPurpose = db.prepare(`SELECT id FROM model_configs WHERE provider_id=? AND model=?
@@ -296,17 +286,16 @@ export function applyBailianFreePool(previewId: string, actorId: string, confirm
         existingModelsByPurpose.set(row.purpose, models);
       }
       const orderedCreates = item.preview.changes.filter((change) => change.type === "create")
-        .toSorted((left, right) => (left.candidate?.quotaExpiresAt ?? "").localeCompare(right.candidate?.quotaExpiresAt ?? "")
-          || left.model.localeCompare(right.model));
+        .toSorted((left, right) => left.model.localeCompare(right.model));
       const insert = db.prepare(`INSERT INTO model_configs
         (id,name,base_url,api_key_ciphertext,provider_id,model,purpose,is_purpose_default,supports_vision,
          temperature,max_tokens,is_default,is_enabled,created_at,updated_at,pool_enabled,billing_mode,
          quality_tier,priority,thinking_mode,member_type,quota_total_tokens,quota_used_tokens,
          quota_expires_at,quota_safety_ratio,preset_key,preset_version)
-        VALUES (?,?,?,?,?,?,?,0,?,0.2,1500,0,1,?,?,0,'free',?,?,?,?,?,?,?,0.95,?,?)`);
-      const update = db.prepare(`UPDATE model_configs SET name=?,base_url=?,provider_id=?,supports_vision=?,billing_mode='free',
-        quality_tier='A',thinking_mode=0,member_type='general',quota_total_tokens=?,quota_used_tokens=?,
-        quota_expires_at=?,quota_safety_ratio=0.95,quota_exhausted_at=NULL,preset_key=?,preset_version=?,updated_at=? WHERE id=?`);
+         VALUES (?,?,?,?,?,?,?,0,?,0.2,1500,0,1,?,?,0,'paid',?,?,?,?,?,?,?,0.95,?,?)`);
+      const update = db.prepare(`UPDATE model_configs SET name=?,base_url=?,provider_id=?,supports_vision=?,billing_mode='paid',
+        quality_tier='A',thinking_mode=0,member_type='general',quota_total_tokens=NULL,quota_used_tokens=0,
+        quota_expires_at=NULL,quota_safety_ratio=0.95,quota_exhausted_at=NULL,preset_key=?,preset_version=?,updated_at=? WHERE id=?`);
       const disable = db.prepare("UPDATE model_configs SET pool_enabled=0, pool_removed_at=CASE WHEN pool_removed_at IS NULL THEN ? ELSE pool_removed_at END, pool_removed_reason=CASE WHEN pool_removed_at IS NULL THEN 'sync_unavailable' ELSE pool_removed_reason END, pool_removed_note=CASE WHEN pool_removed_at IS NULL THEN ? ELSE pool_removed_note END, updated_at=? WHERE id=?");
       for (const change of [...item.preview.changes.filter((candidate) => candidate.type !== "create"), ...orderedCreates]) {
         if (change.type === "create") {
@@ -315,13 +304,12 @@ export function applyBailianFreePool(previewId: string, actorId: string, confirm
           insert.run(id, candidate.name, provider.base_url, provider.api_key_ciphertext, provider.id,
             candidate.model, candidate.purpose, candidate.supportsVision ? 1 : 0, timestamp, timestamp,
             candidate.qualityTier, nextPriorityByPurpose.get(candidate.purpose)!, candidate.thinkingMode ? 1 : 0, candidate.memberType,
-            candidate.quotaTotalTokens, candidate.quotaUsedTokens, candidate.quotaExpiresAt, PRESET_KEY, PRESET_VERSION);
+            0, 0, null, PRESET_KEY, PRESET_VERSION);
           nextPriorityByPurpose.set(candidate.purpose, nextPriorityByPurpose.get(candidate.purpose)! + 1);
           created.push(id);
         } else if (change.type === "update") {
           const candidate = change.candidate!;
           update.run(candidate.name, provider.base_url, provider.id, candidate.supportsVision ? 1 : 0,
-            candidate.quotaTotalTokens, candidate.quotaUsedTokens, candidate.quotaExpiresAt,
             PRESET_KEY, PRESET_VERSION, timestamp, change.id);
           if (change.id && existingRows.find((row) => row.id === change.id)?.pool_removed_at
             && existingRows.find((row) => row.id === change.id)?.pool_removed_reason !== "sync_unavailable") preservedManual.push(change.id);

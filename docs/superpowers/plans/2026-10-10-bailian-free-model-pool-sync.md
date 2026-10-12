@@ -1,4 +1,6 @@
-# 百炼免费模型池动态同步实施计划
+# 百炼免费模型池动态同步实施计划（已被按量千问模型池计划取代）
+
+> 历史计划，不再执行；当前实现范围以 [百炼千问按量模型池计划](2026-10-12-qianwen-paid-model-pool.md) 为准。
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

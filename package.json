@@ -25,7 +25,7 @@
     "bootstrap:admin": "tsx src/server/bootstrap-admin-cli.ts",
     "reset:admin": "tsx src/server/reset-admin-password-cli.ts",
     "keys:migrate": "tsx src/server/key-cli.ts",
-    "pool:sync:bailian": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/sync-bailian-free-pool.ps1"
+    "pool:sync:bailian-qwen-paid": "pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/sync-bailian-free-pool.ps1"
   },
   "type": "module",
   "dependencies": {

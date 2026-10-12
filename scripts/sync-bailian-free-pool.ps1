@@ -10,8 +10,8 @@ Import-Module (Join-Path $PSScriptRoot 'bailian-free-pool-sync.psm1') -Force
 
 $script:MaxHttpBodyBytes = 5MB
 $script:CliTimeoutMilliseconds = 30000
-$script:ConfirmationText = 'APPLY BAILIAN FREE POOL'
-$script:StopAllConfirmationText = 'STOP ALL MANAGED FREE MODELS'
+$script:ConfirmationText = 'APPLY BAILIAN QWEN PAID POOL'
+$script:StopAllConfirmationText = 'STOP ALL MANAGED QWEN MODELS'
 
 function Get-ValidatedBaseUri {
     param([string]$Value)
@@ -364,16 +364,8 @@ $baseUri = Get-ValidatedBaseUri -Value $BaseUrl
 $httpContext = New-BailianHttpClient
 $client = $httpContext.Client
 try {
-    $quotaJson = Invoke-BlJson -Arguments @('usage', 'free', '--all', '--output', 'json', '--quiet') -Operation 'free quota query'
-    $quotaRecords = @(ConvertFrom-BailianQuotaJson -Json $quotaJson)
-    $modelDetails = [System.Collections.Generic.List[string]]::new()
-    foreach ($quota in $quotaRecords) {
-        $model = [string]$quota.model
-        if ($model -notmatch '^[A-Za-z0-9._:/-]{1,200}$') { throw 'A quota model ID failed validation; no project request was sent.' }
-        $detailJson = Invoke-BlJson -Arguments @('model', 'list', '--model', $model, '--include-deprecated', '--output', 'json', '--quiet') -Operation 'model detail query'
-        $modelDetails.Add($detailJson)
-    }
-    $snapshot = New-BailianFreePoolSnapshot -ProviderId 'pending' -QuotaJson $quotaJson -ModelDetails $modelDetails.ToArray() -AccountMatchConfirmed
+    $catalogJson = Invoke-BlJson -Arguments @('model', 'list', '--output', 'json', '--quiet') -Operation 'model catalog query'
+    $catalogModels = @(ConvertFrom-BailianModelCatalogJson -Json $catalogJson)
 
     $credential = Get-Credential -Message 'Sign in to the Customer Chat Analysis Center. The password is held only in this process.'
     if ($null -eq $credential) { throw 'Project login was cancelled.' }
@@ -386,14 +378,13 @@ try {
     $providers = @(Get-ApiData -Method 'GET' -Uri (Get-ApiUri $baseUri '/api/model-providers') -Client $client)
     $provider = Select-BailianProvider -Providers $providers -RequestedId $ProviderId
     Write-Output ("Selected provider: {0} | {1} | key {2}" -f $provider.name, $provider.baseUrl, $provider.maskedApiKey)
-    $snapshot.providerId = [string]$provider.id
     Write-Output 'Confirm that the account authenticated by the host Bailian CLI is the same account as the selected provider API key.'
     $accountConfirmation = Read-Host 'Type SAME BAILIAN ACCOUNT to confirm'
     if ($accountConfirmation -cne 'SAME BAILIAN ACCOUNT') { throw 'Account match was not confirmed; no snapshot was submitted.' }
-    $snapshot.accountMatchConfirmed = $true
+    $snapshot = New-BailianQianwenPoolSnapshot -ProviderId ([string]$provider.id) -ModelCatalogJson $catalogJson -AccountMatchConfirmed
 
-    $preview = Get-ApiData -Method 'POST' -Uri (Get-ApiUri $baseUri '/api/model-pools/bailian-free/preview') -Client $client -Body $snapshot
-    Write-Output 'Bailian free-pool preview:'
+    $preview = Get-ApiData -Method 'POST' -Uri (Get-ApiUri $baseUri '/api/model-pools/bailian-qwen-paid/preview') -Client $client -Body $snapshot
+    Write-Output 'Bailian Qwen paid-pool preview:'
     $summary = $preview.summary
     Write-Output ("Created: {0}; updated: {1}; disabled: {2}; preserved manual: {3}; excluded: {4}" -f $summary.created, $summary.updated, $summary.disabled, $summary.preservedManual, $summary.excluded)
     Show-PreviewChanges -Changes $preview.changes
@@ -403,13 +394,13 @@ try {
     if ($confirmation -cne $script:ConfirmationText) { throw 'Preview was not confirmed; no changes were applied.' }
     $applyConfirmation = $script:ConfirmationText
     if ($preview.requiresDisableAllConfirmation -eq $true) {
-        $stopConfirmation = Read-Host "Type '$script:StopAllConfirmationText' to stop all managed free models"
+        $stopConfirmation = Read-Host "Type '$script:StopAllConfirmationText' to disable all managed Qwen models"
         if ($stopConfirmation -cne $script:StopAllConfirmationText) { throw 'Zero-candidate stop was not confirmed; no changes were applied.' }
         $applyConfirmation = $script:StopAllConfirmationText
     }
     $applyBody = @{ previewId = [string]$preview.previewId; confirmation = $applyConfirmation }
-    $result = Get-ApiData -Method 'POST' -Uri (Get-ApiUri $baseUri '/api/model-pools/bailian-free/apply') -Client $client -Body $applyBody
-    Write-Output 'Applied Bailian free-pool sync.'
+    $result = Get-ApiData -Method 'POST' -Uri (Get-ApiUri $baseUri '/api/model-pools/bailian-qwen-paid/apply') -Client $client -Body $applyBody
+    Write-Output 'Applied Bailian Qwen paid-pool sync.'
 } finally {
     try { $null = Invoke-JsonRequest -Method 'POST' -Uri (Get-ApiUri $baseUri '/api/auth/logout') -Client $client -Body @{} } catch { }
     $password = $null

@@ -148,7 +148,7 @@ describe("model pool administration API", () => {
     expect((await jsonRequest("/api/model-configs")).body.data[0].isPurposeDefault).toBe(false);
   });
 
-  it("previews and applies a Bailian free pool snapshot without exposing credentials", async () => {
+  it("previews and applies a Qwen paid pool snapshot without exposing credentials", async () => {
     const provider = createModelProvider({
       name: "百炼",
       baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -158,24 +158,23 @@ describe("model pool administration API", () => {
       providerId: provider.id,
       capturedAt: "2026-10-10T00:00:00.000Z",
       accountMatchConfirmed: true,
-      quotas: [{ model: "route-text", type: "Text", remaining: 900000, total: 1000000, expires: "2099-12-31", autoStop: true }],
-      models: [{ model: "route-text", name: "Route Text", provider: "bailian", capabilities: ["TG"],
+      models: [{ model: "qwen-route-text", name: "Route Text", provider: "bailian", capabilities: ["TG"],
         modalities: { input: ["Text"], output: ["Text"] }, features: ["structured-outputs"], offline: false }],
     };
-    const preview = await jsonRequest("/api/model-pools/bailian-free/preview", {
+    const preview = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
       method: "POST", body: JSON.stringify(snapshot),
     });
     expect(preview.status).toBe(200);
     expect(preview.body.data.summary).toMatchObject({ created: 1, excluded: 0 });
     expect(JSON.stringify(preview.body)).not.toContain("route-dashscope-secret");
 
-    const applied = await jsonRequest("/api/model-pools/bailian-free/apply", {
-      method: "POST", body: JSON.stringify({ previewId: preview.body.data.previewId, confirmation: "APPLY BAILIAN FREE POOL" }),
+    const applied = await jsonRequest("/api/model-pools/bailian-qwen-paid/apply", {
+      method: "POST", body: JSON.stringify({ previewId: preview.body.data.previewId, confirmation: "APPLY BAILIAN QWEN PAID POOL" }),
     });
     expect(applied.status).toBe(200);
     expect(applied.body.data.created).toHaveLength(1);
     expect((await jsonRequest("/api/model-pools")).body.data.members[0]).toMatchObject({
-      model: "route-text", poolEnabled: false, billingMode: "free", presetKey: "bailian-free-pool",
+      model: "qwen-route-text", poolEnabled: false, billingMode: "paid", presetKey: "bailian-qwen-paid-pool",
     });
   });
 
@@ -184,9 +183,9 @@ describe("model pool administration API", () => {
       name: "disabled Bailian", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       apiKey: "disabled-route-secret", isEnabled: false,
     });
-    const response = await jsonRequest("/api/model-pools/bailian-free/preview", {
+    const response = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
       method: "POST", body: JSON.stringify({ providerId: provider.id, capturedAt: "2026-10-10T00:00:00.000Z",
-        accountMatchConfirmed: true, quotas: [], models: [] }),
+        accountMatchConfirmed: true, models: [] }),
     });
     expect(response.status).toBe(409);
     expect(response.body.error).toContain("未启用");
@@ -194,33 +193,32 @@ describe("model pool administration API", () => {
 
   it("rejects an enabled non-DashScope provider for Bailian sync", async () => {
     const provider = createModelProvider({ name: "Other provider", baseUrl: "https://other.example/v1", apiKey: "other-secret" });
-    const response = await jsonRequest("/api/model-pools/bailian-free/preview", {
+    const response = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
       method: "POST", body: JSON.stringify({ providerId: provider.id, capturedAt: "2026-10-10T00:00:00.000Z",
-        accountMatchConfirmed: true, quotas: [], models: [] }),
+        accountMatchConfirmed: true, models: [] }),
     });
     expect(response.status).toBe(409);
     expect(response.body.error).toContain("地址无效");
   });
 
   it("rejects malformed snapshots before creating a preview", async () => {
-    const response = await jsonRequest("/api/model-pools/bailian-free/preview", {
+    const response = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
       method: "POST", body: JSON.stringify({ providerId: "missing", capturedAt: "not-a-date",
-        accountMatchConfirmed: true, quotas: [], models: [] }),
+        accountMatchConfirmed: true, models: [] }),
     });
     expect(response.status).toBe(400);
     expect(response.body).toMatchObject({ success: false, data: null });
-    const audits = db.prepare("SELECT metadata_json FROM audit_events WHERE action='pool.bailian_preview' ORDER BY occurred_at DESC LIMIT 1").get() as { metadata_json: string };
+    const audits = db.prepare("SELECT metadata_json FROM audit_events WHERE action='pool.bailian_qwen_paid_preview' ORDER BY occurred_at DESC LIMIT 1").get() as { metadata_json: string };
     expect(audits.metadata_json).not.toContain("not-a-date");
     expect(audits.metadata_json).not.toContain("missing");
   });
 
   it("returns conflict for a manual model collision while keeping schema errors at 400", async () => {
     const provider = createModelProvider({ name: "百炼 collision", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", apiKey: "collision-secret" });
-    createModelConfig({ name: "manual collision", baseUrl: provider.baseUrl, providerId: provider.id, model: "collision-model", purpose: "text", supportsVision: false });
-    const response = await jsonRequest("/api/model-pools/bailian-free/preview", {
+    createModelConfig({ name: "manual collision", baseUrl: provider.baseUrl, providerId: provider.id, model: "qwen-collision-model", purpose: "text", supportsVision: false });
+    const response = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
       method: "POST", body: JSON.stringify({ providerId: provider.id, capturedAt: "2026-10-10T00:00:00.000Z", accountMatchConfirmed: true,
-        quotas: [{ model: "collision-model", type: "Text", remaining: 900000, total: 1000000, expires: "2099-12-31", autoStop: true }],
-        models: [{ model: "collision-model", name: "Collision", provider: "bailian", capabilities: ["TG"], modalities: { input: ["Text"], output: ["Text"] }, features: ["structured-outputs"], offline: false }] }),
+        models: [{ model: "qwen-collision-model", name: "Collision", provider: "bailian", capabilities: ["TG"], modalities: { input: ["Text"], output: ["Text"] }, features: ["structured-outputs"], offline: false }] }),
     });
     expect(response.status).toBe(409);
     expect(response.body.error).toContain("手工配置占用");
