@@ -91,6 +91,29 @@ describe("batch analysis scheduling", () => {
     await retry!.completion;
     expect(getJob(job.id)).toMatchObject({ status: "paused", completedRecords: 1, pendingRecords: 1, failedRecords: 0, completedFields: 5 });
   });
+
+  it("runs failed-record retries inside the configured paid-token budget", async () => {
+    const job = createJob("paid-retry.xlsx", "paid-retry.xlsx", { id: "refund", name: "refund" });
+    attachConversationTestPlatform(job.id);
+    addRecords(job.id, [{ sheetName: "Sheet1", rowNumber: 1, anchor: {}, sourceFields: {}, imagePath: "test.png" }]);
+    const [record] = listRecords(job.id);
+    updateRecord(record.id, { status: "failed" });
+    let observedPaidTokens = 0;
+    vi.mocked(analyzeRecordFields).mockImplementation(async (id) => {
+      observedPaidTokens = paidTokensRemaining();
+      for (const field of listFields("refund").filter((item) => item.isEnabled)) {
+        createFieldRun({ recordId: id, fieldId: field.id, status: "completed" });
+      }
+      updateRecord(id, { status: "completed" });
+      return { total: 5, completed: 5, failed: 0, needsReview: 0, skipped: 0 };
+    });
+
+    const retry = await retryFailedJob(job.id, { concurrency: 1, batchSize: 5, maxPaidTokens: 1234 });
+    await retry!.completion;
+
+    expect(observedPaidTokens).toBe(1234);
+    expect(getJob(job.id)).toMatchObject({ status: "completed", completedRecords: 1, failedRecords: 0 });
+  });
   it("loads records one batch at a time until the candidate query is empty", async () => {
     const loaded: number[] = [];
     const processed: number[] = [];
@@ -651,11 +674,56 @@ describe("batch analysis API", () => {
       const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
       const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, withAuth(cookie, {
         method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ concurrency: 4, batchSize: 25, maxPaidTokens: 1234 }),
       }));
       await new Promise<void>((resolve) => setImmediate(resolve));
 
       expect(response.status).toBe(200);
-      expect(retryFailedJobStarter).toHaveBeenCalledWith(job.id);
+      expect(retryFailedJobStarter).toHaveBeenCalledWith(job.id, {
+        concurrency: 4,
+        batchSize: 25,
+        maxPaidTokens: 1234,
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) => error ? reject(error) : resolve());
+      });
+    }
+  });
+
+  it("rejects an invalid retry token budget before starting the retry", async () => {
+    const retryFailedJobStarter = vi.fn(async () => ({
+      completion: Promise.resolve({ total: 0, completed: 0, failed: 0, needsReview: 0 }),
+    }));
+    const job = createJob("retry-invalid-budget.xlsx", "retry-invalid-budget.xlsx", {
+      id: "refund",
+      name: "退货分析",
+    });
+    attachConversationTestPlatform(job.id);
+    addRecords(job.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 1,
+      anchor: {},
+      sourceFields: {},
+      imagePath: "retry-invalid-budget.png",
+    }]);
+    updateRecord(listRecords(job.id)[0].id, { status: "failed", reviewStatus: "needs_review" });
+    const server: Server = createApp({ retryFailedJobStarter } as never).listen(0);
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    const address = server.address() as AddressInfo;
+
+    try {
+      const cookie = await loginAdmin(`http://127.0.0.1:${address.port}`);
+      const response = await fetch(`http://127.0.0.1:${address.port}/api/jobs/${job.id}/retry-failed`, withAuth(cookie, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ maxPaidTokens: -1 }),
+      }));
+
+      expect(response.status).toBe(400);
+      expect(retryFailedJobStarter).not.toHaveBeenCalled();
+      expect(listRecords(job.id)[0]).toMatchObject({ status: "failed", reviewStatus: "needs_review" });
     } finally {
       await new Promise<void>((resolve, reject) => {
         server.close((error) => error ? reject(error) : resolve());
@@ -734,10 +802,11 @@ describe("batch analysis API", () => {
     });
     const retryWithPreparationFailure = retryFailedJob as unknown as (
       jobId: string,
+      options: NonNullable<Parameters<typeof retryFailedJob>[1]>,
       dependencies: { getProgressBaseline: () => never },
     ) => Promise<{ completion: Promise<unknown> } | null>;
     const server: Server = createApp({
-      retryFailedJobStarter: (jobId: string) => retryWithPreparationFailure(jobId, {
+      retryFailedJobStarter: (jobId: string, options: NonNullable<Parameters<typeof retryFailedJob>[1]>) => retryWithPreparationFailure(jobId, options, {
         getProgressBaseline: () => {
           throw new Error("准备阶段失败");
         },

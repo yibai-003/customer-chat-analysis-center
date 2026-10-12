@@ -54,7 +54,21 @@ describe("AnalysisRunDialog", () => {
     expect(maxPaidTokens.value).toBe("0");
     expect(maxPaidTokens.min).toBe("0");
     expect(maxPaidTokens.step).toBe("1000");
-    expect(screen.getByText("0 表示仅使用免费池；免费额度不可用时任务暂停并等待处理。")).toBeTruthy();
+    expect(screen.getByText("0 表示不允许使用付费模型；付费预算不足时，请补充预算后重试失败记录。")).toBeTruthy();
+  });
+
+  it("prefills the previous paid-token limit for a failed-record retry", () => {
+    render(<AnalysisRunDialog
+      capacity={capacity}
+      initialMaxPaidTokens={8000}
+      intent="retry-failed"
+      onCancel={() => undefined}
+      onConfirm={() => undefined}
+    />);
+
+    expect(screen.getByText("本次只重试失败记录；这是独立的新一轮付费 Token 预算。")).toBeTruthy();
+    expect((screen.getByLabelText("最大付费 Token") as HTMLInputElement).value).toBe("8000");
+    expect(screen.getByRole("button", { name: "按此配置重试失败" })).toBeTruthy();
   });
 
   it("warns above the recommendation and submits the chosen numeric values", () => {

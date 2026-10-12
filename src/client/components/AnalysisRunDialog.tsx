@@ -11,15 +11,19 @@ export function AnalysisRunDialog({
   onConfirm,
   onCancel,
   selectedCount,
+  intent = "analyze",
+  initialMaxPaidTokens = 0,
 }: {
   capacity: AnalysisCapacity;
   selectedCount?: number | null;
+  intent?: "analyze" | "retry-failed";
+  initialMaxPaidTokens?: number;
   onConfirm: (options: Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize" | "maxPaidTokens">>) => void;
   onCancel: () => void;
 }) {
   const [concurrency, setConcurrency] = useState(capacity.recommendation.concurrency);
   const [batchSize, setBatchSize] = useState(capacity.recommendation.batchSize);
-  const [maxPaidTokens, setMaxPaidTokens] = useState("0");
+  const [maxPaidTokens, setMaxPaidTokens] = useState(String(initialMaxPaidTokens));
   const [paidTokenError, setPaidTokenError] = useState(false);
   const { metrics, recommendation, allowedRanges } = capacity;
   const parsedMaxPaidTokens = Number(maxPaidTokens);
@@ -57,7 +61,9 @@ export function AnalysisRunDialog({
       <strong>并发 {recommendation.concurrency} · 每批 {recommendation.batchSize} 条</strong>
     </div>
 
-    {typeof selectedCount === "number" && <div className="analysis-target">
+    {intent === "retry-failed" ? <div className="analysis-target">
+      本次只重试失败记录；这是独立的新一轮付费 Token 预算。
+    </div> : typeof selectedCount === "number" && <div className="analysis-target">
       本次只解析已选 {selectedCount} 条记录
     </div>}
 
@@ -102,12 +108,13 @@ export function AnalysisRunDialog({
           step={1000}
           value={maxPaidTokens}
           aria-invalid={paidTokenError}
+          autoComplete="off"
           onChange={(event) => {
             setMaxPaidTokens(event.target.value);
             setPaidTokenError(false);
           }}
         />
-        <small>0 表示仅使用免费池；免费额度不可用时任务暂停并等待处理。</small>
+        <small>0 表示不允许使用付费模型；付费预算不足时，请补充预算后重试失败记录。</small>
       </label>
     </div>
 
@@ -131,7 +138,7 @@ export function AnalysisRunDialog({
           onConfirm({ concurrency, batchSize, maxPaidTokens: parsedMaxPaidTokens });
         }}
       >
-        按此配置开始解析
+        {intent === "retry-failed" ? "按此配置重试失败" : "按此配置开始解析"}
       </button>
     </div>
   </Modal>;
