@@ -240,7 +240,8 @@ export function resolveModelMember(id: string): ResolvedPoolMember {
 export function listPoolMemberStatuses(purpose: ModelPurpose): PoolMemberStatus[] {
   const rows = db.prepare(`${modelWithProviderSql}
     WHERE m.purpose=? AND m.pool_enabled=1
-    ORDER BY m.is_purpose_default DESC, m.priority ASC, m.created_at DESC`).all(purpose) as any[];
+    ORDER BY CASE WHEN m.billing_mode='paid' AND m.is_purpose_default=1 THEN 1 ELSE 0 END,
+      m.priority ASC, m.created_at DESC`).all(purpose) as any[];
   return rows.map((row) => ({
     ...mapModelConfigRow(row),
     providerEnabled: row.provider_id ? Boolean(row.provider_enabled) : true,
@@ -251,7 +252,8 @@ export function resolvePoolMembers(purpose: ModelPurpose): ResolvedPoolMember[] 
   const rows = db.prepare(`${modelWithProviderSql}
     WHERE m.purpose=? AND m.pool_enabled=1 AND m.is_enabled=1
       AND (m.provider_id IS NULL OR p.is_enabled=1)
-    ORDER BY m.is_purpose_default DESC, m.priority ASC, m.created_at DESC`).all(purpose) as any[];
+    ORDER BY CASE WHEN m.billing_mode='paid' AND m.is_purpose_default=1 THEN 1 ELSE 0 END,
+      m.priority ASC, m.created_at DESC`).all(purpose) as any[];
   return rows.map((row) => ({
     ...mapModelConfigRow(row),
     apiKey: decryptSecret(

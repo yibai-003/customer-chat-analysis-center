@@ -3,11 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { db, initDb } from "../db/client";
 import { createModelConfig, testModelCapabilities } from "./model-config-service";
 import { createModelProvider } from "./model-provider-service";
-import { QIANWEN_FREE_POOL_PRESET } from "./qianwen-free-pool-preset";
 import {
   getModelPoolSettings,
   getPoolSummary,
-  installQianwenFreePool,
   listModelUsageEvents,
   listPoolMembers,
   removePoolMembers,
@@ -41,6 +39,32 @@ function createDashScopeProvider() {
   });
 }
 
+function createPoolMember(
+  providerId: string,
+  options: {
+    purpose?: "vision" | "text";
+    memberType?: "general" | "ocr";
+    poolEnabled?: boolean;
+    model?: string;
+  } = {},
+) {
+  const provider = db.prepare("SELECT base_url FROM model_providers WHERE id=?").get(providerId) as { base_url: string };
+  const purpose = options.purpose ?? "vision";
+  const member = createModelConfig({
+    name: `${purpose} test member`,
+    providerId,
+    baseUrl: provider.base_url,
+    model: options.model ?? `${purpose}-${randomUUID()}`,
+    purpose,
+    supportsVision: purpose === "vision",
+  });
+  db.prepare(`UPDATE model_configs SET
+    pool_enabled=?, member_type=?, billing_mode='free', quota_total_tokens=1000000,
+    quota_safety_ratio=0.95 WHERE id=?`)
+    .run(options.poolEnabled ? 1 : 0, options.memberType ?? "general", member.id);
+  return listPoolMembers().find((item) => item.id === member.id)!;
+}
+
 describe("model pool administration", () => {
   beforeEach(() => {
     initDb();
@@ -48,82 +72,10 @@ describe("model pool administration", () => {
     vi.mocked(testModelCapabilities).mockReset();
   });
 
-  it("requires an enabled DashScope provider", () => {
-    expect(() => installQianwenFreePool()).toThrow("请先配置并启用千问服务商凭证");
-    createModelProvider({
-      name: "disabled",
-      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-      apiKey: "disabled-secret",
-      isEnabled: false,
-    });
-    expect(() => installQianwenFreePool()).toThrow("请先配置并启用千问服务商凭证");
-  });
-
-  it("installs every preset member idempotently with safe defaults", () => {
-    createDashScopeProvider();
-    const first = installQianwenFreePool();
-    const second = installQianwenFreePool();
-
-    expect(first.created).toHaveLength(QIANWEN_FREE_POOL_PRESET.length);
-    expect(first.needsVerification).toEqual(first.created);
-    expect(second.created).toEqual([]);
-    expect(second.updated).toHaveLength(QIANWEN_FREE_POOL_PRESET.length);
-    expect(second.needsVerification).toEqual(second.updated);
-    expect(db.prepare("SELECT COUNT(*) count FROM model_configs WHERE preset_key IS NOT NULL").get())
-      .toEqual({ count: QIANWEN_FREE_POOL_PRESET.length });
-    expect(db.prepare(`SELECT COUNT(*) count FROM model_configs
-      WHERE billing_mode='free' AND pool_enabled=0 AND quota_total_tokens=1000000
-        AND quota_safety_ratio=0.95 AND capability_json IS NULL AND capability_checked_at IS NULL`).get())
-      .toEqual({ count: QIANWEN_FREE_POOL_PRESET.length });
-    expect(db.prepare(`SELECT COUNT(*) count FROM model_configs
-      WHERE member_type='ocr' AND pool_enabled=0`).get()).toEqual({ count: 2 });
-  });
-
-  it("preserves manual state and initializes snapshot usage only when adopting unused legacy rows", () => {
+  it("preserves manual state while editing supported member fields", () => {
     const provider = createDashScopeProvider();
-    const adopted = createModelConfig({
-      name: "existing qwen plus",
-      providerId: provider.id,
-      baseUrl: provider.baseUrl,
-      model: "qwen-plus",
-      purpose: "text",
-      supportsVision: false,
-    });
-    db.prepare(`UPDATE model_configs SET pool_enabled=1, capability_json=?, capability_checked_at=?,
-      cooldown_until='2026-09-17T00:00:00.000Z', consecutive_failures=3 WHERE id=?`)
-      .run(JSON.stringify({ text: true, json: true, vision: false }), Date.now(), adopted.id);
-
-    installQianwenFreePool();
-    let row = db.prepare(`SELECT quota_used_tokens, pool_enabled, capability_json, capability_checked_at,
-      cooldown_until, consecutive_failures FROM model_configs WHERE id=?`).get(adopted.id) as any;
-    expect(row).toMatchObject({
-      quota_used_tokens: 333_600,
-      pool_enabled: 1,
-      cooldown_until: "2026-09-17T00:00:00.000Z",
-      consecutive_failures: 3,
-    });
-    expect(row.capability_json).toContain('"text":true');
-    expect(row.capability_checked_at).toBeTruthy();
-
-    db.prepare("UPDATE model_configs SET pool_enabled=0, is_enabled=0, quota_used_tokens=456789 WHERE id=?")
-      .run(adopted.id);
-    installQianwenFreePool();
-    row = db.prepare(`SELECT pool_enabled, is_enabled, quota_used_tokens, capability_json,
-      cooldown_until, consecutive_failures FROM model_configs WHERE id=?`).get(adopted.id) as any;
-    expect(row).toMatchObject({
-      pool_enabled: 0,
-      is_enabled: 0,
-      quota_used_tokens: 456_789,
-      cooldown_until: "2026-09-17T00:00:00.000Z",
-      consecutive_failures: 3,
-    });
-    expect(row.capability_json).toContain('"text":true');
-  });
-
-  it("lists and edits only the supported member fields", () => {
-    createDashScopeProvider();
-    const id = installQianwenFreePool().created[0];
-    const updated = updatePoolMember(id, {
+    const created = createPoolMember(provider.id);
+    const updated = updatePoolMember(created.id, {
       isEnabled: false,
       poolEnabled: true,
       billingMode: "paid",
@@ -137,7 +89,7 @@ describe("model pool administration", () => {
     });
 
     expect(updated).toMatchObject({
-      id,
+      id: created.id,
       isEnabled: false,
       poolEnabled: true,
       billingMode: "paid",
@@ -149,15 +101,13 @@ describe("model pool administration", () => {
       quotaSafetyRatio: 0.9,
     });
     expect(updated.model).not.toBe("must-not-change");
-    expect(listPoolMembers(updated.purpose).some((member) => member.id === id)).toBe(true);
+    expect(listPoolMembers(updated.purpose).some((member) => member.id === created.id)).toBe(true);
     expect(() => updatePoolMember("missing", {})).toThrow("模型池成员不存在");
   });
 
   it("verifies unique IDs with concurrency two and enables passed members only when requested", async () => {
-    createDashScopeProvider();
-    const ids = installQianwenFreePool().created
-      .filter((id) => listPoolMembers().find((member) => member.id === id)?.memberType === "general")
-      .slice(0, 5);
+    const provider = createDashScopeProvider();
+    const ids = Array.from({ length: 5 }, () => createPoolMember(provider.id).id);
     let active = 0;
     let maxActive = 0;
     vi.mocked(testModelCapabilities).mockImplementation(async (id) => {
@@ -188,40 +138,39 @@ describe("model pool administration", () => {
   });
 
   it("keeps verification failures out of routing without auto-removing the member", async () => {
-    createDashScopeProvider();
-    const [id] = installQianwenFreePool().created;
-    db.prepare("UPDATE model_configs SET pool_enabled=1 WHERE id=?").run(id);
+    const provider = createDashScopeProvider();
+    const created = createPoolMember(provider.id, { poolEnabled: true });
     vi.mocked(testModelCapabilities).mockResolvedValueOnce({
-      model: "qwen3-vl-plus",
+      model: created.model,
       purpose: "vision",
       capabilities: { text: true, json: true, vision: false, errors: { vision: "INVALID_OUTPUT" } },
       checkedAt: "2026-09-16T00:00:00.000Z",
     });
 
-    await expect(verifyPoolMembers([id], { enablePassed: true })).resolves.toEqual([
-      expect.objectContaining({ id, passed: false }),
+    await expect(verifyPoolMembers([created.id], { enablePassed: true })).resolves.toEqual([
+      expect.objectContaining({ id: created.id, passed: false }),
     ]);
-    const member = listPoolMembers().find((item) => item.id === id)!;
+    const member = listPoolMembers().find((item) => item.id === created.id)!;
     expect(member.poolEnabled).toBe(true);
     expect(member.capabilityEligible).toBe(false);
   });
 
   it("reports per-member error categories when a verification request throws", async () => {
-    createDashScopeProvider();
-    const [id] = installQianwenFreePool().created;
+    const provider = createDashScopeProvider();
+    const created = createPoolMember(provider.id);
     vi.mocked(testModelCapabilities).mockRejectedValueOnce(new Error("模型服务错误 (401)"));
 
-    const [result] = await verifyPoolMembers([id], { enablePassed: true });
-    expect(result).toMatchObject({ id, passed: false, errorCode: "auth" });
+    const [result] = await verifyPoolMembers([created.id], { enablePassed: true });
+    expect(result).toMatchObject({ id: created.id, passed: false, errorCode: "auth" });
     expect(result.error).toBeTruthy();
   });
 
-  it("keeps verified OCR preset members disabled for general vision routing", async () => {
-    createDashScopeProvider();
-    installQianwenFreePool();
-    const ocrIds = listPoolMembers("vision")
-      .filter((member) => member.memberType === "ocr")
-      .map((member) => member.id);
+  it("keeps verified OCR members disabled for general vision routing", async () => {
+    const provider = createDashScopeProvider();
+    const ocrIds = [
+      createPoolMember(provider.id, { purpose: "vision", memberType: "ocr" }).id,
+      createPoolMember(provider.id, { purpose: "vision", memberType: "ocr" }).id,
+    ];
     vi.mocked(testModelCapabilities).mockImplementation(async (id) => {
       const capabilities = { text: true, json: true, vision: true, errors: {} };
       db.prepare("UPDATE model_configs SET capability_json=?, capability_checked_at=? WHERE id=?")
@@ -247,10 +196,10 @@ describe("model pool administration", () => {
   });
 
   it("removes members with reason metadata and requires fresh verification after restore", () => {
-    createDashScopeProvider();
-    const created = installQianwenFreePool().created;
-    const [first, second] = created;
-    db.prepare(`UPDATE model_configs SET pool_enabled=1, capability_json=?, capability_checked_at=?
+    const provider = createDashScopeProvider();
+    const first = createPoolMember(provider.id, { poolEnabled: true }).id;
+    const second = createPoolMember(provider.id, { poolEnabled: true }).id;
+    db.prepare(`UPDATE model_configs SET capability_json=?, capability_checked_at=?
       WHERE id IN (?,?)`)
       .run(JSON.stringify({ text: true, json: true, vision: true }), Date.now(), first, second);
 
@@ -275,28 +224,27 @@ describe("model pool administration", () => {
   });
 
   it("enabling a previously removed general member after verification clears the removal metadata", async () => {
-    createDashScopeProvider();
-    const [id] = installQianwenFreePool().created
-      .filter((candidate) => listPoolMembers().find((member) => member.id === candidate)?.memberType === "general");
-    removePoolMembers([id], { reason: "maintenance" });
+    const provider = createDashScopeProvider();
+    const created = createPoolMember(provider.id, { poolEnabled: false });
+    removePoolMembers([created.id], { reason: "maintenance" });
     vi.mocked(testModelCapabilities).mockResolvedValueOnce({
-      model: "qwen3-vl-plus",
-      purpose: "vision",
+      model: created.model,
+      purpose: created.purpose,
       capabilities: { text: true, json: true, vision: true, errors: {} },
       checkedAt: "2026-09-16T00:00:00.000Z",
     });
 
-    await expect(verifyPoolMembers([id], { enablePassed: true })).resolves.toEqual([
-      expect.objectContaining({ id, passed: true }),
+    await expect(verifyPoolMembers([created.id], { enablePassed: true })).resolves.toEqual([
+      expect.objectContaining({ id: created.id, passed: true }),
     ]);
-    const member = listPoolMembers().find((item) => item.id === id)!;
+    const member = listPoolMembers().find((item) => item.id === created.id)!;
     expect(member.poolEnabled).toBe(true);
     expect(member.poolRemovedAt).toBeUndefined();
   });
 
   it("rejects duplicate, unknown, empty and oversized member selections", () => {
-    createDashScopeProvider();
-    const [id] = installQianwenFreePool().created;
+    const provider = createDashScopeProvider();
+    const id = createPoolMember(provider.id).id;
     expect(() => removePoolMembers([id, id], { reason: "maintenance" })).toThrow("成员 ID 不能重复");
     expect(() => restorePoolMembers(["missing-member"])).toThrow("模型池成员不存在");
     expect(() => removePoolMembers([], { reason: "maintenance" })).toThrow();
@@ -305,11 +253,12 @@ describe("model pool administration", () => {
 
   it("reads summaries, validates settings, and filters newest usage events", () => {
     const provider = createDashScopeProvider();
-    const [id] = installQianwenFreePool().created;
+    const member = createPoolMember(provider.id, { purpose: "vision" });
+    createPoolMember(provider.id, { purpose: "text" });
     expect(getPoolSummary()).toMatchObject({
-      total: QIANWEN_FREE_POOL_PRESET.length,
-      vision: expect.objectContaining({ total: 22 }),
-      text: expect.objectContaining({ total: 29 }),
+      total: 2,
+      vision: expect.objectContaining({ total: 1 }),
+      text: expect.objectContaining({ total: 1 }),
     });
 
     expect(updateModelPoolSettings({
@@ -327,9 +276,24 @@ describe("model pool administration", () => {
     const insert = db.prepare(`INSERT INTO model_usage_events
       (id,model_config_id,provider_id,purpose,event_type,accounted_tokens,created_at)
       VALUES (?,?,?,?,?,?,?)`);
-    insert.run("older", id, provider.id, "vision", "failure", 0, "2026-09-16T01:00:00.000Z");
-    insert.run("newer", id, provider.id, "vision", "success", 12, "2026-09-16T02:00:00.000Z");
-    expect(listModelUsageEvents({ purpose: "vision", modelConfigId: id, limit: 1 }))
+    insert.run("older", member.id, provider.id, "vision", "failure", 0, "2026-09-16T01:00:00.000Z");
+    insert.run("newer", member.id, provider.id, "vision", "success", 12, "2026-09-16T02:00:00.000Z");
+    expect(listModelUsageEvents({ purpose: "vision", modelConfigId: member.id, limit: 1 }))
       .toEqual([expect.objectContaining({ id: "newer", eventType: "success", accountedTokens: 12 })]);
+  });
+
+  it("places paid purpose defaults at the end while preserving member priority", () => {
+    const provider = createDashScopeProvider();
+    const free = createPoolMember(provider.id, { purpose: "text", poolEnabled: true });
+    const paid = createModelConfig({
+      name: "paid fallback",
+      providerId: provider.id,
+      baseUrl: provider.baseUrl,
+      model: "paid-fallback",
+      purpose: "text",
+      supportsVision: false,
+    });
+    db.prepare("UPDATE model_configs SET is_purpose_default=1, priority=0 WHERE id=?").run(paid.id);
+    expect(listPoolMembers("text").map((item) => item.id)).toEqual([free.id, paid.id]);
   });
 });

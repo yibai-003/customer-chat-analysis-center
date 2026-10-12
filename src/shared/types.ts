@@ -578,7 +578,7 @@ export interface ModelConfig {
   capabilityEligible: boolean;
   quotaBlocked: boolean;
   poolRemovedAt?: string;
-  poolRemovedReason?: "verify_failed" | "unstable" | "quota" | "maintenance";
+  poolRemovedReason?: "verify_failed" | "unstable" | "quota" | "maintenance" | "sync_unavailable";
   poolRemovedNote?: string;
 }
 

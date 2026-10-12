@@ -1,4 +1,3 @@
-import crypto from "node:crypto";
 import { z } from "zod";
 import type {
   ModelConfig,
@@ -10,12 +9,6 @@ import { db } from "../db/client";
 import { testModelCapabilities } from "./model-config-service";
 import { classifyModelError } from "../ai/openai-compatible-client";
 import { mapModelConfigRow } from "./model-provider-service";
-import {
-  QIANWEN_FREE_POOL_PRESET,
-  QIANWEN_FREE_POOL_PRESET_VERSION,
-} from "./qianwen-free-pool-preset";
-
-const QIANWEN_FREE_POOL_PRESET_KEY = "qianwen-free-pool";
 const MAX_VERIFICATION_IDS = 50;
 const VERIFICATION_CONCURRENCY = 2;
 
@@ -41,120 +34,14 @@ export interface PoolVerificationOptions {
   enablePassed: boolean;
 }
 
-function enabledDashScopeProvider() {
-  const providers = db.prepare("SELECT * FROM model_providers WHERE is_enabled=1 ORDER BY created_at, id")
-    .all() as any[];
-  return providers.find((provider) => {
-    try {
-      return new URL(provider.base_url).hostname.toLowerCase() === "dashscope.aliyuncs.com";
-    } catch {
-      return false;
-    }
-  });
-}
-
-export function installQianwenFreePool(): {
-  created: string[];
-  updated: string[];
-  needsVerification: string[];
-} {
-  const provider = enabledDashScopeProvider();
-  if (!provider) throw new Error("请先配置并启用千问服务商凭证");
-  const result = { created: [] as string[], updated: [] as string[], needsVerification: [] as string[] };
-  const now = new Date().toISOString();
-
-  db.transaction(() => {
-    const findExisting = db.prepare(`SELECT * FROM model_configs
-      WHERE provider_id=? AND purpose=? AND model=? ORDER BY created_at, id LIMIT 1`);
-    const createMember = db.prepare(`INSERT INTO model_configs (
-      id,name,base_url,api_key_ciphertext,provider_id,model,purpose,is_purpose_default,
-      supports_vision,temperature,max_tokens,is_default,is_enabled,created_at,updated_at,
-      pool_enabled,billing_mode,quality_tier,priority,thinking_mode,member_type,
-      quota_total_tokens,quota_used_tokens,quota_expires_at,quota_safety_ratio,
-      capability_json,capability_checked_at,preset_key,preset_version
-    ) VALUES (?,?,?,?,?,?,?,0,?,0.2,1500,0,1,?,?,0,'free',?,?,?,?,?,?,?,0.95,NULL,NULL,?,?)`);
-    const adoptMember = db.prepare(`UPDATE model_configs SET
-      billing_mode='free', quality_tier=?, priority=?, thinking_mode=?, member_type=?,
-      quota_total_tokens=?, quota_used_tokens=CASE
-        WHEN preset_key IS NULL AND quota_used_tokens=0 THEN ? ELSE quota_used_tokens END,
-      quota_expires_at=?, quota_safety_ratio=0.95, preset_key=?, preset_version=?, updated_at=?
-      WHERE id=?`);
-    const updateMember = db.prepare(`UPDATE model_configs SET
-      quality_tier=?, priority=?, thinking_mode=?, member_type=?, quota_total_tokens=?,
-      quota_expires_at=?, quota_safety_ratio=0.95, preset_version=?, updated_at=?
-      WHERE id=?`);
-
-    for (const preset of QIANWEN_FREE_POOL_PRESET) {
-      const existing = findExisting.get(provider.id, preset.purpose, preset.model) as any;
-      if (!existing) {
-        const id = crypto.randomUUID();
-        createMember.run(
-          id,
-          preset.model,
-          provider.base_url,
-          provider.api_key_ciphertext,
-          provider.id,
-          preset.model,
-          preset.purpose,
-          preset.purpose === "vision" ? 1 : 0,
-          now,
-          now,
-          preset.qualityTier,
-          preset.priority,
-          preset.thinkingMode ? 1 : 0,
-          preset.memberType,
-          preset.quotaTotalTokens,
-          preset.initialUsedTokens ?? 0,
-          preset.quotaExpiresAt,
-          QIANWEN_FREE_POOL_PRESET_KEY,
-          QIANWEN_FREE_POOL_PRESET_VERSION,
-        );
-        result.created.push(id);
-        result.needsVerification.push(id);
-        continue;
-      }
-
-      if (existing.preset_key == null) {
-        adoptMember.run(
-          preset.qualityTier,
-          preset.priority,
-          preset.thinkingMode ? 1 : 0,
-          preset.memberType,
-          preset.quotaTotalTokens,
-          preset.initialUsedTokens ?? 0,
-          preset.quotaExpiresAt,
-          QIANWEN_FREE_POOL_PRESET_KEY,
-          QIANWEN_FREE_POOL_PRESET_VERSION,
-          now,
-          existing.id,
-        );
-      } else {
-        updateMember.run(
-          preset.qualityTier,
-          preset.priority,
-          preset.thinkingMode ? 1 : 0,
-          preset.memberType,
-          preset.quotaTotalTokens,
-          preset.quotaExpiresAt,
-          QIANWEN_FREE_POOL_PRESET_VERSION,
-          now,
-          existing.id,
-        );
-      }
-      result.updated.push(existing.id);
-      if (!existing.capability_json || !existing.capability_checked_at) {
-        result.needsVerification.push(existing.id);
-      }
-    }
-  })();
-
-  return result;
-}
-
 export function listPoolMembers(purpose?: ModelPurpose): ModelConfig[] {
   const rows = purpose
-    ? db.prepare(`${modelWithProviderSql} WHERE m.purpose=? ORDER BY m.priority, m.created_at, m.id`).all(purpose)
-    : db.prepare(`${modelWithProviderSql} ORDER BY m.purpose, m.priority, m.created_at, m.id`).all();
+    ? db.prepare(`${modelWithProviderSql} WHERE m.purpose=? ORDER BY
+        CASE WHEN m.billing_mode='paid' AND m.is_purpose_default=1 THEN 1 ELSE 0 END,
+        m.priority, m.created_at, m.id`).all(purpose)
+    : db.prepare(`${modelWithProviderSql} ORDER BY m.purpose,
+        CASE WHEN m.billing_mode='paid' AND m.is_purpose_default=1 THEN 1 ELSE 0 END,
+        m.priority, m.created_at, m.id`).all();
   return (rows as any[]).map(mapModelConfigRow);
 }
 
