@@ -940,6 +940,46 @@ describe("targeted record analysis", () => {
 });
 
 describe("App record pagination", () => {
+  it("opens run settings before retrying failed records and posts the paid-token budget", async () => {
+    const failedJob = { ...jobs[0], status: "failed" as const, failedRecords: 1 };
+    const fallback = responseFor;
+    responseFor = (url, init) => {
+      if (url === "/api/jobs" && !init?.method) return jsonResponse([failedJob, jobs[1]]);
+      if (url === "/api/jobs/job-1" && !init?.method) return jsonResponse(failedJob);
+      if (url === "/api/jobs/job-1/retry-failed" && init?.method === "POST") {
+        return jsonResponse({ ...failedJob, status: "processing" });
+      }
+      return fallback(url, init);
+    };
+    window.localStorage.setItem("analysis-paid-token-budget:job-1", "6000");
+    await act(async () => root.render(<App />));
+    await waitFor(() => expect(host.textContent).toContain("重试失败"));
+
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>(".content-actions button")]
+        .find((button) => button.textContent === "重试失败")?.click();
+    });
+    await waitFor(() => expect(host.textContent).toContain("本次只重试失败记录"));
+    expect(host.querySelector<HTMLInputElement>('input[aria-label="最大付费 Token"]')?.value).toBe("6000");
+
+    const maxPaidTokens = host.querySelector<HTMLInputElement>('input[aria-label="最大付费 Token"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(maxPaidTokens, "8000");
+      maxPaidTokens.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => {
+      [...host.querySelectorAll<HTMLButtonElement>(".analysis-run-modal button")]
+        .find((button) => button.textContent === "按此配置重试失败")?.click();
+    });
+
+    await waitFor(() => expect(requests).toContain("/api/jobs/job-1/retry-failed"));
+    const retryRequest = requestOptions.find((request) => (
+      request.url === "/api/jobs/job-1/retry-failed" && request.init?.method === "POST"
+    ));
+    expect(JSON.parse(String(retryRequest?.init?.body))).toMatchObject({ maxPaidTokens: 8000 });
+    window.localStorage.removeItem("analysis-paid-token-budget:job-1");
+  });
+
   it("loads capacity before batch analysis and posts the confirmed run options", async () => {
     const fallback = responseFor;
     responseFor = (url, init) => {

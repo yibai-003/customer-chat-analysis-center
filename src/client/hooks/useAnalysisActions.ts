@@ -7,6 +7,30 @@ import type { useRecordWorkspace } from "./useRecordWorkspace";
 import type { JobOperationHelpers } from "./workspace-types";
 
 type AnalysisRunOptions = Required<Pick<AnalysisJobOptions, "concurrency" | "batchSize" | "maxPaidTokens">>;
+const lastMaxPaidTokensByJob = new Map<string, number>();
+const paidTokenBudgetStorageKey = (jobId: string) => `analysis-paid-token-budget:${jobId}`;
+
+function getLastMaxPaidTokens(jobId: string): number {
+  try {
+    const stored = Number(window.localStorage.getItem(paidTokenBudgetStorageKey(jobId)));
+    if (Number.isSafeInteger(stored) && stored >= 0 && stored <= 100_000_000) {
+      lastMaxPaidTokensByJob.set(jobId, stored);
+      return stored;
+    }
+  } catch {
+    // Storage may be disabled; the run can still use the zero default.
+  }
+  return lastMaxPaidTokensByJob.get(jobId) ?? 0;
+}
+
+function rememberMaxPaidTokens(jobId: string, value: number) {
+  lastMaxPaidTokensByJob.set(jobId, value);
+  try {
+    window.localStorage.setItem(paidTokenBudgetStorageKey(jobId), String(value));
+  } catch {
+    // Storage may be disabled; keep the in-memory value for this session.
+  }
+}
 type TargetedSummary = { selected: number; executable: number; skipped: number };
 const targetedNotice = (summary: TargetedSummary) =>
   `已选择 ${summary.selected} 条：可执行 ${summary.executable} 条，跳过 ${summary.skipped} 条`;
@@ -59,6 +83,11 @@ export function useAnalysisActions(deps: {
     executable: number;
     skipped: number;
   } | null>(null);
+  const [retryRunOptions, setRetryRunOptions] = useState<{
+    jobId: string;
+    capacity: AnalysisCapacity;
+    maxPaidTokens: number;
+  } | null>(null);
 
   const analyzeRecord = async (recordId: string) => {
     if (!job || !currentSection) return;
@@ -110,6 +139,7 @@ export function useAnalysisActions(deps: {
 
   const startBatchAnalysis = async (options: AnalysisRunOptions) => {
     if (!job || !currentSection) return;
+    rememberMaxPaidTokens(job.id, options.maxPaidTokens);
     setAnalysisCapacity(null);
     const operation = captureJobOperation();
     const operationJobId = job.id;
@@ -173,8 +203,30 @@ export function useAnalysisActions(deps: {
     } finally { finishBusyOperation(operation); }
   };
 
-  const taskAction = async (action: "pause" | "cancel" | "retry-failed") => {
+  const taskAction = async (action: "pause" | "cancel" | "retry-failed", options?: AnalysisRunOptions) => {
     if (!job || taskActionBusy) return;
+    if (action === "retry-failed" && !options) {
+      const operation = captureJobOperation();
+      const operationJobId = job.id;
+      startTaskActionOperation(operation);
+      setNotice("");
+      try {
+        const capacity = await api<AnalysisCapacity>("/api/system/analysis-capacity");
+        if (!isJobOperationCurrent(operation)) return;
+        setRetryRunOptions({
+          jobId: operationJobId,
+          capacity,
+          maxPaidTokens: getLastMaxPaidTokens(operationJobId),
+        });
+      } catch (error) {
+        if (isJobOperationCurrent(operation)) {
+          setNotice(error instanceof Error ? error.message : "系统容量指标暂时不可用");
+        }
+      } finally {
+        finishTaskActionOperation(operation);
+      }
+      return;
+    }
     const operation = captureJobOperation();
     const operationJobId = job.id;
     const pollSuspension = action === "retry-failed"
@@ -186,6 +238,7 @@ export function useAnalysisActions(deps: {
       await api(`/api/jobs/${operationJobId}/${action}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        ...(action === "retry-failed" && options ? { body: JSON.stringify(options) } : {}),
       });
       actionAccepted = true;
       if (action !== "retry-failed") cancelAnalysisPoll(operationJobId);
@@ -210,6 +263,15 @@ export function useAnalysisActions(deps: {
     startBatchAnalysis,
     retryField,
     taskAction,
+    retryRunOptions,
+    confirmRetryFailed: (options: AnalysisRunOptions) => {
+      if (!retryRunOptions || retryRunOptions.jobId !== job?.id) return;
+      const retryJobId = retryRunOptions.jobId;
+      rememberMaxPaidTokens(retryJobId, options.maxPaidTokens);
+      setRetryRunOptions(null);
+      void taskAction("retry-failed", options);
+    },
+    cancelRetryFailed: () => setRetryRunOptions(null),
     pendingTargetedCount,
     targetedSummary,
   };

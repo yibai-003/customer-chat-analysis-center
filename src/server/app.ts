@@ -4,6 +4,7 @@ import { projectRoot } from "./environment";
 import { readRuntimeVersion, type RuntimeVersion } from "./runtime-version";
 import { getReadinessStatus, type ReadinessStatus } from "./services/readiness-service";
 import express from "express";
+import { z } from "zod";
 import fs from "node:fs";
 import path from "node:path";
 import multer from "multer";
@@ -45,6 +46,12 @@ import {
   updateDraftSectionVersion,
 } from "./services/section-config-version-service";
 import { createRouteResponders } from "./http/route-response";
+
+const retryFailedOptionsSchema = z.object({
+  concurrency: z.number().int().min(1).max(6).optional(),
+  batchSize: z.number().int().min(5).max(100).optional(),
+  maxPaidTokens: z.number().int().min(0).max(100_000_000).optional(),
+}).strict();
 
 interface AppDependencies {
   knowledgeSync?: KnowledgeSync;
@@ -366,7 +373,8 @@ export function createApp(dependencies: AppDependencies = {}) {
   });
   app.post("/api/jobs/:id/retry-failed", canRetryFailed, async (req, res) => {
     try {
-      const started = await (dependencies.retryFailedJobStarter ?? retryFailedJob)(req.params.id);
+      const options = retryFailedOptionsSchema.parse(req.body ?? {});
+      const started = await (dependencies.retryFailedJobStarter ?? retryFailedJob)(req.params.id, options);
       if (started) {
         void started.completion.catch((error) => console.error("失败记录重试失败", error));
         auditRequest(req, { action: "task.retry_failed", targetType: "job", targetId: req.params.id });
