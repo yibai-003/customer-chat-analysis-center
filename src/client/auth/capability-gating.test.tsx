@@ -56,7 +56,7 @@ const textModel = {
   poolEnabled: true,
   capabilityEligible: true,
   quotaBlocked: false,
-  billingMode: "free",
+  billingMode: "paid",
   qualityTier: "A",
   priority: 0,
   thinkingMode: false,

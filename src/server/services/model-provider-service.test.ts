@@ -214,13 +214,16 @@ describe("model provider credentials", () => {
       baseUrl: "https://provider-test.example/v1",
       apiKey: "provider-test-secret",
     });
-    createModelConfig({
+    const member = createModelConfig({
       name: "连接测试成员",
       providerId: provider.id,
       baseUrl: "https://unused.example/v1",
       model: "provider-test-model",
       purpose: "text",
     });
+    db.prepare(`UPDATE model_configs SET pool_enabled=1, billing_mode='paid',
+      capability_json=?, capability_checked_at=? WHERE id=?`)
+      .run(JSON.stringify({ text: true, json: true, vision: false }), Date.now(), member.id);
     vi.mocked(requestModel).mockResolvedValueOnce({
       response: new Response("", { status: 200 }),
       rawText: JSON.stringify({ choices: [{ message: { content: "OK" } }] }),
@@ -234,7 +237,7 @@ describe("model provider credentials", () => {
     expect(JSON.stringify(tested)).not.toContain("provider-test-secret");
   });
 
-  it("tests a provider with the highest-priority usable free member before its paid default", async () => {
+  it("tests a provider with its paid default before preserved free members", async () => {
     const provider = createModelProvider({
       name: "免费优先测试供应商",
       baseUrl: "https://provider-free-first.example/v1",
@@ -271,13 +274,14 @@ describe("model provider credentials", () => {
 
     await expect(testModelProvider(provider.id)).resolves.toMatchObject({
       success: true,
-      model: "free-first-model",
+      model: "paid-default-model",
     });
     const request = vi.mocked(requestModel).mock.calls.at(-1)?.[1];
-    expect(JSON.parse(String(request?.body)).model).toBe("free-first-model");
+    expect(JSON.parse(String(request?.body)).model).toBe("paid-default-model");
   });
 
-  it("marks an exhausted free member and continues testing the next free member", async () => {
+  it("does not test preserved free members", async () => {
+    vi.mocked(requestModel).mockReset();
     const provider = createModelProvider({
       name: "免费额度切换供应商",
       baseUrl: "https://provider-quota-switch.example/v1",
@@ -298,35 +302,12 @@ describe("model provider credentials", () => {
       purpose: "text",
     });
     const capability = JSON.stringify({ text: true, json: true, vision: false });
-    const prepareMember = db.prepare(`UPDATE model_configs SET pool_enabled=1,
-      billing_mode='free', priority=?, quota_total_tokens=1000000,
-      quota_used_tokens=0, quota_expires_at='2099-10-08T23:59:59+08:00',
-      capability_json=?, capability_checked_at=? WHERE id=?`);
-    prepareMember.run(10, capability, Date.now(), first.id);
-    prepareMember.run(20, capability, Date.now(), second.id);
-    vi.mocked(requestModel)
-      .mockResolvedValueOnce({
-        response: new Response("", { status: 429 }),
-        rawText: JSON.stringify({
-          error: { message: "Free quota exhausted. Please add funds." },
-        }),
-        attemptsUsed: 1,
-      })
-      .mockResolvedValueOnce({
-        response: new Response("", { status: 200 }),
-        rawText: JSON.stringify({ choices: [{ message: { content: "OK" } }] }),
-        attemptsUsed: 1,
-      });
+    db.prepare(`UPDATE model_configs SET pool_enabled=1, billing_mode='free',
+      capability_json=?, capability_checked_at=? WHERE id IN (?,?)`)
+      .run(capability, Date.now(), first.id, second.id);
 
-    await expect(testModelProvider(provider.id)).resolves.toMatchObject({
-      success: true,
-      model: "quota-second-model",
-    });
-    expect(vi.mocked(requestModel).mock.calls.slice(-2).map((call) =>
-      JSON.parse(String(call[1].body)).model
-    )).toEqual(["quota-first-model", "quota-second-model"]);
-    expect(db.prepare("SELECT quota_exhausted_at FROM model_configs WHERE id=?").get(first.id))
-      .toEqual({ quota_exhausted_at: expect.any(String) });
+    await expect(testModelProvider(provider.id)).rejects.toThrow("没有可用于连接测试的模型");
+    expect(vi.mocked(requestModel)).not.toHaveBeenCalled();
     expect(listModelProviders().find((item) => item.id === provider.id)?.isEnabled).toBe(true);
   });
 

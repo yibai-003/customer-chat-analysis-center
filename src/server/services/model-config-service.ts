@@ -283,7 +283,8 @@ function poolMemberSchedulable(
 function getModelReadinessForPurpose(purpose: "vision" | "text", now: number) {
   const poolMembers = listPoolMemberStatuses(purpose);
   if (!poolMembers.length) {
-    return modelVerification(getModelsForPurpose(purpose)[0], now);
+    const fallback = getModelsForPurpose(purpose).find((member) => member.billingMode === "paid");
+    return modelVerification(fallback, now);
   }
 
   const checks = poolMembers.map((member) => ({
@@ -338,7 +339,7 @@ export function getModelReadinessActions(now = Date.now()) {
     ))) {
       continue;
     }
-    const configured = getModelsForPurpose(purpose);
+    const configured = getModelsForPurpose(purpose).filter((member) => member.billingMode === "paid");
     const defaults = configured.filter((member) => member.isPurposeDefault);
     for (const member of defaults.length ? defaults : configured.slice(0, 1)) {
       if (!modelMemberActionable(member, now)) continue;

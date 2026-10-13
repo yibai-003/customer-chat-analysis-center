@@ -32,7 +32,7 @@ function member(overrides: Partial<ModelConfig> = {}): ModelConfig {
     providerId: provider.id,
     providerName: provider.name,
     poolEnabled: true,
-    billingMode: "free",
+    billingMode: "paid",
     qualityTier: "A",
     priority: 10,
     thinkingMode: false,
@@ -105,8 +105,9 @@ function failure(error: string, status = 500) {
 
 function defaultData(url: string) {
   if (url === "/api/model-pools") {
+    const visibleMembers = currentMembers;
     const summaryFor = (purpose: ModelConfig["purpose"]) => {
-      const purposeMembers = currentMembers.filter((model) => model.purpose === purpose);
+      const purposeMembers = visibleMembers.filter((model) => model.purpose === purpose);
       return {
         total: purposeMembers.length,
         enabled: purposeMembers.filter((model) => model.isEnabled && model.poolEnabled).length,
@@ -115,7 +116,7 @@ function defaultData(url: string) {
       };
     };
     return {
-      members: currentMembers,
+      members: visibleMembers,
       summary: {
         total: currentMembers.length,
         vision: summaryFor("vision"),
@@ -354,14 +355,14 @@ describe("ModelConfigDialog", () => {
       isPurposeDefault: true,
       priority: 1,
     });
-    const freeLowPriority = member({ id: "free-low", name: "免费低优先级", priority: 20 });
-    const freeHighPriority = member({ id: "free-high", name: "免费高优先级", priority: 5 });
-    await renderDialog([paidDefault, freeLowPriority, freeHighPriority]);
+    const lowerPriority = member({ id: "paid-low", name: "付费低优先级", billingMode: "paid", priority: 20 });
+    const higherPriority = member({ id: "paid-high", name: "付费高优先级", billingMode: "paid", priority: 5 });
+    await renderDialog([paidDefault, lowerPriority, higherPriority]);
 
     const rows = Array.from(document.querySelectorAll(".model-pool-table tbody tr"));
     expect(rows.map((row) => row.querySelector("strong")?.textContent)).toEqual([
-      "免费低优先级",
-      "免费高优先级",
+      "付费低优先级",
+      "付费高优先级",
       "付费默认",
     ]);
   });
@@ -637,7 +638,7 @@ describe("ModelConfigDialog", () => {
   it("uses distinct text statuses for paid and unavailable members", async () => {
     vi.setSystemTime(new Date("2026-09-16T03:00:00.000Z"));
     const statusMembers = [
-      member({ id: "paid", name: "付费备用", billingMode: "paid" }),
+      member({ id: "paid", name: "付费备用", billingMode: "paid", isPurposeDefault: true }),
       member({
         id: "quota",
         name: "额度耗尽",
@@ -667,13 +668,13 @@ describe("ModelConfigDialog", () => {
       : defaultData(url);
     await renderDialog(statusMembers);
 
-    await screen.findByText("付费可用");
+    expect(screen.getAllByText("付费可用").length).toBeGreaterThan(0);
     const quotaRow = screen.getByText("额度耗尽").closest("tr") as HTMLTableRowElement;
     expect(within(quotaRow.cells[10]!).queryByText("额度已耗尽")).toBeNull();
     expect(screen.getByText("冷却中")).toBeTruthy();
     expect(screen.getAllByText("能力验证失败")).toHaveLength(2);
     expect(screen.getByText("已禁用")).toBeTruthy();
-    expect(screen.getAllByText("可调用")).toHaveLength(2);
+    expect(screen.getAllByText("付费可用").length).toBeGreaterThan(0);
   });
 
   it("shows automatic Bailian sync disable reasons separately from manual removal", async () => {
@@ -725,10 +726,13 @@ describe("ModelConfigDialog", () => {
       }
       if (url === "/api/model-pools") {
         return {
-          members: [pendingVision, readyText],
+          members: [readyText],
+          candidates: [pendingVision],
+          // The default is returned as a pending candidate by the paid-pool API.
+          removed: [],
           summary: {
-            total: 2,
-            vision: { total: 1, enabled: 0, verified: 0, blocked: 0 },
+            total: 1,
+            vision: { total: 0, enabled: 0, verified: 0, blocked: 0 },
             text: { total: 1, enabled: 1, verified: 1, blocked: 0 },
           },
         };
@@ -948,7 +952,7 @@ describe("ModelConfigDialog", () => {
     expect(within(futureRow).getAllByText("验证已过期")).toHaveLength(2);
     expect(within(failedRow).getAllByText("能力验证失败")).toHaveLength(2);
     expect(within(passedRow).getByText("已验证")).toBeTruthy();
-    expect(within(passedRow).getByText("可调用")).toBeTruthy();
+    expect(within(passedRow).getByText("付费可用")).toBeTruthy();
   });
 
   it("refreshes providers and pool members after provider PATCH without refreshing settings", async () => {

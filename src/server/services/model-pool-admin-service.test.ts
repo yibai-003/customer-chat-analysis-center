@@ -8,6 +8,9 @@ import {
   getPoolSummary,
   listModelUsageEvents,
   listPoolMembers,
+  listPoolCandidates,
+  listRemovedPoolMembers,
+  listVisiblePoolMembers,
   removePoolMembers,
   restorePoolMembers,
   updateModelPoolSettings,
@@ -46,6 +49,7 @@ function createPoolMember(
     memberType?: "general" | "ocr";
     poolEnabled?: boolean;
     model?: string;
+    billingMode?: "free" | "paid";
   } = {},
 ) {
   const provider = db.prepare("SELECT base_url FROM model_providers WHERE id=?").get(providerId) as { base_url: string };
@@ -59,9 +63,9 @@ function createPoolMember(
     supportsVision: purpose === "vision",
   });
   db.prepare(`UPDATE model_configs SET
-    pool_enabled=?, member_type=?, billing_mode='free', quota_total_tokens=1000000,
+    pool_enabled=?, member_type=?, billing_mode=?, quota_total_tokens=1000000,
     quota_safety_ratio=0.95 WHERE id=?`)
-    .run(options.poolEnabled ? 1 : 0, options.memberType ?? "general", member.id);
+    .run(options.poolEnabled ? 1 : 0, options.memberType ?? "general", options.billingMode ?? "paid", member.id);
   return listPoolMembers().find((item) => item.id === member.id)!;
 }
 
@@ -253,8 +257,12 @@ describe("model pool administration", () => {
 
   it("reads summaries, validates settings, and filters newest usage events", () => {
     const provider = createDashScopeProvider();
-    const member = createPoolMember(provider.id, { purpose: "vision" });
-    createPoolMember(provider.id, { purpose: "text" });
+    const member = createPoolMember(provider.id, { purpose: "vision", poolEnabled: true });
+    const textMember = createPoolMember(provider.id, { purpose: "text", poolEnabled: true });
+    db.prepare(`UPDATE model_configs SET billing_mode='paid', capability_json=?, capability_checked_at=?
+      WHERE id IN (?,?)`).run(
+      JSON.stringify({ text: true, json: true, vision: true }), Date.now(), member.id, textMember.id,
+    );
     expect(getPoolSummary()).toMatchObject({
       total: 2,
       vision: expect.objectContaining({ total: 1 }),
@@ -280,6 +288,46 @@ describe("model pool administration", () => {
     insert.run("newer", member.id, provider.id, "vision", "success", 12, "2026-09-16T02:00:00.000Z");
     expect(listModelUsageEvents({ purpose: "vision", modelConfigId: member.id, limit: 1 }))
       .toEqual([expect.objectContaining({ id: "newer", eventType: "success", accountedTokens: 12 })]);
+  });
+
+  it("keeps preserved free and unverified rows out of the visible pool", () => {
+    const provider = createDashScopeProvider();
+    const free = createPoolMember(provider.id, { purpose: "text", poolEnabled: true, billingMode: "free" });
+    const paid = createPoolMember(provider.id, { purpose: "text", poolEnabled: true });
+    const unverified = createPoolMember(provider.id, { purpose: "text", poolEnabled: true, model: "unverified-candidate" });
+    const removed = createPoolMember(provider.id, { purpose: "text", poolEnabled: true, model: "removed-candidate" });
+    db.prepare(`UPDATE model_configs SET billing_mode='paid', capability_json=?, capability_checked_at=?
+      WHERE id=?`).run(JSON.stringify({ text: true, json: true, vision: false }), Date.now(), paid.id);
+    db.prepare("UPDATE model_configs SET billing_mode='paid' WHERE id IN (?,?)").run(unverified.id, removed.id);
+    removePoolMembers([removed.id], { reason: "maintenance" });
+
+    expect(listPoolMembers("text").map((item) => item.id)).toEqual(expect.arrayContaining([free.id, paid.id]));
+    expect(listVisiblePoolMembers("text").map((item) => item.id)).toEqual([paid.id]);
+    const candidates = listPoolCandidates("text").map((item) => item.id);
+    expect(candidates).toContain(unverified.id);
+    expect(candidates).not.toContain(removed.id);
+    expect(listRemovedPoolMembers("text").map((item) => item.id)).toEqual([removed.id]);
+    expect(db.prepare("SELECT id FROM model_configs WHERE id=?").get(free.id)).toEqual({ id: free.id });
+    expect(db.prepare("SELECT id FROM model_configs WHERE id=?").get(removed.id)).toEqual({ id: removed.id });
+  });
+
+  it("does not re-enable preserved free rows during capability verification", async () => {
+    const provider = createDashScopeProvider();
+    const free = createPoolMember(provider.id, { purpose: "text", poolEnabled: false, billingMode: "free" });
+    vi.mocked(testModelCapabilities).mockResolvedValueOnce({
+      model: free.model,
+      purpose: free.purpose,
+      capabilities: { text: true, json: true, vision: false, errors: {} },
+      checkedAt: new Date().toISOString(),
+    });
+
+    const [result] = await verifyPoolMembers([free.id], { enablePassed: true });
+
+    expect(result?.passed).toBe(true);
+    expect(listPoolMembers("text").find((item) => item.id === free.id)).toMatchObject({
+      billingMode: "free",
+      poolEnabled: false,
+    });
   });
 
   it("places paid purpose defaults at the end while preserving member priority", () => {

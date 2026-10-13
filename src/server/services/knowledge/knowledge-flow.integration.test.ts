@@ -37,6 +37,8 @@ describe("dynamic reason knowledge flow", () => {
 
   beforeEach(() => {
     vi.useFakeTimers({ now: TEST_NOW, toFake: ["Date"] });
+    db.prepare(`UPDATE model_pool_settings SET paid_daily_token_limit=100000,
+      paid_monthly_token_limit=100000 WHERE id='default'`).run();
     db.exec(`
       DELETE FROM knowledge_match_snapshots;
       DELETE FROM analysis_field_runs;
@@ -208,33 +210,28 @@ describe("dynamic reason knowledge flow", () => {
       maxTokens: 500,
     });
     setDefaultModel(visionModel.id, "vision");
-    setDefaultModel(secondTextModel.id, "text");
+    setDefaultModel(firstTextModel.id, "text");
     const capabilityCheckedAt = Date.now();
-    const quotaExpiresAt = "2026-10-01T00:00:00.000Z";
     const enablePoolMember = db.prepare(`
       UPDATE model_configs
-      SET pool_enabled=1, billing_mode='free', priority=?,
-          quota_total_tokens=10000, quota_used_tokens=0, quota_expires_at=?,
+      SET pool_enabled=1, billing_mode='paid', priority=?,
           capability_json=?, capability_checked_at=?
       WHERE id=?
     `);
     enablePoolMember.run(
       1,
-      quotaExpiresAt,
       JSON.stringify({ text: true, json: true, vision: true, errors: {} }),
       capabilityCheckedAt,
       visionModel.id,
     );
     enablePoolMember.run(
       1,
-      quotaExpiresAt,
       JSON.stringify({ text: true, json: true, vision: false, errors: {} }),
       capabilityCheckedAt,
       firstTextModel.id,
     );
     enablePoolMember.run(
       2,
-      quotaExpiresAt,
       JSON.stringify({ text: true, json: true, vision: false, errors: {} }),
       capabilityCheckedAt,
       secondTextModel.id,

@@ -33,7 +33,7 @@ const emptySummary: PoolData["summary"] = {
 };
 
 export function ModelConfigDialog({
-  models,
+  models: _models,
   close,
   saved,
 }: {
@@ -43,7 +43,7 @@ export function ModelConfigDialog({
 }) {
   const [tab, setTab] = useState<ConsoleTab>("pool");
   const [providers, setProviders] = useState<ModelProvider[]>([]);
-  const [pool, setPool] = useState<PoolData>({ members: models, summary: emptySummary });
+  const [pool, setPool] = useState<PoolData>({ members: [], candidates: [], removed: [], summary: emptySummary });
   const [settings, setSettings] = useState<ModelPoolSettings>({
     paidDailyTokenLimit: 0,
     paidMonthlyTokenLimit: 0,

@@ -22,7 +22,7 @@ import {
   resolvePoolMembers,
   type ResolvedPoolMember,
 } from "./model-provider-service";
-import { rankEligibleModelCandidates } from "./model-pool-policy";
+import { isPoolMemberVisible, rankEligibleModelCandidates } from "./model-pool-policy";
 
 export interface ModelPoolCallOptions {
   purpose: ModelPurpose;
@@ -58,15 +58,23 @@ export function rankPoolCandidates(
 }
 
 const roundRobinLastSelected = new Map<ModelPurpose, string>();
+const SINGLE_ANALYSIS_REQUEST_LIMIT = 6;
+
+export function singleAnalysisPaidTokenBudget(fieldCount = 1) {
+  const maxTokens = (["vision", "text"] as const)
+    .flatMap((purpose) => resolvePoolMembers(purpose))
+    .filter((member) => isPoolMemberVisible(member))
+    .reduce((maximum, member) => Math.max(maximum, member.maxTokens), 0);
+  return maxTokens * SINGLE_ANALYSIS_REQUEST_LIMIT * Math.max(1, fieldCount);
+}
 
 function nextPoolCandidate(
   candidates: ResolvedPoolMember[],
   purpose: ModelPurpose,
 ) {
-  const freeCandidates = candidates.filter((member) => member.billingMode === "free");
-  const billingPool = freeCandidates.length ? freeCandidates : candidates;
-  const regularCandidates = billingPool.filter((member) => !member.isPurposeDefault);
-  const pool = regularCandidates.length ? regularCandidates : billingPool;
+  const purposeDefault = candidates.find((member) => member.isPurposeDefault);
+  if (purposeDefault) return purposeDefault;
+  const pool = candidates;
   if (!pool.length) return undefined;
 
   const previousId = roundRobinLastSelected.get(purpose);

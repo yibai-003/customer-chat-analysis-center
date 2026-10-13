@@ -9,6 +9,7 @@ import { db } from "../db/client";
 import { testModelCapabilities } from "./model-config-service";
 import { classifyModelError } from "../ai/openai-compatible-client";
 import { mapModelConfigRow } from "./model-provider-service";
+import { isPoolMemberVisible } from "./model-pool-policy";
 const MAX_VERIFICATION_IDS = 50;
 const VERIFICATION_CONCURRENCY = 2;
 
@@ -43,6 +44,27 @@ export function listPoolMembers(purpose?: ModelPurpose): ModelConfig[] {
         CASE WHEN m.billing_mode='paid' AND m.is_purpose_default=1 THEN 1 ELSE 0 END,
         m.priority, m.created_at, m.id`).all();
   return (rows as any[]).map(mapModelConfigRow);
+}
+
+export function listVisiblePoolMembers(purpose?: ModelPurpose): ModelConfig[] {
+  return listPoolMembers(purpose).filter((member) => isPoolMemberVisible(member));
+}
+
+export function listPoolCandidates(purpose?: ModelPurpose): ModelConfig[] {
+  return listPoolMembers(purpose).filter((member) => (
+    member.billingMode === "paid"
+    && member.isEnabled
+    && member.providerEnabled !== false
+    && member.memberType === "general"
+    && !member.poolRemovedAt
+    && !isPoolMemberVisible(member)
+  ));
+}
+
+export function listRemovedPoolMembers(purpose?: ModelPurpose): ModelConfig[] {
+  return listPoolMembers(purpose).filter((member) => (
+    member.billingMode === "paid" && Boolean(member.poolRemovedAt)
+  ));
 }
 
 const poolMemberPatchSchema = z.object({
@@ -92,15 +114,17 @@ function summarizePoolMembers(items: ModelConfig[]) {
     total: items.length,
     enabled: items.filter((item) => item.isEnabled && item.poolEnabled).length,
     verified: items.filter((item) => item.capabilityEligible).length,
-    blocked: items.filter((item) => item.quotaBlocked || Boolean(item.cooldownUntil)).length,
+    blocked: items.filter((item) => Boolean(item.cooldownUntil)).length,
   };
 }
 
-export function getPoolSummary() {  const members = listPoolMembers();
+export function getPoolSummary() {
+  const members = listPoolMembers();
+  const visibleMembers = members.filter((member) => isPoolMemberVisible(member));
   return {
-    total: members.length,
-    vision: summarizePoolMembers(members.filter((item) => item.purpose === "vision")),
-    text: summarizePoolMembers(members.filter((item) => item.purpose === "text")),
+    total: visibleMembers.length,
+    vision: summarizePoolMembers(visibleMembers.filter((item) => item.purpose === "vision")),
+    text: summarizePoolMembers(visibleMembers.filter((item) => item.purpose === "text")),
   };
 }
 
@@ -262,7 +286,9 @@ export async function verifyPoolMembers(
         const capabilities = checked.capabilities;
         const passed = capabilities.text && capabilities.json
           && (member.purpose === "text" || capabilities.vision);
-        if (passed && options.enablePassed && member.memberType === "general") {
+        if (passed && options.enablePassed
+          && member.billingMode === "paid"
+          && member.memberType === "general") {
           db.prepare(`UPDATE model_configs SET pool_enabled=1, pool_removed_at=NULL,
             pool_removed_reason=NULL, pool_removed_note=NULL, updated_at=? WHERE id=?`)
             .run(new Date().toISOString(), id);

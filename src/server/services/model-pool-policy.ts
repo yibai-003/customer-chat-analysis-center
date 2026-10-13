@@ -9,45 +9,34 @@ export interface ModelCandidateOptions {
   capabilityEligible?: boolean;
 }
 
-function expiryTime(member: ModelConfig) {
-  if (!member.quotaExpiresAt) return Number.POSITIVE_INFINITY;
-  const value = Date.parse(member.quotaExpiresAt);
-  return Number.isFinite(value) ? value : Number.NEGATIVE_INFINITY;
-}
-
-function remainingQuota(member: ModelConfig) {
-  return Math.max(
-    0,
-    (member.quotaTotalTokens ?? Number.MAX_SAFE_INTEGER) - member.quotaUsedTokens,
-  );
+export function isPoolMemberVisible(
+  member: Candidate,
+  capabilityEligible = member.capabilityEligible,
+) {
+  return member.billingMode === "paid"
+    && member.isEnabled
+    && member.poolEnabled
+    && member.providerEnabled !== false
+    && capabilityEligible
+    && member.memberType === "general";
 }
 
 export function isPoolMemberEligible(
   member: Candidate,
   options: ModelCandidateOptions,
 ) {
-  if (!member.isEnabled
-    || !member.poolEnabled
-    || member.providerEnabled === false
-    || !(options.capabilityEligible ?? member.capabilityEligible)
-    || member.memberType !== "general"
+  if (!isPoolMemberVisible(member, options.capabilityEligible)
     || options.failedMemberIds.has(member.id)
-    || (member.billingMode === "paid" && !options.allowPaid)) {
+    || !options.allowPaid) {
     return false;
   }
   if (member.cooldownUntil && Date.parse(member.cooldownUntil) > options.now) return false;
-  if (member.billingMode === "free") {
-    if (expiryTime(member) <= options.now) return false;
-    const safetyLimit = (member.quotaTotalTokens ?? 0) * member.quotaSafetyRatio;
-    if (member.quotaBlocked || member.quotaUsedTokens >= safetyLimit) return false;
-  }
   return true;
 }
 
 export function rankModelCandidates<T extends ModelConfig>(members: T[]): T[] {
   const tier = { A: 0, B: 1, C: 2 } as const;
   return members.toSorted((left, right) => {
-    if (left.billingMode !== right.billingMode) return left.billingMode === "free" ? -1 : 1;
     if (left.isPurposeDefault !== right.isPurposeDefault) {
       return left.isPurposeDefault ? 1 : -1;
     }
@@ -55,12 +44,6 @@ export function rankModelCandidates<T extends ModelConfig>(members: T[]): T[] {
     if (left.thinkingMode !== right.thinkingMode) return left.thinkingMode ? 1 : -1;
     if (tier[left.qualityTier] !== tier[right.qualityTier]) {
       return tier[left.qualityTier] - tier[right.qualityTier];
-    }
-    if (left.billingMode === "free") {
-      const quotaDifference = remainingQuota(right) - remainingQuota(left);
-      if (quotaDifference) return quotaDifference;
-      const expiryDifference = expiryTime(left) - expiryTime(right);
-      if (expiryDifference) return expiryDifference;
     }
     if (left.consecutiveFailures !== right.consecutiveFailures) {
       return left.consecutiveFailures - right.consecutiveFailures;
@@ -74,10 +57,17 @@ export function rankEligibleModelCandidates<T extends Candidate>(
   options: ModelCandidateOptions,
 ) {
   const eligible = members.filter((member) => isPoolMemberEligible(member, options));
-  const hasNonThinkingFree = eligible.some((member) =>
-    member.billingMode === "free" && !member.thinkingMode
-  );
-  return rankModelCandidates(eligible.filter((member) =>
-    !(hasNonThinkingFree && member.billingMode === "free" && member.thinkingMode)
-  ));
+  return rankModelCandidates(eligible);
+}
+
+export function rankDefaultFirstModelCandidates<T extends ModelConfig>(members: T[]): T[] {
+  return members.toSorted((left, right) => {
+    if (left.isPurposeDefault !== right.isPurposeDefault) {
+      return left.isPurposeDefault ? -1 : 1;
+    }
+    const rankedPair = rankModelCandidates([left, right]);
+    if (rankedPair[0].id === left.id && rankedPair[1].id === right.id) return -1;
+    if (rankedPair[0].id === right.id && rankedPair[1].id === left.id) return 1;
+    return 0;
+  });
 }

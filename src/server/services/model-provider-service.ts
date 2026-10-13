@@ -10,8 +10,7 @@ import { config } from "../config";
 import { db } from "../db/client";
 import { decryptSecret, encryptSecret, maskSecret } from "../security/secrets";
 import {
-  isPoolMemberEligible,
-  rankModelCandidates,
+  rankDefaultFirstModelCandidates,
 } from "./model-pool-policy";
 
 export interface ResolvedPoolMember extends ModelConfig {
@@ -107,6 +106,7 @@ export function mapModelConfigRow(row: any): ModelConfig {
     capabilityCheckedAt,
     providerId: row.provider_id ?? undefined,
     providerName: row.provider_name ?? undefined,
+    providerEnabled: row.provider_id ? Boolean(row.provider_enabled) : true,
     poolEnabled: Boolean(row.pool_enabled),
     billingMode: row.billing_mode === "free" ? "free" : "paid",
     qualityTier: row.quality_tier === "B" || row.quality_tier === "C" ? row.quality_tier : "A",
@@ -142,6 +142,18 @@ const modelWithProviderSql = `
 export function listModelProviders() {
   return (db.prepare("SELECT * FROM model_providers ORDER BY created_at DESC").all() as any[])
     .map(mapProviderRow);
+}
+
+function isDashScopeProvider(provider: ModelProvider) {
+  try {
+    return new URL(provider.baseUrl).hostname.toLowerCase() === "dashscope.aliyuncs.com";
+  } catch {
+    return false;
+  }
+}
+
+export function listCommonModelProviders() {
+  return listModelProviders().filter(isDashScopeProvider);
 }
 
 export function createModelProvider(raw: unknown) {
@@ -287,21 +299,14 @@ export async function testModelProvider(id: string) {
     providerEnabled: Boolean(row.provider_enabled),
   }));
   const now = Date.now();
-  const eligible = rankModelCandidates(candidates.filter((member) =>
-    isPoolMemberEligible(member, {
-      now,
-      allowPaid: true,
-      failedMemberIds: new Set(),
-    })
-  ));
-  const eligibleIds = new Set(eligible.map((member) => member.id));
-  const fallback = rankModelCandidates(candidates.filter((member) =>
-    !eligibleIds.has(member.id)
+  const eligible = rankDefaultFirstModelCandidates(candidates.filter((member) => (
+    member.billingMode === "paid"
+    && member.isEnabled
+    && member.providerEnabled
     && member.memberType === "general"
-    && !member.quotaBlocked
     && (!member.cooldownUntil || Date.parse(member.cooldownUntil) <= now)
-  ));
-  const ordered = [...eligible, ...fallback];
+  )));
+  const ordered = eligible;
   const started = Date.now();
   const testedAt = new Date().toISOString();
   let lastError = "没有可用于连接测试的模型";

@@ -3,7 +3,7 @@ import { z, ZodError } from "zod";
 import {
   createModelProvider,
   deleteModelProvider,
-  listModelProviders,
+  listCommonModelProviders,
   safeBaseUrlSchema,
   testModelProvider,
   updateModelProvider,
@@ -12,7 +12,9 @@ import {
   getModelPoolSettings,
   getPoolSummary,
   listModelUsageEvents,
-  listPoolMembers,
+  listPoolCandidates,
+  listRemovedPoolMembers,
+  listVisiblePoolMembers,
   POOL_REMOVAL_REASONS,
   removePoolMembers,
   restorePoolMembers,
@@ -135,7 +137,7 @@ export function createModelPoolRouter(): express.Router {
     ),
   });
 
-  router.get("/model-providers", canReadPool, (_req, res) => ok(res, listModelProviders()));
+  router.get("/model-providers", canReadPool, (_req, res) => ok(res, listCommonModelProviders()));
 
   router.post("/model-providers", canCreateProvider, (req, res) => {
     try {
@@ -192,7 +194,9 @@ export function createModelPoolRouter(): express.Router {
     try {
       const query = poolListQuerySchema.parse(req.query);
       return ok(res, {
-        members: listPoolMembers(query.purpose),
+        members: listVisiblePoolMembers(query.purpose),
+        candidates: listPoolCandidates(query.purpose),
+        removed: listRemovedPoolMembers(query.purpose),
         summary: getPoolSummary(),
       });
     } catch (error) {

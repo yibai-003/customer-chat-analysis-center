@@ -36,7 +36,7 @@ function model(overrides: Partial<ModelConfig> = {}): ModelConfig {
     isPurposeDefault: false,
     isEnabled: true,
     poolEnabled: true,
-    billingMode: "free",
+    billingMode: "paid",
     qualityTier: "A",
     priority: 1,
     thinkingMode: false,
@@ -80,5 +80,9 @@ describe("useModelReadiness", () => {
     for (const patch of blockedPatches) {
       expect(useModelReadiness([model(patch)], [field()]).ready).toBe(false);
     }
+  });
+
+  it("does not treat preserved free members as ready", () => {
+    expect(useModelReadiness([model({ billingMode: "free" })], [field()]).ready).toBe(false);
   });
 });

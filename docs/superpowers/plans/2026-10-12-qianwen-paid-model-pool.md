@@ -91,7 +91,7 @@
 
 **Interfaces:**
 - UI 显示“百炼千问目录同步”“按量计费/待验证”，不显示免费池安装按钮、免费额度或额度进度。
-- 付费 purpose-default 模型继续置底；新模型验证/启用入口不变。
+- 付费 purpose-default 模型在管理列表继续置底，但运行时优先于其他已验证付费模型；新模型验证/启用入口不变。
 
 - [x] **Step 1: 写 UI 失败测试**，断言旧免费安装文案不出现、按量同步提示出现、默认模型置底。
 - [x] **Step 2: 运行 `npm test -- src/client/components/ModelConfigDialog.test.tsx` 确认失败。**

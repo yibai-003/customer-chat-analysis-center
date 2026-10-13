@@ -3,6 +3,9 @@ import type { AnalysisField, ModelConfig } from "../../shared/types";
 function eligible(model: ModelConfig) {
   return model.isEnabled
     && model.poolEnabled
+    && model.billingMode === "paid"
+    && model.providerEnabled !== false
+    && model.memberType === "general"
     && model.capabilityEligible
     && !model.quotaBlocked
     && !model.cooldownUntil;

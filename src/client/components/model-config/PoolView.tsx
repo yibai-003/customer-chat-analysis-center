@@ -11,6 +11,8 @@ import { SelectMenu } from "../SelectMenu";
 type PoolSummaryItem = { total: number; enabled: number; verified: number; blocked: number };
 export type PoolData = {
   members: ModelConfig[];
+  candidates?: ModelConfig[];
+  removed?: ModelConfig[];
   summary: {
     total: number;
     vision: PoolSummaryItem;
@@ -143,6 +145,22 @@ export function PoolView({
       }),
     [pool.members, purpose],
   );
+  const candidates = useMemo(
+    () => (pool.candidates ?? pool.members.filter((model) => (
+      model.billingMode === "paid"
+      && model.isEnabled
+      && model.providerEnabled !== false
+      && model.memberType === "general"
+      && !model.poolRemovedAt
+      && (!model.capabilityEligible || !model.poolEnabled)
+    ))).filter((model) => model.purpose === purpose
+      && model.billingMode === "paid" && !model.isPurposeDefault),
+    [pool.candidates, pool.members, purpose],
+  );
+  const removedMembers = useMemo(
+    () => (pool.removed ?? []).filter((model) => model.purpose === purpose),
+    [pool.removed, purpose],
+  );
   const summary = pool.summary[purpose];
   const selectedMembers = pool.members.filter((model) => selectedIds.includes(model.id));
   const visibleSelectedCount = members.filter((model) => selectedIds.includes(model.id)).length;
@@ -156,13 +174,14 @@ export function PoolView({
     return !pool.members.some((model) => model.purpose === panelPurpose
       && eligibleForRouting(model) && !selectedIds.includes(model.id));
   });
-  const pendingDefaults = useMemo(() => pool.members.filter((model) => (
+  const pendingDefaults = useMemo(() => [...pool.members, ...(pool.candidates ?? [])].filter((model) => (
     model.isPurposeDefault
+    && model.billingMode === "paid"
     && model.isEnabled
     && model.memberType === "general"
     && (!model.capabilityEligible || !model.poolEnabled)
     && !model.cooldownUntil
-  )), [pool.members]);
+  )), [pool.candidates, pool.members]);
 
   const beginEdit = (model: ModelConfig) => {
     setEditingId(model.id);
@@ -301,8 +320,7 @@ export function PoolView({
     await refreshAfterMutation("成员状态");
   };
 
-  const restoreSelected = async () => {
-    const ids = [...selectedIds];
+  const restoreMembers = async (ids: string[]) => {
     if (!ids.length) return;
     setBulkBusy(true);
     try {
@@ -322,6 +340,8 @@ export function PoolView({
     setBulkBusy(false);
     await refreshAfterMutation("成员状态");
   };
+
+  const restoreSelected = () => restoreMembers([...selectedIds]);
 
   const toggleSelected = (id: string) => setSelectedIds((current) => (
     current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
@@ -392,6 +412,37 @@ export function PoolView({
           </p>
         </div>
       </div>
+
+      {candidates.length > 0 && (
+        <div className="pool-readiness" role="status">
+          <span>另有 {candidates.length} 个按量模型尚未加入可用池，验证通过后才会加入。</span>
+          <button
+            className="model-console-command"
+            type="button"
+            disabled={bulkBusy}
+            onClick={() => void bulkVerify(candidates.map((model) => model.id))}
+          >
+            验证待验证模型
+          </button>
+        </div>
+      )}
+
+      {removedMembers.length > 0 && (
+        <div className="pool-readiness" role="region" aria-label="已人工剔除模型">
+          <span>已人工剔除 {removedMembers.length} 个按量模型（配置和调用历史保留）。</span>
+          {removedMembers.map((model) => (
+            <button
+              key={model.id}
+              className="model-console-command"
+              type="button"
+              disabled={bulkBusy}
+              onClick={() => void restoreMembers([model.id])}
+            >
+              恢复 {model.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="pool-sync-guide" role="region" aria-label="百炼千问目录同步">
         <div>

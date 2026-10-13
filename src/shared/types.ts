@@ -558,6 +558,7 @@ export interface ModelConfig {
   capabilityCheckedAt?: string;
   providerId?: string;
   providerName?: string;
+  providerEnabled?: boolean;
   poolEnabled: boolean;
   billingMode: ModelBillingMode;
   qualityTier: ModelQualityTier;

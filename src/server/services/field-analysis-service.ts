@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import { assertAnalysisActive } from "./analysis-cancellation";
-import { withModelBudget } from "../ai/model-budget";
+import { withModelBudget, withPaidTokenBudget } from "../ai/model-budget";
 import { withSingleAnalysisRun } from "./single-analysis-run";
 import { assertJobSection, getRecord, updateRecord } from "../db/repositories";
 import { createFieldRun, getFieldResultContextForFields } from "./field-run-service";
@@ -15,6 +15,7 @@ import {
 } from "../../shared/types";
 import type { FieldExecutionState } from "./execution";
 import { getJobSectionConfigVersion } from "./section-config-version-service";
+import { singleAnalysisPaidTokenBudget } from "./model-pool-service";
 
 export { executeFieldGraph } from "./execution";
 export type { FieldExecutionState } from "./execution";
@@ -74,7 +75,10 @@ export async function analyzeRecordFields(recordId: string, sectionId: string): 
   return withSingleAnalysisRun(
     recordId,
     sectionId,
-    () => withModelBudget(() => analyzeRecordFieldsWithinRun(recordId, sectionId)),
+    () => withPaidTokenBudget(
+      () => withModelBudget(() => analyzeRecordFieldsWithinRun(recordId, sectionId)),
+      { maxPaidTokens: singleAnalysisPaidTokenBudget(configuredFieldCount(recordId, sectionId)) },
+    ),
   );
 }
 
@@ -84,6 +88,14 @@ function latestRunsByField(record: NonNullable<ReturnType<typeof getRecord>>, se
     if (run.sectionId === sectionId && !latest.has(run.fieldId)) latest.set(run.fieldId, run);
   }
   return latest;
+}
+
+function configuredFieldCount(recordId: string, sectionId: string) {
+  const record = getRecord(recordId);
+  if (!record) return 1;
+  const version = getJobSectionConfigVersion(record.jobId);
+  if (!version || version.sectionId !== sectionId) return 1;
+  return version.fieldsSnapshot.filter((field) => field.isEnabled).length;
 }
 
 function descendantKeys(fields: AnalysisField[], startingKeys: Set<string>) {
@@ -173,7 +185,10 @@ export async function analyzeField(recordId: string, sectionId: string, fieldKey
   return withSingleAnalysisRun(
     recordId,
     sectionId,
-    () => withModelBudget(() => analyzeFieldWithinRun(recordId, sectionId, fieldKey)),
+    () => withPaidTokenBudget(
+      () => withModelBudget(() => analyzeFieldWithinRun(recordId, sectionId, fieldKey)),
+      { maxPaidTokens: singleAnalysisPaidTokenBudget(configuredFieldCount(recordId, sectionId)) },
+    ),
   );
 }
 

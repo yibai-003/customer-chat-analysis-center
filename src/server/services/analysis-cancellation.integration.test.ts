@@ -134,17 +134,23 @@ describe("actual analysis cancellation", () => {
         name: "cancel transport", baseUrl, apiKey: "test-secret", model: "local",
         purpose: "text", supportsVision: false,
       });
-      db.prepare(`UPDATE model_configs SET pool_enabled=1, billing_mode='free',
-        quota_total_tokens=1000, quota_used_tokens=0, capability_json=?,
+      db.prepare(`UPDATE model_configs SET pool_enabled=1, billing_mode='paid',
+        capability_json=?,
         capability_checked_at=? WHERE id=?`).run(
         JSON.stringify({ text: true, json: true, vision: false }),
         new Date().toISOString(),
         member.id,
       );
+      db.prepare(`UPDATE model_pool_settings SET paid_daily_token_limit=10000,
+        paid_monthly_token_limit=10000 WHERE id='default'`).run();
       const { callModelPool: route } = await vi.importActual<typeof import("./model-pool-service")>("./model-pool-service");
       vi.mocked(callModelPool).mockImplementation(route);
       const f = fixture();
-      const run = analyzeJob(f.job.id, f.sectionId, { concurrency: 1, batchSize: 5 });
+      const run = analyzeJob(f.job.id, f.sectionId, {
+        concurrency: 1,
+        batchSize: 5,
+        maxPaidTokens: 10000,
+      });
       await requested.promise;
       requestJobCancel(f.job.id);
       await run;

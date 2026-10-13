@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ModelConfig } from "../../shared/types";
-import { isPoolMemberEligible } from "./model-pool-policy";
+import {
+  isPoolMemberEligible,
+  isPoolMemberVisible,
+  rankDefaultFirstModelCandidates,
+  rankEligibleModelCandidates,
+} from "./model-pool-policy";
 
 const baseMember: ModelConfig & { providerEnabled: boolean } = {
   id: "member-1",
@@ -18,7 +23,7 @@ const baseMember: ModelConfig & { providerEnabled: boolean } = {
   capabilityStatus: { text: true, json: true, vision: false },
   capabilityCheckedAt: "2026-09-25T00:00:00.000Z",
   poolEnabled: true,
-  billingMode: "free",
+  billingMode: "paid",
   qualityTier: "A",
   priority: 100,
   thinkingMode: false,
@@ -32,7 +37,7 @@ const baseMember: ModelConfig & { providerEnabled: boolean } = {
   consecutiveFailures: 0,
   lastSuccessAt: undefined,
   lastFailureAt: undefined,
-  capabilityEligible: false,
+  capabilityEligible: true,
   quotaBlocked: false,
   poolRemovedAt: undefined,
   poolRemovedReason: undefined,
@@ -55,5 +60,49 @@ describe("model pool eligibility policy", () => {
       failedMemberIds: new Set(),
       capabilityEligible: false,
     })).toBe(false);
+  });
+
+  it("excludes free members even when their capability check passes", () => {
+    expect(isPoolMemberEligible({ ...baseMember, billingMode: "free" }, {
+      now: Date.parse("2026-09-25T08:00:00.000Z"),
+      allowPaid: true,
+      failedMemberIds: new Set(),
+      capabilityEligible: true,
+    })).toBe(false);
+  });
+
+  it("shows only enabled paid members with fresh capability verification", () => {
+    expect(isPoolMemberVisible(baseMember)).toBe(true);
+    expect(isPoolMemberVisible({ ...baseMember, billingMode: "free" })).toBe(false);
+    expect(isPoolMemberVisible({ ...baseMember, capabilityEligible: false })).toBe(false);
+    expect(isPoolMemberVisible({ ...baseMember, isEnabled: false })).toBe(false);
+  });
+
+  it("ranks only fresh paid members and does not expose free fallbacks", () => {
+    const ranked = rankEligibleModelCandidates([
+      { ...baseMember, id: "free", billingMode: "free" },
+      { ...baseMember, id: "paid-default", isPurposeDefault: true, priority: 1 },
+      { ...baseMember, id: "paid-fallback", priority: 2 },
+    ], {
+      now: Date.parse("2026-09-25T08:00:00.000Z"),
+      allowPaid: true,
+      failedMemberIds: new Set(),
+    });
+
+    expect(ranked.map((member) => member.id)).toEqual(["paid-fallback", "paid-default"]);
+  });
+
+  it("ranks the purpose default first and then preserves manual priority", () => {
+    const ranked = rankDefaultFirstModelCandidates([
+      { ...baseMember, id: "lower-priority", priority: 10 },
+      { ...baseMember, id: "default", priority: 100, isPurposeDefault: true },
+      { ...baseMember, id: "higher-priority", priority: 1 },
+    ]);
+
+    expect(ranked.map((member) => member.id)).toEqual([
+      "default",
+      "higher-priority",
+      "lower-priority",
+    ]);
   });
 });

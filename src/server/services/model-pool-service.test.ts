@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ModelPurpose } from "../../shared/types";
-import { withModelBudget } from "../ai/model-budget";
+import { withModelBudget, withPaidTokenBudget as withTestPaidTokenBudget } from "../ai/model-budget";
 import { callVisionModel } from "../ai/openai-compatible-client";
 import { db, initDb } from "../db/client";
 import { createModelConfig } from "./model-config-service";
 import {
-  callModelPool,
+  callModelPool as routeModelPool,
   rankPoolCandidates,
 } from "./model-pool-service";
 import { createModelProvider, type ResolvedPoolMember } from "./model-provider-service";
@@ -18,6 +18,16 @@ vi.mock("../ai/openai-compatible-client", async (importOriginal) => {
 
 const NOW = Date.parse("2026-09-16T08:00:00.000Z");
 const DEFAULT_USAGE = { prompt_tokens: 12, completion_tokens: 8 };
+
+function callModelPool(
+  messages: unknown[],
+  options: Parameters<typeof routeModelPool>[1],
+) {
+  return withTestPaidTokenBudget(
+    () => routeModelPool(messages, options),
+    { maxPaidTokens: 10_000 },
+  );
+}
 
 function member(
   id: string,
@@ -41,7 +51,7 @@ function member(
     capabilityCheckedAt: new Date(NOW).toISOString(),
     providerEnabled: true,
     poolEnabled: true,
-    billingMode: "free",
+    billingMode: "paid",
     qualityTier: "A",
     priority: 100,
     thinkingMode: false,
@@ -64,8 +74,8 @@ function resetPoolData() {
     DELETE FROM model_providers;
   `);
   updateModelPoolSettings({
-    paidDailyTokenLimit: 0,
-    paidMonthlyTokenLimit: 0,
+    paidDailyTokenLimit: 10_000,
+    paidMonthlyTokenLimit: 10_000,
     capabilityTtlMs: 86_400_000,
   });
   const settingsColumns = new Set(
@@ -118,7 +128,7 @@ function createPoolMember(options: {
     quota_safety_ratio=0.95, capability_json=?, capability_checked_at=?,
     is_purpose_default=?
     WHERE id=?`).run(
-    options.billingMode ?? "free",
+    options.billingMode ?? "paid",
     options.qualityTier ?? "A",
     options.priority ?? 100,
     options.billingMode === "paid" ? null : 1000,
@@ -146,7 +156,7 @@ function paidReservations() {
 }
 
 describe("pool candidate ranking", () => {
-  it("excludes expired, safety-blocked, cooling-down, stale, failed, and OCR members", () => {
+  it("excludes stale, cooling-down, failed, and OCR members while ignoring old quota fields", () => {
     const ranked = rankPoolCandidates([
       member("eligible"),
       member("expired", { quotaExpiresAt: "2026-09-15T00:00:00.000Z" }),
@@ -155,9 +165,9 @@ describe("pool candidate ranking", () => {
       member("stale", { capabilityEligible: false }),
       member("failed"),
       member("ocr", { memberType: "ocr" }),
-    ], { now: NOW, allowPaid: false, failedMemberIds: new Set(["failed"]) });
+    ], { now: NOW, allowPaid: true, failedMemberIds: new Set(["failed"]) });
 
-    expect(ranked.map((item) => item.id)).toEqual(["eligible"]);
+    expect(ranked.map((item) => item.id)).toEqual(["eligible", "expired", "safety"]);
   });
 
   it("uses manual priority before model characteristics", () => {
@@ -172,13 +182,12 @@ describe("pool candidate ranking", () => {
       member("earlier-less", { quotaExpiresAt: "2026-10-01T00:00:00.000Z", quotaUsedTokens: 800 }),
       member("tier-b", { qualityTier: "B", quotaExpiresAt: "2026-12-01T00:00:00.000Z" }),
       member("tier-c", { qualityTier: "C", quotaExpiresAt: "2026-12-01T00:00:00.000Z" }),
-      member("thinking", { thinkingMode: true, priority: 999 }),
-    ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
+    ], { now: NOW, allowPaid: true, failedMemberIds: new Set() });
 
     expect(ranked.map((item) => item.id)).toEqual([
       "later",
-      "earlier-more",
       "earlier-less",
+      "earlier-more",
       "tier-b",
       "tier-c",
       "earlier-tier-c",
@@ -190,18 +199,18 @@ describe("pool candidate ranking", () => {
       member("tier-c", { qualityTier: "C", priority: 10 }),
       member("tier-a", { qualityTier: "A", priority: 10 }),
       member("tier-b", { qualityTier: "B", priority: 10 }),
-    ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
+    ], { now: NOW, allowPaid: true, failedMemberIds: new Set() });
 
     expect(ranked.map((item) => item.id)).toEqual(["tier-a", "tier-b", "tier-c"]);
   });
 
-  it("keeps free thinking models as a fallback after free non-thinking models", () => {
+  it("ranks paid non-thinking models before thinking models", () => {
     const ranked = rankPoolCandidates([
-      member("thinking", { thinkingMode: true, priority: 10 }),
-      member("non-thinking", { thinkingMode: false, priority: 10 }),
-    ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
+      member("thinking", { billingMode: "paid", quotaTotalTokens: undefined, quotaExpiresAt: undefined, thinkingMode: true, priority: 10 }),
+      member("non-thinking", { billingMode: "paid", quotaTotalTokens: undefined, quotaExpiresAt: undefined, thinkingMode: false, priority: 10 }),
+    ], { now: NOW, allowPaid: true, failedMemberIds: new Set() });
 
-    expect(ranked.map((item) => item.id)).toEqual(["non-thinking"]);
+    expect(ranked.map((item) => item.id)).toEqual(["non-thinking", "thinking"]);
   });
 
   it("proves the comparator orders paid non-thinking before thinking when both remain eligible", () => {
@@ -233,7 +242,7 @@ describe("pool candidate ranking", () => {
       member("healthy-lower-priority", { priority: 20, consecutiveFailures: 0 }),
       member("unhealthy-higher-priority", { priority: 10, consecutiveFailures: 4 }),
       member("healthy-higher-priority", { priority: 30, consecutiveFailures: 0 }),
-    ], { now: NOW, allowPaid: false, failedMemberIds: new Set() });
+    ], { now: NOW, allowPaid: true, failedMemberIds: new Set() });
 
     expect(ranked.map((item) => item.id)).toEqual([
       "unhealthy-higher-priority",
@@ -248,15 +257,15 @@ describe("pool candidate ranking", () => {
       quotaTotalTokens: undefined,
       quotaExpiresAt: undefined,
     });
-    const free = member("free");
+    const free = member("free", { billingMode: "free" });
     expect(rankPoolCandidates(
       [paid, free],
       { now: NOW, allowPaid: false, failedMemberIds: new Set() },
-    ).map((item) => item.id)).toEqual(["free"]);
+    ).map((item) => item.id)).toEqual([]);
     expect(rankPoolCandidates(
       [paid, free],
       { now: NOW, allowPaid: true, failedMemberIds: new Set() },
-    ).map((item) => item.id)).toEqual(["free", "paid"]);
+    ).map((item) => item.id)).toEqual(["paid"]);
   });
 
   it("keeps purpose defaults as the fallback within each billing mode", () => {
@@ -274,13 +283,11 @@ describe("pool candidate ranking", () => {
         quotaExpiresAt: undefined,
         priority: 99,
       }),
-      member("default-free", { priority: 1, isPurposeDefault: true }),
-      member("regular-free", { priority: 99 }),
+      member("default-free", { billingMode: "free", priority: 1, isPurposeDefault: true }),
+      member("regular-free", { billingMode: "free", priority: 99 }),
     ], { now: NOW, allowPaid: true, failedMemberIds: new Set() });
 
     expect(ranked.map((item) => item.id)).toEqual([
-      "regular-free",
-      "default-free",
       "regular-paid",
       "default-paid",
     ]);
@@ -299,7 +306,57 @@ describe("model pool routing", () => {
     vi.useRealTimers();
   });
 
-  it("returns after the first successful candidate and records free usage", async () => {
+  it("calls the paid purpose default first and ignores preserved free members", async () => {
+    updateModelPoolSettings({ paidDailyTokenLimit: 10_000, paidMonthlyTokenLimit: 10_000 });
+    const defaultId = createPoolMember({
+      model: "default-paid-first",
+      billingMode: "paid",
+      priority: 100,
+      isPurposeDefault: true,
+    });
+    createPoolMember({ model: "paid-fallback", billingMode: "paid", priority: 1 });
+    createPoolMember({ model: "preserved-free", billingMode: "free", priority: 0 });
+    vi.mocked(callVisionModel).mockResolvedValue(success());
+
+    const result = await withModelBudget(
+      () => import("../ai/model-budget").then(({ withPaidTokenBudget }) =>
+        withPaidTokenBudget(
+          () => callModelPool([], { purpose: "text", operation: "default-first" }),
+          { maxPaidTokens: 1_000 },
+        )),
+    );
+
+    expect(result.model.id).toBe(defaultId);
+    expect(vi.mocked(callVisionModel).mock.calls.map((call) => (call[0] as any).model))
+      .toEqual(["default-paid-first"]);
+  });
+
+  it("falls back to another paid member after the paid default fails", async () => {
+    updateModelPoolSettings({ paidDailyTokenLimit: 10_000, paidMonthlyTokenLimit: 10_000 });
+    createPoolMember({
+      model: "default-paid-failure",
+      billingMode: "paid",
+      priority: 100,
+      isPurposeDefault: true,
+    });
+    const fallbackId = createPoolMember({ model: "paid-after-default", billingMode: "paid", priority: 1 });
+    vi.mocked(callVisionModel)
+      .mockRejectedValueOnce(new Error("temporary service failure (503)"))
+      .mockRejectedValueOnce(new Error("temporary service failure (503)"))
+      .mockResolvedValueOnce(success());
+
+    const result = await import("../ai/model-budget").then(({ withPaidTokenBudget }) =>
+      withPaidTokenBudget(
+        () => callModelPool([], { purpose: "text", operation: "default-failure" }),
+        { maxPaidTokens: 1_000 },
+      ));
+
+    expect(result.model.id).toBe(fallbackId);
+    expect(vi.mocked(callVisionModel).mock.calls.map((call) => (call[0] as any).model))
+      .toEqual(["default-paid-failure", "default-paid-failure", "paid-after-default"]);
+  });
+
+  it("returns after the first successful paid candidate without changing free quota fields", async () => {
     const first = createPoolMember({ model: "first", priority: 1 });
     createPoolMember({ model: "second", priority: 2 });
     vi.mocked(callVisionModel).mockResolvedValue(success());
@@ -309,13 +366,13 @@ describe("model pool routing", () => {
     expect(result.model.id).toBe(first);
     expect(callVisionModel).toHaveBeenCalledTimes(1);
     expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(first))
-      .toEqual({ quota_used_tokens: 20 });
+      .toEqual({ quota_used_tokens: 0 });
     expect(events()).toEqual([
       expect.objectContaining({ model_config_id: first, event_type: "success", accounted_tokens: 20 }),
     ]);
   });
 
-  it("rotates successful requests across eligible free members", async () => {
+  it("rotates successful requests across eligible paid members", async () => {
     const first = createPoolMember({ model: "first", priority: 1 });
     const second = createPoolMember({ model: "second", priority: 2 });
     const third = createPoolMember({ model: "third", priority: 3 });
@@ -329,14 +386,14 @@ describe("model pool routing", () => {
     expect(vi.mocked(callVisionModel).mock.calls.map((call) => (call[0] as any).model))
       .toEqual(["first", "second", "third", "first"]);
     expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(first))
-      .toEqual({ quota_used_tokens: 40 });
+      .toEqual({ quota_used_tokens: 0 });
     expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(second))
-      .toEqual({ quota_used_tokens: 20 });
+      .toEqual({ quota_used_tokens: 0 });
     expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(third))
-      .toEqual({ quota_used_tokens: 20 });
+      .toEqual({ quota_used_tokens: 0 });
   });
 
-  it("uses a regular free member before the default free fallback", async () => {
+  it("uses the paid default before other paid members", async () => {
     const fallback = createPoolMember({
       model: "default-fallback",
       priority: 1,
@@ -347,11 +404,11 @@ describe("model pool routing", () => {
 
     const result = await callModelPool([], { purpose: "text", operation: "default-fallback" });
 
-    expect(result.model.id).toBe(regular);
-    expect(result.model.id).not.toBe(fallback);
+    expect(result.model.id).toBe(fallback);
+    expect(result.model.id).not.toBe(regular);
   });
 
-  it("keeps the default free member out of repeated rotation while regular members remain", async () => {
+  it("keeps the paid default first on repeated requests", async () => {
     createPoolMember({
       model: "rotation-default",
       priority: 1,
@@ -366,11 +423,7 @@ describe("model pool routing", () => {
     await callModelPool([], { purpose: "text", operation: "rotation-default-3" });
 
     expect(vi.mocked(callVisionModel).mock.calls.map((call) => (call[0] as any).model))
-      .toEqual([
-        "rotation-regular-first",
-        "rotation-regular-second",
-        "rotation-regular-first",
-      ]);
+      .toEqual(["rotation-default", "rotation-default", "rotation-default"]);
   });
 
   it("marks quota exhaustion and switches immediately", async () => {
@@ -608,32 +661,17 @@ describe("model pool routing", () => {
     ]);
   });
 
-  it("does not decrement free quota when usage is unknown", async () => {
-    const id = createPoolMember({ model: "free-unknown" });
+  it("preserves free configurations without routing to them", async () => {
+    const id = createPoolMember({ model: "preserved-free", billingMode: "free" });
     vi.mocked(callVisionModel).mockResolvedValue(success("ok", {}));
 
-    await callModelPool([], { purpose: "text", operation: "free-unknown" });
+    await expect(callModelPool([], { purpose: "text", operation: "preserved-free" }))
+      .rejects.toMatchObject({ code: "configuration" });
 
+    expect(vi.mocked(callVisionModel)).not.toHaveBeenCalled();
     expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(id))
       .toEqual({ quota_used_tokens: 0 });
-    expect(events()).toEqual([
-      expect.objectContaining({ event_type: "success", accounted_tokens: 0 }),
-      expect.objectContaining({ event_type: "usage_unknown", accounted_tokens: 0 }),
-    ]);
-  });
-
-  it("treats free usage as unknown when only prompt tokens are valid", async () => {
-    const id = createPoolMember({ model: "free-partial-usage" });
-    vi.mocked(callVisionModel).mockResolvedValue(success("ok", { prompt_tokens: 12 }));
-
-    await callModelPool([], { purpose: "text", operation: "free-partial-usage" });
-
-    expect(db.prepare("SELECT quota_used_tokens FROM model_configs WHERE id=?").get(id))
-      .toEqual({ quota_used_tokens: 0 });
-    expect(events()).toEqual([
-      expect.objectContaining({ event_type: "success", accounted_tokens: 0 }),
-      expect.objectContaining({ event_type: "usage_unknown", accounted_tokens: 0 }),
-    ]);
+    expect(events()).toEqual([]);
   });
 
   it("retains maxTokens for unknown paid usage and keeps it in the batch total", async () => {
@@ -752,7 +790,7 @@ describe("model pool routing", () => {
     const id = createPoolMember({ model: "paid-blocked", billingMode: "paid" });
     updateModelPoolSettings({ paidDailyTokenLimit: 1000, paidMonthlyTokenLimit: 1000 });
 
-    await expect(callModelPool([], {
+    await expect(routeModelPool([], {
       purpose: "text",
       operation: "paid-blocked",
     })).rejects.toMatchObject({ code: "budget" });

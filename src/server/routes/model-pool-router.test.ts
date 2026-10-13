@@ -53,13 +53,79 @@ afterAll(async () => {
 });
 
 describe("model pool administration API", () => {
+  it("lists only verified paid models in the active pool and keeps verification candidates separate", async () => {
+    const provider = createModelProvider({
+      name: "按量模型池 provider",
+      baseUrl: "https://pool-filter.example/v1",
+      apiKey: "pool-filter-secret",
+    });
+    const verified = createModelConfig({
+      name: "已验证按量模型",
+      baseUrl: provider.baseUrl,
+      providerId: provider.id,
+      model: "verified-paid-model",
+      purpose: "text",
+      supportsVision: false,
+    });
+    const unverified = createModelConfig({
+      name: "待验证按量模型",
+      baseUrl: provider.baseUrl,
+      providerId: provider.id,
+      model: "unverified-paid-model",
+      purpose: "text",
+      supportsVision: false,
+    });
+    const free = createModelConfig({
+      name: "保留免费模型",
+      baseUrl: provider.baseUrl,
+      providerId: provider.id,
+      model: "preserved-free-model",
+      purpose: "text",
+      supportsVision: false,
+    });
+    db.prepare(`UPDATE model_configs SET pool_enabled=1, billing_mode='paid',
+      capability_json=?, capability_checked_at=? WHERE id=?`)
+      .run(JSON.stringify({ text: true, json: true, vision: false }), Date.now(), verified.id);
+    db.prepare("UPDATE model_configs SET pool_enabled=1, billing_mode='paid' WHERE id=?")
+      .run(unverified.id);
+    db.prepare(`UPDATE model_configs SET pool_enabled=1, billing_mode='free',
+      quota_total_tokens=1000, quota_used_tokens=0 WHERE id=?`).run(free.id);
+
+    const response = await jsonRequest("/api/model-pools?purpose=text");
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.members.map((member: any) => member.id)).toEqual([verified.id]);
+    expect(response.body.data.candidates.map((member: any) => member.id)).toEqual([unverified.id]);
+    expect(response.body.data.summary.text).toMatchObject({ total: 1, verified: 1 });
+    expect(db.prepare("SELECT id FROM model_configs WHERE id=?").get(free.id)).toEqual({ id: free.id });
+  });
+
+  it("shows only the common DashScope provider without deleting other provider rows", async () => {
+    const qwenProvider = createModelProvider({
+      name: "千问百炼",
+      baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      apiKey: "visible-dashscope-secret",
+    });
+    const otherProvider = createModelProvider({
+      name: "历史供应商",
+      baseUrl: "https://legacy-provider.example/v1",
+      apiKey: "hidden-legacy-secret",
+    });
+
+    const response = await jsonRequest("/api/model-providers");
+
+    expect(response.body.data.map((provider: any) => provider.id)).toEqual([qwenProvider.id]);
+    expect(db.prepare("SELECT id FROM model_providers WHERE id=?").get(otherProvider.id))
+      .toEqual({ id: otherProvider.id });
+  });
+
   it("creates, updates, and lists providers without exposing API keys", async () => {
     const secret = "route-provider-secret";
     const created = await jsonRequest("/api/model-providers", {
       method: "POST",
       body: JSON.stringify({
         name: "Route provider",
-        baseUrl: "https://provider-route.example/v1",
+        baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
         apiKey: secret,
       }),
     });
@@ -173,7 +239,9 @@ describe("model pool administration API", () => {
     });
     expect(applied.status).toBe(200);
     expect(applied.body.data.created).toHaveLength(1);
-    expect((await jsonRequest("/api/model-pools")).body.data.members[0]).toMatchObject({
+    const appliedPool = (await jsonRequest("/api/model-pools")).body.data;
+    expect(appliedPool.members).toEqual([]);
+    expect(appliedPool.candidates[0]).toMatchObject({
       model: "qwen-route-text", poolEnabled: false, billingMode: "paid", presetKey: "bailian-qwen-paid-pool",
     });
   });
@@ -301,7 +369,7 @@ describe("model pool administration API", () => {
     expect(removal.body.data).toEqual({ removed: [first.id, second.id] });
 
     const removedList = await jsonRequest("/api/model-pools");
-    const removed = removedList.body.data.members.find((member: any) => member.id === first.id);
+    const removed = removedList.body.data.removed.find((member: any) => member.id === first.id);
     expect(removed).toMatchObject({
       poolEnabled: false,
       poolRemovedReason: "quota",
@@ -317,7 +385,7 @@ describe("model pool administration API", () => {
     expect(restore.body.data).toEqual({ restored: [first.id] });
 
     const restoredList = await jsonRequest("/api/model-pools");
-    const restored = restoredList.body.data.members.find((member: any) => member.id === first.id);
+    const restored = restoredList.body.data.candidates.find((member: any) => member.id === first.id);
     expect(restored).toMatchObject({ poolEnabled: true });
     expect(restored.poolRemovedAt).toBeUndefined();
   });

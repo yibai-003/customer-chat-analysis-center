@@ -31,12 +31,10 @@ function createReadyModel(
     purpose,
     supportsVision: purpose === "vision",
   });
-  db.prepare(`UPDATE model_configs SET pool_enabled=?, billing_mode='free',
-    quota_total_tokens=1000, quota_used_tokens=0, quota_expires_at=?,
-    quota_safety_ratio=0.95, capability_json=?, capability_checked_at=?
+  db.prepare(`UPDATE model_configs SET pool_enabled=?, billing_mode='paid',
+    capability_json=?, capability_checked_at=?
     WHERE id=?`).run(
     poolEnabled ? 1 : 0,
-    new Date(Date.now() + 86_400_000).toISOString(),
     JSON.stringify({ text: true, json: true, vision: purpose === "vision" }),
     Date.now(),
     model.id,
@@ -222,7 +220,16 @@ describe("model configuration management", () => {
     });
   });
 
-  it("checks capability TTL, free quota, expiry, and cooldown for each purpose pool", () => {
+  it("does not report preserved free defaults as ready or request useless verification", () => {
+    const freeDefault = createReadyModel("preserved-free-default", "text", false);
+    db.prepare("UPDATE model_configs SET billing_mode='free' WHERE id=?").run(freeDefault.id);
+    setDefaultModel(freeDefault.id, "text");
+
+    expect(getModelReadinessChecks().text).toMatchObject({ configured: false, verified: false });
+    expect(getModelReadinessActions().verifyPoolMemberIds).not.toContain(freeDefault.id);
+  });
+
+  it("checks capability TTL and cooldown for each paid purpose pool", () => {
     createReadyModel("legacy-text", "text", false);
     createReadyModel("legacy-vision", "vision", false);
     const text = createReadyModel("pool-text", "text", true);
@@ -238,17 +245,11 @@ describe("model configuration management", () => {
       .run(Date.now() - 120_000, text.id);
     expect(getModelReadinessChecks().text.verified).toBe(false);
 
-    db.prepare(`UPDATE model_configs SET capability_checked_at=?, quota_used_tokens=950
+    db.prepare(`UPDATE model_configs SET capability_checked_at=?
       WHERE id=?`).run(Date.now(), text.id);
-    expect(getModelReadinessChecks().text.verified).toBe(false);
+    expect(getModelReadinessChecks().text.verified).toBe(true);
 
-    db.prepare(`UPDATE model_configs SET quota_used_tokens=0, quota_expires_at=?
-      WHERE id=?`).run(new Date(Date.now() - 1_000).toISOString(), text.id);
-    expect(getModelReadinessChecks().text.verified).toBe(false);
-
-    db.prepare(`UPDATE model_configs SET quota_expires_at=?, cooldown_until=?
-      WHERE id=?`).run(
-      new Date(Date.now() + 86_400_000).toISOString(),
+    db.prepare("UPDATE model_configs SET cooldown_until=? WHERE id=?").run(
       new Date(Date.now() + 60_000).toISOString(),
       text.id,
     );
@@ -263,8 +264,8 @@ describe("model configuration management", () => {
   it("reports vision and text pool readiness independently from /api/ready", async () => {
     createReadyModel("ready-vision", "vision", true);
     const text = createReadyModel("expired-text", "text", true);
-    db.prepare("UPDATE model_configs SET quota_expires_at=? WHERE id=?")
-      .run(new Date(Date.now() - 1_000).toISOString(), text.id);
+    db.prepare("UPDATE model_configs SET cooldown_until=? WHERE id=?")
+      .run(new Date(Date.now() + 60_000).toISOString(), text.id);
     vi.spyOn(fs, "statfsSync").mockReturnValue({
       bavail: config.minFreeDiskMb * 1024 * 1024 + 1,
       bsize: 1,
