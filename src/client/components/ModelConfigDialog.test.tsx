@@ -244,7 +244,7 @@ describe("ModelConfigDialog", () => {
       .toBe(identity.providerName);
   });
 
-  it("renders quota progress and consistent warning, unlimited, invalid, and exhausted states", async () => {
+  it("does not use quota status to gate paid pool members", async () => {
     vi.setSystemTime(new Date("2026-09-16T03:00:00.000Z"));
     const quotaMembers = [
       member({ id: "normal", name: "正常额度", quotaUsedTokens: 800, quotaTotalTokens: 1_000 }),
@@ -302,102 +302,68 @@ describe("ModelConfigDialog", () => {
     await renderDialog(quotaMembers);
 
     const normalRow = (await screen.findByText("正常额度")).closest("tr")!;
-    const normalMeter = normalRow.querySelector(".quota-meter")!;
-    expect(within(normalRow).getByRole("progressbar", { name: "正常额度额度 80%" })).toBeTruthy();
-    expect(within(normalRow).getByText("800 / 1,000")).toBeTruthy();
-    expect(normalRow.cells[5]?.textContent).toBe("200");
-    expect(normalMeter.classList.contains("normal")).toBe(true);
-    expect(normalMeter.getAttribute("data-quota-state")).toBe("normal");
+    expect(normalRow.querySelector(".quota-meter")).toBeNull();
+    expect(normalRow.textContent).toContain("按量");
 
     const warningRow = screen.getByText("接近阈值").closest("tr")!;
-    const warningMeter = warningRow.querySelector(".quota-meter")!;
-    expect(within(warningRow).getByRole("progressbar", { name: "接近阈值额度 95%" })).toBeTruthy();
-    expect(warningMeter.classList.contains("warning")).toBe(true);
-    expect(warningMeter.getAttribute("data-quota-state")).toBe("warning");
-    expect(within(warningRow.cells[10]!).getByText("接近安全阈值")).toBeTruthy();
-    expect(within(warningRow.cells[10]!).getByText("接近安全阈值")
-      .classList.contains("warning")).toBe(true);
+    expect(warningRow.querySelector(".quota-meter")).toBeNull();
+    expect(within(warningRow.cells[10]!).queryByText("接近安全阈值")).toBeNull();
 
     const unlimitedRow = screen.getByText("无限额模型").closest("tr")!;
-    const unlimitedMeter = unlimitedRow.querySelector(".quota-meter")!;
-    expect(within(unlimitedRow).getByText("不限额")).toBeTruthy();
-    expect(unlimitedRow.cells[5]?.textContent).toBe("—");
-    expect(unlimitedMeter.classList.contains("unlimited")).toBe(true);
-    expect(unlimitedMeter.getAttribute("data-quota-state")).toBe("unlimited");
+    expect(unlimitedRow.querySelector(".quota-meter")).toBeNull();
 
     const invalidRow = screen.getByText("异常额度").closest("tr")!;
-    const invalidMeter = invalidRow.querySelector(".quota-meter")!;
-    expect(within(invalidRow).getByText("额度数据异常")).toBeTruthy();
-    expect(invalidRow.cells[5]?.textContent).toBe("—");
-    expect(invalidMeter.classList.contains("invalid")).toBe(true);
-    expect(invalidMeter.getAttribute("data-quota-state")).toBe("invalid");
+    expect(invalidRow.querySelector(".quota-meter")).toBeNull();
 
     const exhaustedRow = screen.getByText("实际耗尽").closest("tr")!;
-    const exhaustedMeter = exhaustedRow.querySelector(".quota-meter")!;
-    expect(exhaustedMeter.classList.contains("exhausted")).toBe(true);
-    expect(exhaustedMeter.getAttribute("data-quota-state")).toBe("exhausted");
-    expect(within(exhaustedRow.cells[10]!).getByText("额度已耗尽")
-      .classList.contains("danger")).toBe(true);
+    expect(exhaustedRow.querySelector(".quota-meter")).toBeNull();
+    expect(within(exhaustedRow.cells[10]!).queryByText("额度已耗尽")).toBeNull();
 
     const cooldownRow = screen.getByText("阈值冷却").closest("tr")!;
-    expect(within(cooldownRow).getByRole("progressbar", { name: "阈值冷却额度 95%" }))
-      .toBeTruthy();
-    expect(cooldownRow.querySelector(".quota-meter")?.getAttribute("data-quota-state"))
-      .toBe("warning");
-    expect(within(cooldownRow.cells[10]!).getByText("冷却中")).toBeTruthy();
+    expect(cooldownRow.querySelector(".quota-meter")).toBeNull();
+    expect(within(cooldownRow.cells[10]!).queryByText("冷却中")).toBeNull();
     expect(within(cooldownRow.cells[10]!).queryByText("接近安全阈值")).toBeNull();
 
     const capabilityRow = screen.getByText("阈值能力失败").closest("tr")!;
-    expect(within(capabilityRow).getByRole("progressbar", { name: "阈值能力失败额度 95%" }))
-      .toBeTruthy();
-    expect(capabilityRow.querySelector(".quota-meter")?.getAttribute("data-quota-state"))
-      .toBe("warning");
-    expect(within(capabilityRow.cells[10]!).getByText("能力验证失败")).toBeTruthy();
+    expect(capabilityRow.querySelector(".quota-meter")).toBeNull();
+    expect(within(capabilityRow.cells[10]!).queryByText("能力验证失败")).toBeNull();
     expect(within(capabilityRow.cells[10]!).queryByText("接近安全阈值")).toBeNull();
 
     const exhaustedConflictRow = screen.getByText("耗尽优先").closest("tr")!;
-    expect(within(exhaustedConflictRow.cells[10]!).getByText("额度已耗尽")).toBeTruthy();
+    expect(within(exhaustedConflictRow.cells[10]!).queryByText("额度已耗尽")).toBeNull();
     expect(within(exhaustedConflictRow.cells[10]!).queryByText("冷却中")).toBeNull();
     expect(within(exhaustedConflictRow.cells[10]!).queryByText("能力验证失败")).toBeNull();
   });
 
-  it("installs presets, reports created count, and verifies every required ID in safe batches", async () => {
-    const created = Array.from({ length: 51 }, (_, index) => `new-${index + 1}`);
-    const existing = Array.from({ length: 52 }, (_, index) => `existing-${index + 1}`);
-    responseFor = (url) => {
-      if (url === "/api/model-pools/qianwen-free/install") {
-        return {
-          created,
-          updated: existing,
-          needsVerification: [...existing, ...created],
-        };
-      }
-      if (url === "/api/model-pools/qianwen-free/verify") return [];
-      return defaultData(url);
-    };
-
+  it("shows the paid Qwen catalog sync command and pending verification guidance", async () => {
     await renderDialog();
-    await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "安装/更新千问免费池" }));
+
+    const command = await screen.findByLabelText("百炼千问目录同步命令") as HTMLTextAreaElement;
+    expect(command.value).toBe("npm run pool:sync:bailian-qwen-paid -- -BaseUrl <local-or-https-url>");
+    expect(screen.getByText(/按量计费且默认待验证、未入池/)).toBeTruthy();
+    expect(screen.getByText(/预览后确认/)).toBeTruthy();
+    expect(screen.queryByText(/免费额度|免费模型池/)).toBeNull();
+    expect(requests.some((request) => request.url.includes("/install"))).toBe(false);
+  });
+
+  it("keeps paid purpose defaults at the end while preserving priority order within groups", async () => {
+    const paidDefault = member({
+      id: "paid-default",
+      name: "付费默认",
+      billingMode: "paid",
+      isPurposeDefault: true,
+      priority: 1,
     });
+    const freeLowPriority = member({ id: "free-low", name: "免费低优先级", priority: 20 });
+    const freeHighPriority = member({ id: "free-high", name: "免费高优先级", priority: 5 });
+    await renderDialog([paidDefault, freeLowPriority, freeHighPriority]);
 
-    await waitFor(() => expect(
-      requests.filter((request) => request.url === "/api/model-pools/qianwen-free/verify"),
-    ).toHaveLength(4));
-    expect(screen.getByRole("status").textContent).toContain("新建 51");
-
-    const verificationBodies = requests
-      .filter((request) => request.url === "/api/model-pools/qianwen-free/verify")
-      .map((request) => JSON.parse(String(request.init?.body)));
-    expect(verificationBodies).toEqual([
-      { ids: existing.slice(0, 50), enablePassed: false },
-      { ids: existing.slice(50), enablePassed: false },
-      { ids: created.slice(0, 50), enablePassed: true },
-      { ids: created.slice(50), enablePassed: true },
+    const rows = Array.from(document.querySelectorAll(".model-pool-table tbody tr"));
+    expect(rows.map((row) => row.querySelector("strong")?.textContent)).toEqual([
+      "免费低优先级",
+      "免费高优先级",
+      "付费默认",
     ]);
-    const verifiedIds = verificationBodies.flatMap((body) => body.ids);
-    expect(verifiedIds).toHaveLength(103);
-    expect(new Set(verifiedIds).size).toBe(103);
   });
 
   it("never places an existing full API key into the provider password field", async () => {
@@ -442,17 +408,13 @@ describe("ModelConfigDialog", () => {
     });
   });
 
-  it("sends all editable routing, quota, and billing fields for a member row", async () => {
+  it("sends routing fields without quota snapshot values for a member row", async () => {
     await renderDialog();
     const row = (await screen.findByText("千问视觉")).closest("tr");
     if (!row) throw new Error("model row not found");
     fireEvent.click(within(row).getByRole("button", { name: "编辑" }));
 
     chooseSelectMenuOption(within(row).getByLabelText("等级"), "B");
-    chooseSelectMenuOption(within(row).getByLabelText("计费"), "paid");
-    fireEvent.change(within(row).getByLabelText("已用 Token"), { target: { value: "250000" } });
-    fireEvent.change(within(row).getByLabelText("总额 Token"), { target: { value: "1200000" } });
-    fireEvent.change(within(row).getByLabelText("到期时间"), { target: { value: "2026-12-30T12:30" } });
     fireEvent.change(within(row).getByLabelText("优先级"), { target: { value: "17" } });
     fireEvent.click(within(row).getByLabelText("启用模型"));
     fireEvent.click(within(row).getByLabelText("加入模型池"));
@@ -465,14 +427,9 @@ describe("ModelConfigDialog", () => {
     ));
     expect(JSON.parse(String(patch?.init?.body))).toEqual({
       qualityTier: "B",
-      billingMode: "paid",
-      quotaUsedTokens: 250000,
-      quotaTotalTokens: 1200000,
-      quotaExpiresAt: new Date("2026-12-30T12:30").toISOString(),
       priority: 17,
       isEnabled: false,
       poolEnabled: false,
-      quotaSafetyRatio: 0.95,
     });
   });
 
@@ -712,11 +669,28 @@ describe("ModelConfigDialog", () => {
 
     await screen.findByText("付费可用");
     const quotaRow = screen.getByText("额度耗尽").closest("tr") as HTMLTableRowElement;
-    expect(within(quotaRow.cells[10]!).getByText("额度已耗尽")).toBeTruthy();
+    expect(within(quotaRow.cells[10]!).queryByText("额度已耗尽")).toBeNull();
     expect(screen.getByText("冷却中")).toBeTruthy();
     expect(screen.getAllByText("能力验证失败")).toHaveLength(2);
     expect(screen.getByText("已禁用")).toBeTruthy();
-    expect(screen.getByText("可调用")).toBeTruthy();
+    expect(screen.getAllByText("可调用")).toHaveLength(2);
+  });
+
+  it("shows automatic Bailian sync disable reasons separately from manual removal", async () => {
+    const syncDisabled = member({
+      id: "sync-disabled",
+      name: "同步停用模型",
+      poolEnabled: false,
+      capabilityEligible: false,
+      poolRemovedReason: "sync_unavailable",
+      poolRemovedNote: "bailian-sync:expired",
+    });
+    await renderDialog([syncDisabled]);
+
+    const row = (await screen.findByText("同步停用模型")).closest("tr")!;
+    expect(within(row).getByText("同步自动停用")).toBeTruthy();
+    expect(within(row).getByText("同步原因：expired")).toBeTruthy();
+    expect(within(row).queryByText("人工维护")).toBeNull();
   });
 
   it("verifies blocked default members from the pool readiness action", async () => {
@@ -739,7 +713,7 @@ describe("ModelConfigDialog", () => {
       capabilityStatus: { text: true, json: true, vision: false },
     });
     responseFor = (url) => {
-      if (url === "/api/model-pools/qianwen-free/verify") {
+      if (url === "/api/model-pool-members/verify") {
         return [{
           id: "pending-default",
           model: "qwen3-vl-plus",
@@ -762,14 +736,14 @@ describe("ModelConfigDialog", () => {
       return defaultData(url);
     };
     await renderDialog([pendingVision, readyText]);
-    expect(requests.some((request) => request.url === "/api/model-pools/qianwen-free/verify")).toBe(false);
+    expect(requests.some((request) => request.url === "/api/model-pool-members/verify")).toBe(false);
 
     fireEvent.click(await screen.findByRole("button", { name: "验证默认模型" }));
 
     await waitFor(() => expect(
-      requests.filter((request) => request.url === "/api/model-pools/qianwen-free/verify"),
+      requests.filter((request) => request.url === "/api/model-pool-members/verify"),
     ).toHaveLength(1));
-    const verifyRequest = requests.find((request) => request.url === "/api/model-pools/qianwen-free/verify")!;
+    const verifyRequest = requests.find((request) => request.url === "/api/model-pool-members/verify")!;
     expect(JSON.parse(String(verifyRequest.init?.body))).toEqual({
       ids: ["pending-default"],
       enablePassed: true,
@@ -788,7 +762,7 @@ describe("ModelConfigDialog", () => {
       capabilityStatus: undefined,
     });
     responseFor = (url) => {
-      if (url === "/api/model-pools/qianwen-free/verify") return failure("验证服务不可用");
+      if (url === "/api/model-pool-members/verify") return failure("验证服务不可用");
       if (url === "/api/model-pools") {
         return {
           members: [pendingVision],
@@ -807,7 +781,7 @@ describe("ModelConfigDialog", () => {
 
     await screen.findAllByText("验证服务不可用");
     expect(screen.getByRole("button", { name: "验证默认模型" })).toBeTruthy();
-    expect(requests.filter((request) => request.url === "/api/model-pools/qianwen-free/verify")).toHaveLength(1);
+    expect(requests.filter((request) => request.url === "/api/model-pool-members/verify")).toHaveLength(1);
   });
 
   it("bulk-verifies selected members with enablePassed and reports per-member results", async () => {

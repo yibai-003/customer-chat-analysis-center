@@ -6,7 +6,6 @@ import { createApp } from "../app";
 import { db, initDb } from "../db/client";
 import { createModelConfig } from "../services/model-config-service";
 import { createModelProvider } from "../services/model-provider-service";
-import { QIANWEN_FREE_POOL_PRESET } from "../services/qianwen-free-pool-preset";
 import { loginAdmin } from "../auth/test-admin";
 
 let server: Server;
@@ -149,42 +148,80 @@ describe("model pool administration API", () => {
     expect((await jsonRequest("/api/model-configs")).body.data[0].isPurposeDefault).toBe(false);
   });
 
-  it("returns preset install changes and reports a missing reusable provider as conflict", async () => {
-    const conflict = await jsonRequest("/api/model-pools/qianwen-free/install", {
-      method: "POST",
-    });
-    expect(conflict).toEqual({
-      status: 409,
-      body: {
-        success: false,
-        data: null,
-        error: "请先配置并启用千问服务商凭证",
-      },
-    });
-
-    createModelProvider({
-      name: "千问百炼",
+  it("previews and applies a Qwen paid pool snapshot without exposing credentials", async () => {
+    const provider = createModelProvider({
+      name: "百炼",
       baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
       apiKey: "route-dashscope-secret",
     });
-    const installed = await jsonRequest("/api/model-pools/qianwen-free/install", {
-      method: "POST",
+    const snapshot = {
+      providerId: provider.id,
+      capturedAt: "2026-10-10T00:00:00.000Z",
+      accountMatchConfirmed: true,
+      models: [{ model: "qwen-route-text", name: "Route Text", provider: "bailian", capabilities: ["TG"],
+        modalities: { input: ["Text"], output: ["Text"] }, features: ["structured-outputs"], offline: false }],
+    };
+    const preview = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
+      method: "POST", body: JSON.stringify(snapshot),
     });
+    expect(preview.status).toBe(200);
+    expect(preview.body.data.summary).toMatchObject({ created: 1, excluded: 0 });
+    expect(JSON.stringify(preview.body)).not.toContain("route-dashscope-secret");
 
-    expect(installed.status).toBe(200);
-    expect(installed.body.data.created).toHaveLength(QIANWEN_FREE_POOL_PRESET.length);
-    expect(installed.body.data.updated).toEqual([]);
-    expect(installed.body.data.needsVerification).toEqual(installed.body.data.created);
-
-    const pools = await jsonRequest("/api/model-pools");
-    expect(pools.body).toMatchObject({
-      success: true,
-      data: {
-        members: expect.any(Array),
-        summary: { total: QIANWEN_FREE_POOL_PRESET.length },
-      },
-      error: null,
+    const applied = await jsonRequest("/api/model-pools/bailian-qwen-paid/apply", {
+      method: "POST", body: JSON.stringify({ previewId: preview.body.data.previewId, confirmation: "APPLY BAILIAN QWEN PAID POOL" }),
     });
+    expect(applied.status).toBe(200);
+    expect(applied.body.data.created).toHaveLength(1);
+    expect((await jsonRequest("/api/model-pools")).body.data.members[0]).toMatchObject({
+      model: "qwen-route-text", poolEnabled: false, billingMode: "paid", presetKey: "bailian-qwen-paid-pool",
+    });
+  });
+
+  it("rejects Bailian preview when the provider is not enabled", async () => {
+    const provider = createModelProvider({
+      name: "disabled Bailian", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+      apiKey: "disabled-route-secret", isEnabled: false,
+    });
+    const response = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
+      method: "POST", body: JSON.stringify({ providerId: provider.id, capturedAt: "2026-10-10T00:00:00.000Z",
+        accountMatchConfirmed: true, models: [] }),
+    });
+    expect(response.status).toBe(409);
+    expect(response.body.error).toContain("未启用");
+  });
+
+  it("rejects an enabled non-DashScope provider for Bailian sync", async () => {
+    const provider = createModelProvider({ name: "Other provider", baseUrl: "https://other.example/v1", apiKey: "other-secret" });
+    const response = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
+      method: "POST", body: JSON.stringify({ providerId: provider.id, capturedAt: "2026-10-10T00:00:00.000Z",
+        accountMatchConfirmed: true, models: [] }),
+    });
+    expect(response.status).toBe(409);
+    expect(response.body.error).toContain("地址无效");
+  });
+
+  it("rejects malformed snapshots before creating a preview", async () => {
+    const response = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
+      method: "POST", body: JSON.stringify({ providerId: "missing", capturedAt: "not-a-date",
+        accountMatchConfirmed: true, models: [] }),
+    });
+    expect(response.status).toBe(400);
+    expect(response.body).toMatchObject({ success: false, data: null });
+    const audits = db.prepare("SELECT metadata_json FROM audit_events WHERE action='pool.bailian_qwen_paid_preview' ORDER BY occurred_at DESC LIMIT 1").get() as { metadata_json: string };
+    expect(audits.metadata_json).not.toContain("not-a-date");
+    expect(audits.metadata_json).not.toContain("missing");
+  });
+
+  it("returns conflict for a manual model collision while keeping schema errors at 400", async () => {
+    const provider = createModelProvider({ name: "百炼 collision", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1", apiKey: "collision-secret" });
+    createModelConfig({ name: "manual collision", baseUrl: provider.baseUrl, providerId: provider.id, model: "qwen-collision-model", purpose: "text", supportsVision: false });
+    const response = await jsonRequest("/api/model-pools/bailian-qwen-paid/preview", {
+      method: "POST", body: JSON.stringify({ providerId: provider.id, capturedAt: "2026-10-10T00:00:00.000Z", accountMatchConfirmed: true,
+        models: [{ model: "qwen-collision-model", name: "Collision", provider: "bailian", capabilities: ["TG"], modalities: { input: ["Text"], output: ["Text"] }, features: ["structured-outputs"], offline: false }] }),
+    });
+    expect(response.status).toBe(409);
+    expect(response.body.error).toContain("手工配置占用");
   });
 
   it("rejects verification requests containing more than 50 IDs", async () => {
@@ -213,8 +250,10 @@ describe("model pool administration API", () => {
       }),
     });
     expect(provider.status).toBe(200);
-    const installed = await jsonRequest("/api/model-pools/qianwen-free/install", { method: "POST" });
-    const [first, second] = installed.body.data.created;
+    const first = createModelConfig({ name: "bulk one", baseUrl: provider.body.data.baseUrl,
+      providerId: provider.body.data.id, model: "bulk-one", purpose: "text", supportsVision: false });
+    const second = createModelConfig({ name: "bulk two", baseUrl: provider.body.data.baseUrl,
+      providerId: provider.body.data.id, model: "bulk-two", purpose: "vision", supportsVision: true });
 
     const emptyVerify = await jsonRequest("/api/model-pool-members/verify", {
       method: "POST",
@@ -230,7 +269,7 @@ describe("model pool administration API", () => {
 
     const duplicate = await jsonRequest("/api/model-pool-members/remove", {
       method: "POST",
-      body: JSON.stringify({ ids: [first, first], reason: "maintenance" }),
+      body: JSON.stringify({ ids: [first.id, first.id], reason: "maintenance" }),
     });
     expect(duplicate.status).toBe(400);
     expect(duplicate.body.error).toContain("重复");
@@ -250,19 +289,19 @@ describe("model pool administration API", () => {
 
     const invalidReason = await jsonRequest("/api/model-pool-members/remove", {
       method: "POST",
-      body: JSON.stringify({ ids: [first], reason: "made-up" }),
+      body: JSON.stringify({ ids: [first.id], reason: "made-up" }),
     });
     expect(invalidReason.status).toBe(400);
 
     const removal = await jsonRequest("/api/model-pool-members/remove", {
       method: "POST",
-      body: JSON.stringify({ ids: [first, second], reason: "quota", note: "额度耗尽" }),
+      body: JSON.stringify({ ids: [first.id, second.id], reason: "quota", note: "额度耗尽" }),
     });
     expect(removal.status).toBe(200);
-    expect(removal.body.data).toEqual({ removed: [first, second] });
+    expect(removal.body.data).toEqual({ removed: [first.id, second.id] });
 
     const removedList = await jsonRequest("/api/model-pools");
-    const removed = removedList.body.data.members.find((member: any) => member.id === first);
+    const removed = removedList.body.data.members.find((member: any) => member.id === first.id);
     expect(removed).toMatchObject({
       poolEnabled: false,
       poolRemovedReason: "quota",
@@ -272,13 +311,13 @@ describe("model pool administration API", () => {
 
     const restore = await jsonRequest("/api/model-pool-members/restore", {
       method: "POST",
-      body: JSON.stringify({ ids: [first] }),
+      body: JSON.stringify({ ids: [first.id] }),
     });
     expect(restore.status).toBe(200);
-    expect(restore.body.data).toEqual({ restored: [first] });
+    expect(restore.body.data).toEqual({ restored: [first.id] });
 
     const restoredList = await jsonRequest("/api/model-pools");
-    const restored = restoredList.body.data.members.find((member: any) => member.id === first);
+    const restored = restoredList.body.data.members.find((member: any) => member.id === first.id);
     expect(restored).toMatchObject({ poolEnabled: true });
     expect(restored.poolRemovedAt).toBeUndefined();
   });

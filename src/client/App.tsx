@@ -171,6 +171,9 @@ function Workspace({ session }: { session: CurrentSession }) {
     saveReview,
     handleJobsDeleted,
     taskAction,
+    retryRunOptions,
+    confirmRetryFailed,
+    cancelRetryFailed,
     refreshProgress,
     requestRecordDetail,
     clearSelectedRecord,
@@ -468,6 +471,13 @@ function Workspace({ session }: { session: CurrentSession }) {
           batchSize: options.batchSize,
           maxPaidTokens: options.maxPaidTokens,
         })}
+      />}
+      {retryRunOptions && retryRunOptions.jobId === job?.id && <AnalysisRunDialog
+        capacity={retryRunOptions.capacity}
+        intent="retry-failed"
+        initialMaxPaidTokens={retryRunOptions.maxPaidTokens}
+        onCancel={cancelRetryFailed}
+        onConfirm={confirmRetryFailed}
       />}
       {previewImage && <ImagePreviewDialog {...previewImage} onClose={closePreviewImage} />}
       {selectingImportFile && <ImportSectionDialog file={selectingImportFile} sections={sections} platforms={platforms} busy={busy} error={notice} onCancel={() => setSelectingImportFile(null)} onConfirm={(sectionId, platformId, sectionConfigVersionId) => void previewImport(selectingImportFile, sectionId, platformId, sectionConfigVersionId)} />}

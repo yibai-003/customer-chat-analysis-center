@@ -308,6 +308,7 @@ export function analyzeJob(
 
 export async function retryFailedJob(
   jobId: string,
+  options: AnalysisJobOptions = {},
   dependencies: Partial<AnalysisPreparationDependencies> = {},
 ): Promise<StartedAnalysisJob | null> {
   const job = getJob(jobId);
@@ -323,10 +324,15 @@ export async function retryFailedJob(
     const prepared = prepareAcquiredAnalysisJob(
       jobId,
       job.sectionId,
-      { recordIds },
+      { ...options, recordIds },
       { ...defaultPreparationDependencies, ...dependencies },
     );
-    return { completion: runPreparedAnalysisJob(prepared) };
+    return {
+      completion: withPaidTokenBudget(
+        () => runPreparedAnalysisJob(prepared),
+        { maxPaidTokens: prepared.runOptions.maxPaidTokens },
+      ),
+    };
   } catch (error) {
     restoreFailedRecords(jobId, recordIds);
     releaseJobRun(jobId, job.status);

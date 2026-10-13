@@ -1,19 +1,12 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type {
-  ModelBillingMode,
   ModelConfig,
   ModelPoolSettings,
   ModelPurpose,
   ModelQualityTier,
 } from "../../../shared/types";
 import { PoolCheckbox } from "./PoolCheckbox";
-import { QuotaMeter } from "./QuotaMeter";
 import { SelectMenu } from "../SelectMenu";
-import {
-  formatQuotaTokens,
-  quotaPresentation,
-  type QuotaPresentation,
-} from "./quota-presentation";
 
 type PoolSummaryItem = { total: number; enabled: number; verified: number; blocked: number };
 export type PoolData = {
@@ -27,49 +20,35 @@ export type PoolData = {
 
 type EditState = {
   qualityTier: ModelQualityTier;
-  billingMode: ModelBillingMode;
-  quotaUsedTokens: string;
-  quotaTotalTokens: string;
-  quotaExpiresAt: string;
-  quotaSafetyRatio: string;
   priority: string;
   isEnabled: boolean;
   poolEnabled: boolean;
 };
 
-type InstallResult = {
-  created: string[];
-  updated: string[];
-  needsVerification: string[];
-};
+type RemovalReason = "verify_failed" | "unstable" | "quota" | "maintenance" | "sync_unavailable";
 
-type RemovalReason = "verify_failed" | "unstable" | "quota" | "maintenance";
+const bailianSyncCommand = "npm run pool:sync:bailian-qwen-paid -- -BaseUrl <local-or-https-url>";
 
 const removalReasonLabels: Record<RemovalReason, string> = {
   verify_failed: "验证失败",
   unstable: "稳定性差",
-  quota: "额度/限流",
+  quota: "预算限制",
+  sync_unavailable: "同步时不可用",
   maintenance: "人工维护",
 };
 
+function removalLabel(reason: RemovalReason) {
+  return reason === "sync_unavailable" ? "同步自动停用" : removalReasonLabels[reason];
+}
+
+function syncRemovalReason(note?: string) {
+  const prefix = "bailian-sync:";
+  return note?.startsWith(prefix) ? note.slice(prefix.length) : undefined;
+}
+
 function eligibleForRouting(model: ModelConfig) {
   return model.isEnabled && model.poolEnabled && model.capabilityEligible
-    && !model.quotaBlocked && !model.cooldownUntil;
-}
-
-function chunk<T>(items: T[], size: number) {
-  const result: T[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size));
-  }
-  return result;
-}
-
-function localDateTime(value?: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
+    && !model.cooldownUntil;
 }
 
 function displayDate(value?: string) {
@@ -103,19 +82,13 @@ const capabilityLabels: Record<CapabilityState, { column: string; status: string
   failed: { column: "能力验证失败", status: "能力验证失败", tone: "danger" },
 };
 
-function statusFor(
-  model: ModelConfig,
-  capabilityState: CapabilityState,
-  quota: QuotaPresentation,
-) {
+function statusFor(model: ModelConfig, capabilityState: CapabilityState) {
   if (!model.isEnabled || !model.poolEnabled) return { text: "已禁用", tone: "muted" };
-  if (quota.tone === "exhausted") return { text: quota.statusText, tone: "danger" };
   if (model.cooldownUntil) return { text: "冷却中", tone: "warning" };
   if (capabilityState !== "verified") {
     const capability = capabilityLabels[capabilityState];
     return { text: capability.status, tone: capability.tone };
   }
-  if (quota.tone === "warning") return { text: quota.statusText, tone: "warning" };
   if (model.billingMode === "paid") return { text: "付费可用", tone: "paid" };
   return { text: "可调用", tone: "ready" };
 }
@@ -123,11 +96,6 @@ function statusFor(
 function initialEdit(model: ModelConfig): EditState {
   return {
     qualityTier: model.qualityTier,
-    billingMode: model.billingMode,
-    quotaUsedTokens: String(model.quotaUsedTokens),
-    quotaTotalTokens: model.quotaTotalTokens == null ? "" : String(model.quotaTotalTokens),
-    quotaExpiresAt: localDateTime(model.quotaExpiresAt),
-    quotaSafetyRatio: String(model.quotaSafetyRatio),
     priority: String(model.priority),
     isEnabled: model.isEnabled,
     poolEnabled: model.poolEnabled,
@@ -154,7 +122,6 @@ export function PoolView({
   const [purpose, setPurpose] = useState<ModelPurpose>("vision");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
-  const [installing, setInstalling] = useState(false);
   const [verifyingDefaults, setVerifyingDefaults] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -167,7 +134,13 @@ export function PoolView({
   useEffect(() => setSettingsForm(settings), [settings]);
 
   const members = useMemo(
-    () => pool.members.filter((model) => model.purpose === purpose),
+    () => pool.members
+      .filter((model) => model.purpose === purpose)
+      .toSorted((left, right) => {
+        const leftIsPaidDefault = left.isPurposeDefault && left.billingMode === "paid";
+        const rightIsPaidDefault = right.isPurposeDefault && right.billingMode === "paid";
+        return Number(leftIsPaidDefault) - Number(rightIsPaidDefault);
+      }),
     [pool.members, purpose],
   );
   const summary = pool.summary[purpose];
@@ -188,7 +161,6 @@ export function PoolView({
     && model.isEnabled
     && model.memberType === "general"
     && (!model.capabilityEligible || !model.poolEnabled)
-    && !model.quotaBlocked
     && !model.cooldownUntil
   )), [pool.members]);
 
@@ -205,18 +177,9 @@ export function PoolView({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           qualityTier: editState.qualityTier,
-          billingMode: editState.billingMode,
-          quotaUsedTokens: Number(editState.quotaUsedTokens || 0),
-          quotaTotalTokens: editState.quotaTotalTokens === ""
-            ? null
-            : Number(editState.quotaTotalTokens),
-          quotaExpiresAt: editState.quotaExpiresAt
-            ? new Date(editState.quotaExpiresAt).toISOString()
-            : null,
           priority: Number(editState.priority || 0),
           isEnabled: editState.isEnabled,
           poolEnabled: editState.poolEnabled,
-          quotaSafetyRatio: Number(editState.quotaSafetyRatio || 0.95),
         }),
       });
     } catch (error) {
@@ -235,58 +198,6 @@ export function PoolView({
     }
   };
 
-  const install = async () => {
-    setInstalling(true);
-    setMessage("正在安装或更新千问免费池...");
-    let mutated = false;
-    try {
-      const result = await api<InstallResult>("/api/model-pools/qianwen-free/install", {
-        method: "POST",
-      });
-      mutated = true;
-      markDirty();
-      const createdSet = new Set(result.created);
-      const preExisting = result.needsVerification.filter((id) => !createdSet.has(id));
-      const created = result.needsVerification.filter((id) => createdSet.has(id));
-      const batches = [
-        ...chunk(preExisting, 50).map((ids) => ({ ids, enablePassed: false })),
-        ...chunk(created, 50).map((ids) => ({ ids, enablePassed: true })),
-      ];
-      let verified = 0;
-      setMessage(
-        `新建 ${result.created.length}，更新 ${result.updated.length}，待验证 ${result.needsVerification.length}`,
-      );
-      for (const batch of batches) {
-        await api("/api/model-pools/qianwen-free/verify", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(batch),
-        });
-        verified += batch.ids.length;
-        setMessage(
-          `新建 ${result.created.length}，更新 ${result.updated.length}，已验证 ${verified}/${result.needsVerification.length}`,
-        );
-      }
-      setMessage(
-        `新建 ${result.created.length}，更新 ${result.updated.length}，验证完成 ${verified}/${result.needsVerification.length}`,
-      );
-    } catch (error) {
-      const text = error instanceof Error ? error.message : "千问免费池安装失败";
-      setMessage(text);
-      reportError(text);
-    } finally {
-      setInstalling(false);
-    }
-    if (!mutated) return;
-    try {
-      await refreshPool();
-    } catch (error) {
-      reportError(`千问免费池已变更，但列表刷新失败：${
-        error instanceof Error ? error.message : "刷新失败"
-      }`);
-    }
-  };
-
   const verifyDefaults = async () => {
     const ids = pendingDefaults.map((model) => model.id);
     if (!ids.length) return;
@@ -295,7 +206,7 @@ export function PoolView({
     let mutated = false;
     try {
       const results = await api<Array<{ id: string; passed: boolean; error?: string }>>(
-        "/api/model-pools/qianwen-free/verify",
+        "/api/model-pool-members/verify",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -480,14 +391,21 @@ export function PoolView({
             受限 {summary.blocked}
           </p>
         </div>
-        <button
-          className="model-console-command primary"
-          type="button"
-          disabled={installing}
-          onClick={() => void install()}
-        >
-          安装/更新千问免费池
-        </button>
+      </div>
+
+      <div className="pool-sync-guide" role="region" aria-label="百炼千问目录同步">
+        <div>
+          <strong>百炼千问目录同步</strong>
+          <p>同步符合客服解析能力要求的千问模型；新成员按量计费且默认待验证、未入池，预览后确认才会应用。</p>
+        </div>
+        <textarea
+          aria-label="百炼千问目录同步命令"
+          readOnly
+          rows={1}
+          value={bailianSyncCommand}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+        <p>应用完成后刷新列表，再选择新成员执行“验证已选”；能力验证通过后才会参与路由。</p>
       </div>
 
       <div className="model-purpose-tabs" role="tablist" aria-label="模型用途">
@@ -608,10 +526,9 @@ export function PoolView({
               </th>
               <th>模型</th>
               <th>等级</th>
-              <th>计费</th>
-              <th>已用/总额</th>
-              <th>剩余</th>
-              <th>到期</th>
+              <th>计费方式</th>
+              <th>预算限制</th>
+              <th>付费预算</th>
               <th>能力</th>
               <th>冷却</th>
               <th>优先级</th>
@@ -622,11 +539,10 @@ export function PoolView({
           <tbody>
             {members.map((model) => {
               const editing = editingId === model.id && editState;
-              const quota = quotaPresentation(model);
               const selected = selectedIds.includes(model.id);
               const capabilityState = capabilityStateFor(model, settings.capabilityTtlMs);
               const capability = capabilityLabels[capabilityState];
-              const status = statusFor(model, capabilityState, quota);
+              const status = statusFor(model, capabilityState);
               const providerName = model.providerName ?? "未绑定服务商";
               return (
                 <tr key={model.id} className={selected ? "selected" : undefined}>
@@ -683,61 +599,9 @@ export function PoolView({
                       />
                     ) : model.qualityTier}
                   </td>
-                  <td>
-                    {editing ? (
-                      <SelectMenu
-                        ariaLabel="计费"
-                        value={editState.billingMode}
-                        onChange={(value) => setEditState({
-                          ...editState,
-                          billingMode: value as ModelBillingMode,
-                        })}
-                        options={[{ value: "free", label: "免费" }, { value: "paid", label: "付费" }]}
-                      />
-                    ) : model.billingMode === "free" ? "免费" : "付费"}
-                  </td>
-                  <td>
-                    {editing ? (
-                      <span className="model-inline-inputs">
-                        <input
-                          aria-label="已用 Token"
-                          type="number"
-                          min="0"
-                          value={editState.quotaUsedTokens}
-                          onChange={(event) => setEditState({
-                            ...editState,
-                            quotaUsedTokens: event.target.value,
-                          })}
-                        />
-                        <input
-                          aria-label="总额 Token"
-                          type="number"
-                          min="0"
-                          value={editState.quotaTotalTokens}
-                          onChange={(event) => setEditState({
-                            ...editState,
-                            quotaTotalTokens: event.target.value,
-                          })}
-                        />
-                      </span>
-                    ) : <QuotaMeter modelName={model.name} quota={quota} />}
-                  </td>
-                  <td>
-                    {quota.remaining == null ? "—" : formatQuotaTokens(quota.remaining)}
-                  </td>
-                  <td>
-                    {editing ? (
-                      <input
-                        aria-label="到期时间"
-                        type="datetime-local"
-                        value={editState.quotaExpiresAt}
-                        onChange={(event) => setEditState({
-                          ...editState,
-                          quotaExpiresAt: event.target.value,
-                        })}
-                      />
-                    ) : displayDate(model.quotaExpiresAt)}
-                  </td>
+                  <td>按量计费</td>
+                  <td>由付费预算控制</td>
+                  <td>日/月预算</td>
                   <td>{capability.column}</td>
                   <td>{model.cooldownUntil ? displayDate(model.cooldownUntil) : "无"}</td>
                   <td>
@@ -758,8 +622,16 @@ export function PoolView({
                     <span className={`model-status ${status.tone}`}>{status.text}</span>
                     {model.poolRemovedReason && (
                       <small className="model-status-note">
-                        已剔除：{removalReasonLabels[model.poolRemovedReason]}
+                        {model.poolRemovedReason === "sync_unavailable"
+                          ? removalLabel(model.poolRemovedReason)
+                          : <>已剔除：{removalReasonLabels[model.poolRemovedReason]}</>}
                         {model.poolRemovedAt ? ` · ${displayDate(model.poolRemovedAt)}` : ""}
+                      </small>
+                    )}
+                    {model.poolRemovedReason === "sync_unavailable"
+                      && syncRemovalReason(model.poolRemovedNote) && (
+                      <small className="model-status-note">
+                        同步原因：{syncRemovalReason(model.poolRemovedNote)}
                       </small>
                     )}
                     {model.consecutiveFailures > 0 && (
