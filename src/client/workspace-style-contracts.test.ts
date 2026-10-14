@@ -119,6 +119,43 @@ describe("workbench style contracts", () => {
     expect(getComputedStyle(usage).fontSize).toBe("11px");
   });
 
+  it("keeps model-pool Chinese UI in the workbench body font and identifiers in mono", () => {
+    createStyledWorkbench();
+    document.querySelector(".app")!.insertAdjacentHTML("beforeend", `
+      <section class="model-console-panel">
+        <div class="model-console-section-head"><h3>模型池</h3><p>集中管理模型</p></div>
+        <button class="model-console-command">验证模型</button>
+        <div class="pool-sync-guide"><textarea>npm run pool:sync</textarea></div>
+        <table class="model-pool-table">
+          <thead><tr><th>模型</th></tr></thead>
+          <tbody><tr><td class="model-name-cell"><strong>千问</strong><code>qwen3-vl-plus</code></td></tr></tbody>
+        </table>
+      </section>`);
+
+    const button = document.querySelector(".model-console-command")!;
+    const syncCommand = document.querySelector(".pool-sync-guide textarea")!;
+    const header = document.querySelector(".model-pool-table th")!;
+    const cell = document.querySelector(".model-pool-table td")!;
+    const identifier = document.querySelector(".model-name-cell code")!;
+
+    expect(getComputedStyle(button).fontFamily).toBe("var(--workbench-font-body)");
+    expect(workspaceTheme).toMatch(
+      /\.pool-sync-guide\s*\{[^}]*border: 1px solid var\(--workbench-line\);[^}]*border-left: 4px solid var\(--workbench-blue\);[^}]*background: var\(--workbench-panel-tint\);[^}]*color: var\(--workbench-ink-soft\);/s,
+    );
+    expect(workspaceTheme).toMatch(
+      /\.pool-sync-guide strong\s*\{[^}]*color: var\(--workbench-ink\);/s,
+    );
+    expect(workspaceTheme).toMatch(
+      /\.pool-sync-guide textarea\s*\{[^}]*border-color: var\(--workbench-line-strong\);[^}]*background: var\(--workbench-panel\);[^}]*color: var\(--workbench-ink\);/s,
+    );
+    expect(getComputedStyle(syncCommand).fontFamily).toBe("var(--workbench-font-mono)");
+    expect(getComputedStyle(header).fontFamily).toBe("var(--workbench-font-body)");
+    expect(getComputedStyle(header).fontSize).toBe("11px");
+    expect(getComputedStyle(cell).fontFamily).toBe("var(--workbench-font-body)");
+    expect(getComputedStyle(cell).fontSize).toBe("12px");
+    expect(getComputedStyle(identifier).fontFamily).toBe("var(--workbench-font-mono)");
+  });
+
   it("uses smooth browser interpolation for record thumbnails", () => {
     createStyledWorkbench();
     const thumbnail = document.querySelector(".record-main img")!;

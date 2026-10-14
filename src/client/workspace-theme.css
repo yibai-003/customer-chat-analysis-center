@@ -3625,3 +3625,107 @@ body[data-ui-theme="atelier"] .knowledge-workspace .confirm-action-modal .danger
   background: var(--workbench-danger);
   color: #ffffff;
 }
+
+/* Keep the model console in the workbench type system. Machine-readable
+   identifiers remain mono, while Chinese labels use the application body face. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .model-console-panel {
+  font-family: var(--workbench-font-body);
+  font-synthesis: none;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .model-console-panel :is(
+  button,
+  input,
+  textarea,
+  label,
+  .pool-readiness,
+  .pool-sync-guide,
+  .pool-bulk-bar,
+  .model-console-message,
+  .model-pool-settings,
+  .model-pool-table,
+  .model-purpose-tabs
+) {
+  font-family: var(--workbench-font-body);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-pool-table th
+) {
+  font-family: var(--workbench-font-body);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-pool-table td
+) {
+  font-family: var(--workbench-font-body);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .model-pool-table .model-name-cell strong {
+  font-family: var(--workbench-font-body);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-pool-table .model-name-cell code,
+  .pool-sync-guide textarea,
+  .model-pool-settings input,
+  .model-pool-table input[type="number"]
+) {
+  font-family: var(--workbench-font-mono);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .model-pool-table .model-name-cell code {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) :is(
+  .model-pool-table .model-name-cell small,
+  .model-status,
+  .model-status-note,
+  .model-row-toggles label
+) {
+  font-family: var(--workbench-font-body);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .pool-sync-guide {
+  border: 1px solid var(--workbench-line);
+  border-left: 4px solid var(--workbench-blue);
+  background: var(--workbench-panel-tint);
+  color: var(--workbench-ink-soft);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .pool-sync-guide strong {
+  font-family: var(--workbench-font-body);
+  color: var(--workbench-ink);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .pool-sync-guide textarea {
+  border-color: var(--workbench-line-strong);
+  background: var(--workbench-panel);
+  color: var(--workbench-ink);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .model-pool-settings label {
+  font-family: var(--workbench-font-body);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
