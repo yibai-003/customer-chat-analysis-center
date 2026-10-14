@@ -65,9 +65,9 @@
 
 **Files:** None.
 
-- [ ] Create and verify a full backup of the 8789 test database while no jobs/imports are active.
-- [ ] Preserve all free rows/history but set free members out of the active pool; keep only verified paid members visible/routable.
-- [ ] Verify both defaults, readiness, health, database integrity, and foreign keys after restarting the test container.
+- [x] Create and verify a full backup of the 8789 test database while no jobs/imports are active.
+- [x] Preserve all free rows/history but set free members out of the active pool; keep only verified paid members visible/routable.
+- [x] Verify both defaults, readiness, health, database integrity, and foreign keys after restarting the test container.
 
 ### Task 5: Full verification and review
 
