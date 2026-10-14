@@ -137,10 +137,11 @@ export function parseLegacyReceptionQuality(
     if (index < 0) issues.push(issue);
     else issues.splice(index, 0, issue);
   }
-  const totalDeduction = [...new Map(preSaleIssues.map((issue) => [issue.name, issue.deduction])).values()]
+  const allIssues = [...preSaleIssues, ...afterSaleIssues];
+  const totalDeduction = [...new Map(allIssues.map((issue) => [issue.name, issue.deduction])).values()]
     .reduce((sum, deduction) => sum + deduction, 0);
   const score = Math.max(0, businessRules.scoreBase - totalDeduction);
-  const hasDLevelIssue = preSaleIssues.some((issue) => issue.forceD);
+  const hasDLevelIssue = allIssues.some((issue) => issue.forceD);
   const sceneMismatch = (scene === "售前" && afterSaleIssues.length > 0)
     || (scene === "售后" && preSaleIssues.length > 0);
   return {
