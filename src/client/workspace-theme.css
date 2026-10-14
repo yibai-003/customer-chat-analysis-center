@@ -757,6 +757,8 @@ body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) :
   body[data-ui-theme="atelier"] :is(.app:not(.signin-app), .knowledge-workspace) * {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }
 
@@ -880,6 +882,19 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-stats {
 body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-heading strong,
 body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-heading b,
 body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-stats strong {
+  color: var(--workbench-ink);
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-compact-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px 14px;
+  color: var(--workbench-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+body[data-ui-theme="atelier"] .app:not(.signin-app) .analysis-progress-compact-stats strong {
   color: var(--workbench-ink);
 }
 
@@ -2178,7 +2193,7 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .image-preview-controls outp
   font-size: 12px;
 }
 
-/* Configuration and editor dialogs no longer inherit the legacy paper/pixel surfaces. */
+/* Configuration and editor dialogs use the same workbench surfaces. */
 body[data-ui-theme="atelier"] .app:not(.signin-app) .modal {
   border: 1px solid var(--workbench-line-strong);
   border-radius: var(--workbench-radius);
@@ -3728,4 +3743,66 @@ body[data-ui-theme="atelier"] .app:not(.signin-app) .model-pool-settings label {
   font-size: 11px;
   font-weight: 500;
   line-height: 1.4;
+}
+
+/* Responsive detail drawer behavior lives with the authenticated workbench. */
+body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-drawer-backdrop {
+  display: none;
+}
+
+@media (min-width: 1200px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail {
+    position: sticky;
+    top: var(--workspace-header-height, 52px);
+    align-self: start;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-empty {
+    min-height: 100%;
+  }
+}
+
+@media (max-width: 1199px) {
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail {
+    position: fixed;
+    top: var(--workspace-header-height, 52px);
+    right: 0;
+    bottom: 0;
+    z-index: 21;
+    width: min(480px, calc(100vw - 72px));
+    min-height: 0;
+    border-left: 1px solid var(--workbench-line-strong);
+    box-shadow: -10px 0 24px var(--workbench-shadow);
+    transform: translateX(104%);
+    transition: transform .22s ease;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail.detail-drawer-open {
+    transform: translateX(0);
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-scroll {
+    max-height: none;
+    padding: 24px 16px 38px;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-close {
+    display: inline-grid;
+    place-items: center;
+  }
+
+  body[data-ui-theme="atelier"] .app:not(.signin-app) .detail-drawer-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    width: 100%;
+    border: 0;
+    background: rgba(50, 76, 94, .28);
+    cursor: default;
+  }
+
+  body[data-ui-theme="atelier"].detail-drawer-active {
+    overflow: hidden;
+  }
 }

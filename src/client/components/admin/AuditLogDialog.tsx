@@ -95,7 +95,7 @@ export function AuditLogDialog({ close }: { close: () => void }) {
     void load(EMPTY_FILTERS, null);
   };
 
-  return <Modal title="审计日志" subtitle="PIXEL OPERATIONS / AUDIT TRAIL" close={close} className="audit-log-modal">
+  return <Modal title="审计日志" subtitle="WORKBENCH / AUDIT TRAIL" close={close} className="audit-log-modal">
     <div className="audit-filters">
       <label>动作<input aria-label="按动作筛选" value={draft.action} placeholder="如 task.export" onChange={(event) => setDraft({ ...draft, action: event.target.value })} /></label>
       <label>操作者 ID<input aria-label="按操作者筛选" value={draft.actorUserId} onChange={(event) => setDraft({ ...draft, actorUserId: event.target.value })} /></label>

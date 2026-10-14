@@ -234,7 +234,7 @@ export function UserManagementDialog({ close }: { close: () => void }) {
   };
 
   return <>
-    <Modal title="账号管理" subtitle="PIXEL OPERATIONS / ACCESS CONTROL" close={closeDialog} className="admin-users-modal">
+    <Modal title="账号管理" subtitle="WORKBENCH / ACCESS CONTROL" close={closeDialog} className="admin-users-modal">
       {loading ? <p className="admin-users-loading">正在加载账号…</p> : loadError
         ? <div className="form-error" role="alert">{loadError}</div>
         : <>

@@ -28,7 +28,7 @@ describe("select menu migration contract", () => {
   it("does not keep native select rules in the loaded client stylesheets", () => {
     const stylesheetPaths = [
       "src/client/styles.css",
-      "src/client/atelier-theme.css",
+      "src/client/signin-theme.css",
       "src/client/workspace-theme.css",
     ];
     const remaining = stylesheetPaths.filter((path) => {

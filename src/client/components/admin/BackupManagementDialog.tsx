@@ -145,7 +145,7 @@ export function BackupManagementDialog({ close }: { close: () => void }) {
   };
 
   return <>
-    <Modal title="备份管理" subtitle="PIXEL OPERATIONS / BACKUP & RESTORE" close={close} className="backup-manage-modal">
+    <Modal title="备份管理" subtitle="WORKBENCH / BACKUP & RESTORE" close={close} className="backup-manage-modal">
       {notice && <div className="notice" role="status">{notice}</div>}
       {error && <div className="form-error" role="alert">{error}</div>}
 

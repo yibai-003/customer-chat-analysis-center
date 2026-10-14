@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const baseStyles = readFileSync(resolve(process.cwd(), "src/client/styles.css"), "utf8");
-const atelierStyles = readFileSync(resolve(process.cwd(), "src/client/atelier-theme.css"), "utf8");
+const signinStyles = readFileSync(resolve(process.cwd(), "src/client/signin-theme.css"), "utf8");
 const workspaceThemePath = resolve(process.cwd(), "src/client/workspace-theme.css");
 const workspaceTheme = existsSync(workspaceThemePath) ? readFileSync(workspaceThemePath, "utf8") : "";
 
@@ -68,7 +68,7 @@ function createStyledWorkbench() {
         <canvas class="signin-dandelion-canvas"></canvas>
       </div>
     </div>`;
-  for (const css of [baseStyles, atelierStyles, workspaceTheme]) {
+  for (const css of [baseStyles, signinStyles, workspaceTheme]) {
     const style = document.createElement("style");
     style.textContent = css;
     document.head.append(style);
@@ -94,7 +94,7 @@ function createStyledKnowledgeWorkspace() {
         <div class="knowledge-table-scroll"><div class="knowledge-base-row head"><span>知识库</span></div></div>
       </main>
     </section>`;
-  for (const css of [baseStyles, atelierStyles, workspaceTheme]) {
+  for (const css of [baseStyles, signinStyles, workspaceTheme]) {
     const style = document.createElement("style");
     style.textContent = css;
     document.head.append(style);
@@ -108,6 +108,14 @@ afterEach(() => {
 });
 
 describe("workbench style contracts", () => {
+  it("keeps the active stylesheets on the workbench and sign-in design systems", () => {
+    expect(baseStyles).not.toMatch(/--pixel-|PIXEL OPERATIONS|steps\(2, end\)/);
+    expect(signinStyles).not.toMatch(/--atelier-|\.app(?![\w-])|\.workspace(?![\w-])|\.sidebar\b|\.detail(?:\b|-drawer)/);
+    expect(workspaceTheme).not.toMatch(/--atelier-|\.signin-(?:layout|dandelion-canvas)\b/);
+    expect(workspaceTheme).toContain('--workbench-ink: #263847;');
+    expect(signinStyles).toContain('--signin-ink: #243341;');
+  });
+
   it("keeps task names and supporting task details compact and readable", () => {
     createStyledWorkbench();
     const taskName = document.querySelector(".job-select strong")!;
@@ -195,6 +203,12 @@ describe("workbench style contracts", () => {
       /(?<!:not\()\.signin-app\b|\.signin-(?:layout|dandelion-canvas)\b/,
     );
     expect(workspaceTheme).toContain(".knowledge-tab");
+    expect(workspaceTheme).toMatch(
+      /\.detail\.detail-drawer-open\s*\{[^}]*transform: translateX\(0\);/s,
+    );
+    expect(workspaceTheme).toMatch(
+      /\.detail-drawer-backdrop\s*\{[^}]*position: fixed;[^}]*z-index: 20;/s,
+    );
   });
 
   it("uses the compact application shell and shared control sizing", () => {
@@ -415,6 +429,21 @@ describe("workbench style contracts", () => {
     expect(workspaceTheme).toMatch(
       /\.app:not\(\.signin-app\) \.upload-art\s*\{[^}]*background: var\(--workbench-blue-soft\);[^}]*box-shadow: none;/s,
     );
+  });
+
+  it("keeps completed analysis summaries compact and readable", () => {
+    createStyledWorkbench();
+    document.querySelector(".content")!.insertAdjacentHTML(
+      "beforeend",
+      `<div class="analysis-progress-compact-stats"><span>已完成 <strong>9</strong></span><span>失败 <strong>0</strong></span></div>`,
+    );
+    const summary = document.querySelector(".analysis-progress-compact-stats")!;
+    const value = summary.querySelector("strong")!;
+
+    expect(getComputedStyle(summary).display).toBe("flex");
+    expect(getComputedStyle(summary).fontSize).toBe("12px");
+    expect(getComputedStyle(value).color).toBe("var(--workbench-ink)");
+    expect(workspaceTheme).toContain("font-variant-numeric: tabular-nums;");
   });
 
   it("aligns import selection and delete confirmation dialog details with the workbench theme", () => {

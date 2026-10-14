@@ -30,12 +30,12 @@
 .botanical-art--specimen .botanical-art__leaf--front { width: 74%; height: 112%; left: 15%; bottom: 0; transform: rotate(16deg); }
 .botanical-art--leaves .botanical-art__paper { transform: rotate(8deg); }
 .artwork-credits { display: inline-block; color: #677363; font-size: 11px; text-underline-offset: 4px; padding: 8px 0; }
-.artwork-credits:hover { color: var(--pixel-ink); }
-.artwork-credits:focus-visible { outline: 2px solid var(--pixel-ink); outline-offset: 3px; }
+.artwork-credits:hover { color: var(--ui-ink); }
+.artwork-credits:focus-visible { outline: 2px solid var(--ui-ink); outline-offset: 3px; }
 
 .sidebar { background-image: none; background-color: #efefe4; }
-.section-group { margin: 8px 0; padding: 4px 0; border: 1px solid var(--pixel-line); background: #fff9; }
-.parent { background: #e7eadb; font-weight: 700; border-bottom: 1px dotted var(--pixel-line); }
+.section-group { margin: 8px 0; padding: 4px 0; border: 1px solid var(--ui-line); background: #fff9; }
+.parent { background: #e7eadb; font-weight: 700; border-bottom: 1px dotted var(--ui-line); }
 .sidebar-botanical { margin: auto 0 8px; padding-top: 24px; text-align: center; }
 .sidebar-botanical .botanical-art { width: 180px; height: 138px; margin: 0 auto; }
 .sidebar .server-state { margin-top: 0; }
