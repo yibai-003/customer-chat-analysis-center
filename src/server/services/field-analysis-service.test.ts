@@ -27,7 +27,7 @@ import {
   createDraftVersion,
   publishSectionVersion,
 } from "./section-config-version-service";
-import { sectionBusinessRules } from "./section-business-rules";
+import { receptionV2IssueRules, sectionBusinessRules } from "./section-business-rules";
 import type { AnalysisField, ModelConfig, ModelPurpose, ModelRouteResult } from "../../shared/types";
 import { attachConversationTestPlatform } from "../testing/conversation-platform-fixture";
 
@@ -189,6 +189,9 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
       DELETE FROM analysis_fields WHERE section_id = 'task-5-dispatch';
       DELETE FROM knowledge_bases WHERE section_id = 'task-5-dispatch';
       DELETE FROM analysis_sections WHERE id = 'task-5-dispatch';
+      DELETE FROM analysis_section_versions WHERE section_id = 'task-5-bound-v2-reception';
+      DELETE FROM analysis_fields WHERE section_id = 'task-5-bound-v2-reception';
+      DELETE FROM analysis_sections WHERE id = 'task-5-bound-v2-reception';
     `);
     applySectionConfigVersions(db);
   });
@@ -637,6 +640,117 @@ describe("field analysis executor", { timeout: 20_000 }, () => {
     });
     expect(vi.mocked(callModelPool).mock.calls.filter(([, options]) => options.purpose === "vision"))
       .toHaveLength(1);
+  });
+
+  it("routes a bound V2 reception version and derives deductions from its local rules", async () => {
+    const timestamp = "2026-10-17T00:00:00.000Z";
+    const sectionId = "task-5-bound-v2-reception";
+    upsertSection({ id: sectionId, name: "V2 接待质检", prompt: "", sourceFields: [] });
+    upsertField({
+      sectionId,
+      key: "截图内容总结",
+      label: "截图内容总结",
+      type: "object",
+      prompt: "受控截图事实抽取",
+      imageEnabled: true,
+      executionType: "reception_screenshot_facts",
+    });
+    upsertField({
+      sectionId,
+      key: "统一质检分析",
+      label: "统一质检分析",
+      type: "object",
+      prompt: "受控 V2 规则判定",
+      imageEnabled: false,
+      dependsOn: ["截图内容总结"],
+      executionType: "reception_quality_analysis",
+    });
+    const version = publishSectionVersion(createDraftVersion(sectionId).id);
+    const job = createJob("bound-v2-reception.xlsx", "bound-v2-reception.xlsx", {
+      id: sectionId,
+      name: "V2 接待质检",
+    });
+    attachConversationTestPlatform(job.id);
+    addRecords(job.id, [{
+      sheetName: "Sheet1",
+      rowNumber: 2,
+      anchor: {},
+      sourceFields: {},
+      imagePath,
+    }]);
+    const record = listRecords(job.id)[0]!;
+
+    const v2Rules = receptionV2IssueRules();
+    const businessRules = {
+      ...sectionBusinessRules("reception"),
+      analysisProtocol: "v2",
+      issues: v2Rules,
+    };
+    db.exec("DROP TRIGGER IF EXISTS section_versions_immutable_content");
+    db.prepare("UPDATE analysis_section_versions SET business_rules_json = ? WHERE id = ?")
+      .run(JSON.stringify(businessRules), version.id);
+    applySectionConfigVersions(db);
+
+    const checks = v2Rules.map((rule) => ({
+      ruleId: rule.id,
+      status: rule.scope === "preSale"
+        ? rule.id === "PRE_ANSWER_IRRELEVANT" ? "violation" : "compliant"
+        : "not_applicable",
+      evidence: rule.id === "PRE_ANSWER_IRRELEVANT"
+        ? [{ source: "dialogue", id: "T2", quote: "请看详情页" }]
+        : [],
+      evidenceExplanation: "聊天原文对应规则判定",
+      reason: "受控 V2 集成测试判定",
+    }));
+    vi.mocked(callModelPool)
+      .mockImplementationOnce(async (_messages, options) => routedResponse(
+        options.purpose,
+        JSON.stringify({
+          截图内容总结: {
+            sceneHints: ["售前"],
+            dialogueTurns: [
+              { id: "T1", speaker: "客户", time: "", text: "尺寸多大" },
+              { id: "T2", speaker: "客服", time: "", text: "请看详情页" },
+            ],
+            customerIntents: [],
+            serviceActions: [],
+            businessFacts: [],
+            missingSignals: [],
+          },
+        }),
+      ))
+      .mockImplementationOnce(async (_messages, options) => routedResponse(
+        options.purpose,
+        JSON.stringify({
+          scene: "售前",
+          checkedRuleIds: v2Rules.filter((rule) => rule.scope === "preSale").map((rule) => rule.id),
+          ruleChecks: checks,
+          blockingUnverifiableItems: [],
+          informationalUnverifiableItems: [],
+          confidence: 0.9,
+        }),
+      ));
+
+    const progress = await analyzeBoundRecordFields(record.id, sectionId);
+    expect(progress.failed).toBe(0);
+    const qualityRun = db.prepare(`
+      SELECT result_json, evidence_text FROM analysis_field_runs WHERE record_id = ? AND field_id = ?
+    `).get(record.id, version.fieldsSnapshot.find((field) => field.key === "统一质检分析")!.id) as {
+      result_json: string;
+      evidence_text: string;
+    };
+    const quality = JSON.parse(qualityRun.result_json)["统一质检分析"];
+    const expectedDeduction = v2Rules.find((rule) => rule.id === "PRE_ANSWER_IRRELEVANT")!.deduction;
+    expect(quality).toMatchObject({ analysisProtocol: "v2", totalDeduction: expectedDeduction });
+    expect(quality.preSaleIssues).toEqual([expect.objectContaining({
+      issueId: "PRE_ANSWER_IRRELEVANT",
+      deduction: expectedDeduction,
+    })]);
+    expect(qualityRun.evidence_text).toContain(
+      '"source":"dialogue","id":"T2","quote":"请看详情页"',
+    );
+    expect(JSON.stringify(vi.mocked(callModelPool).mock.calls[1][0])).toContain("接待流程质检 V2");
+    expect(getJob(job.id)?.sectionConfigVersionId).toBe(version.id);
   });
 
   it("reuses a completed summary and recalculates descendants after an upstream retry", async () => {

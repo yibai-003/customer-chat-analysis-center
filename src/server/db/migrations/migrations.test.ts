@@ -15,6 +15,10 @@ import { applyOptimizedReceptionQualityConfiguration } from "./011-optimized-rec
 import { applyReceptionExcelSchemaConfiguration } from "./013-reception-excel-schema";
 import { applyPoolRemovalAndEfficiencyIndexes } from "./015-pool-removal-and-efficiency-indexes";
 import { applyModelPools } from "./014-model-pools";
+import {
+  RECEPTION_V2_QUALITY_PROMPT,
+  RECEPTION_V2_SCREENSHOT_FACTS_PROMPT,
+} from "../../services/reception-quality-v2-prompts";
 
 const exec = promisify(execFile);
 let dir: string;
@@ -27,7 +31,7 @@ describe("versioned migrations", () => {
     db.prepare("INSERT INTO schema_migrations VALUES(1,'legacy','2026-01-01')").run();
     db.exec("INSERT INTO analysis_sections(id,name,prompt,output_schema_json,created_at,updated_at) VALUES('custom','name','keep my prompt','[]','before','before')");
     runMigrations(db);
-    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]);
+    expect(appliedMigrations(db).map(m => m.version)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30]);
     expect(db.prepare("SELECT prompt FROM analysis_sections").get().prompt).toBe("keep my prompt");
     const columns = db.prepare("PRAGMA table_info(jobs)").all().map((c: any) => c.name);
     expect(columns).toEqual(expect.arrayContaining(["run_started_at", "heartbeat_at", "run_finished_at"]));
@@ -66,8 +70,8 @@ describe("versioned migrations", () => {
 
     runMigrations(db);
 
-    expect(currentSchemaVersion).toBe(29);
-    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
+    expect(currentSchemaVersion).toBe(30);
+    expect(appliedMigrations(db).map((migration) => migration.version)).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]);
     const qwenRows = db.prepare(`
       SELECT
         model.provider_id,
@@ -310,7 +314,7 @@ describe("versioned migrations", () => {
       WHERE action = 'config.version_migration' AND target_id = 'section-a'
     `).get()).toEqual({ count: 1 });
   });
-  it("reconciles reception V7 to V9 during startup without advancing the schema version", async () => {
+  it("upgrades a schema-29 V7 reception snapshot to V2 during startup", async () => {
     applyLegacyBaseline(db);
     db.prepare(`
       INSERT INTO analysis_sections (
@@ -377,18 +381,16 @@ describe("versioned migrations", () => {
       fields_snapshot_json: string;
       business_rules_json: string;
     }>;
-    expect(versions).toHaveLength(9);
-    expect(versions[7]).toMatchObject({ version_number: 8, is_current: 0 });
+    expect(versions).toHaveLength(8);
+    expect(versions[6]).toMatchObject({ version_number: 7, is_current: 0 });
+    expect(versions[6]).toMatchObject(currentSnapshot);
+    expect(versions[7]).toMatchObject({ version_number: 8, is_current: 1 });
     expect(JSON.parse(versions[7].export_settings_json)).toMatchObject({
-      rowMode: "reception_issue_records",
-    });
-    expect(versions[8]).toMatchObject({ version_number: 9, is_current: 1 });
-    expect(JSON.parse(versions[8].export_settings_json)).toMatchObject({
       rowMode: "screenshot_records",
     });
-    expect(versions[8]).toMatchObject(currentSnapshot);
-    expect(appliedMigrations(db).at(-1)).toMatchObject({ version: 29 });
-    expect(appliedMigrations(db)).toHaveLength(28);
+    expect(JSON.parse(versions[7].business_rules_json).analysisProtocol).toBe("v2");
+    expect(appliedMigrations(db).at(-1)).toMatchObject({ version: 30 });
+    expect(appliedMigrations(db)).toHaveLength(29);
     await exec(process.execPath, [
       "--import",
       "tsx",
@@ -410,7 +412,178 @@ describe("versioned migrations", () => {
     expect(db.prepare(`
       SELECT COUNT(*) AS count FROM analysis_section_versions
       WHERE section_id = 'reception'
-    `).get()).toEqual({ count: 9 });
+    `).get()).toEqual({ count: 8 });
+  });
+  it("creates one immutable V2 reception version from schema 29", () => {
+    applyLegacyBaseline(db);
+    db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (
+        'reception', NULL, '接待流程质检', '', '[]', '[]',
+        1, 1, 1, '2026-09-22T00:00:00.000Z', '2026-09-22T00:00:00.000Z'
+      )
+    `).run();
+    runMigrations(db, migrations.filter((migration) => migration.version <= 29));
+
+    const before = db.prepare(`
+      SELECT id, version_number, section_snapshot_json, fields_snapshot_json,
+        export_settings_json, dependencies_snapshot_json, knowledge_snapshot_json,
+        business_rules_json
+      FROM analysis_section_versions
+      WHERE section_id = 'reception' AND is_current = 1
+    `).get() as any;
+    const beforeCount = (db.prepare("SELECT COUNT(*) AS count FROM analysis_section_versions WHERE section_id = 'reception'")
+      .get() as { count: number }).count;
+    const beforeFields = JSON.parse(before.fields_snapshot_json) as Array<Record<string, any>>;
+    const beforeFacts = beforeFields.find((field) => field.key === "截图内容总结")!;
+    const beforeQuality = beforeFields.find((field) => field.key === "统一质检分析")!;
+
+    migrations.find((migration) => migration.version === 30)!.up(db);
+
+    const current = db.prepare(`
+      SELECT id, version_number, business_rules_json, fields_snapshot_json,
+        section_snapshot_json, export_settings_json, dependencies_snapshot_json,
+        knowledge_snapshot_json
+      FROM analysis_section_versions
+      WHERE section_id = 'reception' AND is_current = 1
+    `).get() as any;
+    expect(current.version_number).toBe(before.version_number + 1);
+    expect(JSON.parse(current.business_rules_json).analysisProtocol).toBe("v2");
+    expect(JSON.parse(current.business_rules_json).issues[0].evidenceSources).toEqual(["dialogue"]);
+    expect(db.prepare("SELECT business_rules_json FROM analysis_section_versions WHERE id = ?")
+      .get(before.id).business_rules_json).toBe(before.business_rules_json);
+    expect(current.section_snapshot_json).toBe(before.section_snapshot_json);
+    expect(current.export_settings_json).toBe(before.export_settings_json);
+    expect(current.dependencies_snapshot_json).toBe(before.dependencies_snapshot_json);
+    expect(current.knowledge_snapshot_json).toBe(before.knowledge_snapshot_json);
+
+    const currentFields = JSON.parse(current.fields_snapshot_json) as Array<Record<string, any>>;
+    const facts = currentFields.find((field) => field.key === "截图内容总结")!;
+    const quality = currentFields.find((field) => field.key === "统一质检分析")!;
+    expect(facts).toMatchObject({
+      id: beforeFacts.id,
+      executionType: beforeFacts.executionType,
+      imageEnabled: beforeFacts.imageEnabled,
+      dependsOn: beforeFacts.dependsOn,
+      outputColumn: beforeFacts.outputColumn,
+      prompt: RECEPTION_V2_SCREENSHOT_FACTS_PROMPT,
+    });
+    expect(quality).toMatchObject({
+      id: beforeQuality.id,
+      executionType: beforeQuality.executionType,
+      imageEnabled: beforeQuality.imageEnabled,
+      dependsOn: beforeQuality.dependsOn,
+      outputColumn: beforeQuality.outputColumn,
+      prompt: RECEPTION_V2_QUALITY_PROMPT,
+    });
+    expect(db.prepare("SELECT prompt FROM analysis_fields WHERE section_id = 'reception' AND key = '截图内容总结'").get())
+      .toEqual({ prompt: RECEPTION_V2_SCREENSHOT_FACTS_PROMPT });
+    expect(db.prepare("SELECT prompt FROM analysis_fields WHERE section_id = 'reception' AND key = '统一质检分析'").get())
+      .toEqual({ prompt: RECEPTION_V2_QUALITY_PROMPT });
+    expect(db.prepare(`
+      SELECT json_extract(metadata_json, '$.upgrade') AS upgrade
+      FROM audit_events
+      WHERE action = 'config.version_migration' AND target_id = 'reception'
+    `).all()).toContainEqual({ upgrade: "reception-quality-protocol-v2" });
+
+    const auditCountBeforeRepeat = (db.prepare(`SELECT COUNT(*) AS count FROM audit_events
+      WHERE action = 'config.version_migration' AND target_id = 'reception'`).get() as { count: number }).count;
+    const versionCountBeforeRepeat = (db.prepare(`SELECT COUNT(*) AS count FROM analysis_section_versions
+      WHERE section_id = 'reception'`).get() as { count: number }).count;
+    expect(versionCountBeforeRepeat).toBe(beforeCount + 1);
+    migrations.find((migration) => migration.version === 30)!.up(db);
+    expect(db.prepare(`SELECT COUNT(*) AS count FROM analysis_section_versions
+      WHERE section_id = 'reception' AND is_current = 1`).get()).toEqual({ count: 1 });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM analysis_section_versions WHERE section_id = 'reception'").get())
+      .toEqual({ count: versionCountBeforeRepeat });
+    expect((db.prepare(`SELECT COUNT(*) AS count FROM audit_events
+      WHERE action = 'config.version_migration' AND target_id = 'reception'`).get() as { count: number }).count)
+      .toBe(auditCountBeforeRepeat);
+  });
+  it("leaves the current reception version and live prompts unchanged when migration 030 lacks a core field", () => {
+    applyLegacyBaseline(db);
+    db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (
+        'reception', NULL, '接待流程质检', '', '[]', '[]',
+        1, 1, 1, '2026-09-22T00:00:00.000Z', '2026-09-22T00:00:00.000Z'
+      )
+    `).run();
+    runMigrations(db, migrations.filter((migration) => migration.version <= 29));
+
+    const currentBefore = db.prepare(`
+      SELECT id, version_number, status, is_current, fields_snapshot_json, business_rules_json
+      FROM analysis_section_versions
+      WHERE section_id = 'reception' AND is_current = 1
+    `).get() as any;
+    const fieldsWithoutQuality = (JSON.parse(currentBefore.fields_snapshot_json) as Array<Record<string, unknown>>)
+      .filter((field) => field.key !== "统一质检分析");
+    db.exec("DROP TRIGGER IF EXISTS section_versions_immutable_content");
+    db.prepare("UPDATE analysis_section_versions SET fields_snapshot_json = ? WHERE id = ?")
+      .run(JSON.stringify(fieldsWithoutQuality), currentBefore.id);
+
+    const invalidCurrentBefore = db.prepare(`
+      SELECT id, version_number, status, is_current, fields_snapshot_json, business_rules_json
+      FROM analysis_section_versions
+      WHERE section_id = 'reception' AND is_current = 1
+    `).get();
+    const versionCountBefore = (db.prepare(
+      "SELECT COUNT(*) AS count FROM analysis_section_versions WHERE section_id = 'reception'",
+    ).get() as { count: number }).count;
+    const livePromptsBefore = db.prepare(`
+      SELECT s.prompt AS section_prompt,
+        (SELECT prompt FROM analysis_fields WHERE section_id = 'reception' AND key = '截图内容总结') AS facts_prompt,
+        (SELECT prompt FROM analysis_fields WHERE section_id = 'reception' AND key = '统一质检分析') AS quality_prompt
+      FROM analysis_sections s
+      WHERE s.id = 'reception'
+    `).get();
+
+    const migration = migrations.find((candidate) => candidate.version === 30)!;
+    expect(() => migration.up(db)).toThrow("接待质检缺少两阶段核心字段");
+
+    expect(db.prepare(`
+      SELECT id, version_number, status, is_current, fields_snapshot_json, business_rules_json
+      FROM analysis_section_versions
+      WHERE section_id = 'reception' AND is_current = 1
+    `).get()).toEqual(invalidCurrentBefore);
+    expect(db.prepare(`
+      SELECT COUNT(*) AS count FROM analysis_section_versions WHERE section_id = 'reception'
+    `).get()).toEqual({ count: versionCountBefore });
+    expect(db.prepare(`
+      SELECT COUNT(*) AS count FROM analysis_section_versions
+      WHERE section_id = 'reception' AND status = 'published' AND is_current = 1
+    `).get()).toEqual({ count: 1 });
+    expect(db.prepare(`
+      SELECT s.prompt AS section_prompt,
+        (SELECT prompt FROM analysis_fields WHERE section_id = 'reception' AND key = '截图内容总结') AS facts_prompt,
+        (SELECT prompt FROM analysis_fields WHERE section_id = 'reception' AND key = '统一质检分析') AS quality_prompt
+      FROM analysis_sections s
+      WHERE s.id = 'reception'
+    `).get()).toEqual(livePromptsBefore);
+    expect(appliedMigrations(db).at(-1)?.version).toBe(29);
+  });
+  it("treats missing reception state and an already-current V2 snapshot as no-ops", () => {
+    applyLegacyBaseline(db);
+    runMigrations(db, migrations.filter((migration) => migration.version <= 29));
+    const migration = migrations.find((candidate) => candidate.version === 30)!;
+    expect(() => migration.up(db)).not.toThrow();
+
+    db.prepare(`
+      INSERT INTO analysis_sections (
+        id, parent_id, name, prompt, output_schema_json, source_fields_json,
+        sort_order, is_enabled, image_enabled, created_at, updated_at
+      ) VALUES (
+        'reception', NULL, '接待流程质检', '', '[]', '[]',
+        1, 1, 1, 'now', 'now'
+      )
+    `).run();
+    expect(() => migration.up(db)).not.toThrow();
+    expect(db.prepare("SELECT COUNT(*) AS count FROM analysis_section_versions WHERE section_id = 'reception'").get())
+      .toEqual({ count: 0 });
   });
   it("upgrades an existing v18 database with a real section foreign key and dimensioned reception version", () => {
     applyLegacyBaseline(db);
@@ -454,8 +627,8 @@ describe("versioned migrations", () => {
     runMigrations(db);
 
     expect(appliedMigrations(db).at(-1)).toMatchObject({
-      version: 29,
-      name: "revert-reception-issue-row-export",
+      version: 30,
+      name: "reception-quality-protocol-v2",
     });
     expect(db.prepare("PRAGMA foreign_key_list(analysis_section_versions)").all())
       .toEqual(expect.arrayContaining([
@@ -479,7 +652,7 @@ describe("versioned migrations", () => {
       business_rules_json: string;
       export_settings_json: string;
     }>;
-    expect(versions).toHaveLength(9);
+    expect(versions).toHaveLength(10);
     expect(versions[0]).toMatchObject({ id: receptionV1.id, version_number: 1, is_current: 0 });
     expect((JSON.parse(versions[0].business_rules_json).issues as Array<{ dimension?: string }>)[0].dimension)
       .toBeUndefined();
@@ -523,7 +696,7 @@ describe("versioned migrations", () => {
         expect.objectContaining({ format: "reception_issue_names_csv", outputColumn: "问题 (issue)" }),
       ]),
     });
-    expect(versions[8]).toMatchObject({ version_number: 9, is_current: 1 });
+    expect(versions[8]).toMatchObject({ version_number: 9, is_current: 0 });
     expect(JSON.parse(versions[8].export_settings_json)).toMatchObject({
       rowMode: "screenshot_records",
     });
@@ -555,6 +728,8 @@ describe("versioned migrations", () => {
       UPDATE analysis_section_versions SET section_snapshot_json = '{}'
       WHERE id = ?
     `).run(versions[8].id)).toThrow("已发布配置版本内容不可修改");
+    expect(versions[9]).toMatchObject({ version_number: 10, is_current: 1 });
+    expect(JSON.parse(versions[9].business_rules_json).analysisProtocol).toBe("v2");
     expect(() => db.prepare(`
       INSERT INTO analysis_section_versions (
         id, section_id, version_number, status, is_current,

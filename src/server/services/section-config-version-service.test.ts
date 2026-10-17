@@ -14,6 +14,7 @@ import {
   updateDraftSectionVersion,
   deleteDraftSectionVersion,
 } from "./section-config-version-service";
+import { receptionV2IssueRules } from "./section-business-rules";
 
 beforeAll(() => initDb());
 
@@ -512,6 +513,40 @@ describe("section configuration version lifecycle", () => {
       .run(JSON.stringify({ ...draft.businessRules, issues: rules.issues }), draft.id);
 
     expect(() => publishSectionVersion(draft.id)).toThrow("接待质检规则缺少判定标准");
+  });
+
+  it("requires non-empty evidence sources for every V2 reception rule", () => {
+    const draft = createDraftVersion("reception");
+    const rules = {
+      ...draft.businessRules,
+      analysisProtocol: "v2",
+      issues: receptionV2IssueRules().map((issue) => ({ ...issue, evidenceSources: [] })),
+    } as unknown as Record<string, unknown>;
+
+    expect(() => updateDraftSectionVersion(draft.id, { businessRules: rules }))
+      .toThrow("接待质检规则缺少证据来源");
+  });
+
+  it("rejects a V2 snapshot with an unknown evidence source", () => {
+    const draft = createDraftVersion("reception");
+    const rules = structuredClone(draft.businessRules) as any;
+    rules.analysisProtocol = "v2";
+    rules.issues[0].evidenceSources = ["remote_database"];
+    expect(() => updateDraftSectionVersion(draft.id, { businessRules: rules })).toThrow("配置参数无效");
+  });
+
+  it("permits backend_record evidence requirements without a workbook column", () => {
+    const draft = createDraftVersion("reception");
+    const rules = {
+      ...draft.businessRules,
+      analysisProtocol: "v2",
+      issues: receptionV2IssueRules(),
+    } as unknown as Record<string, unknown>;
+
+    const updated = updateDraftSectionVersion(draft.id, { businessRules: rules });
+    expect((updated.businessRules.issues as Array<{ id: string; evidenceSources?: string[] }>)
+      .find((issue) => issue.id === "POST_NO_REGISTRATION")?.evidenceSources)
+      .toEqual(["dialogue", "backend_record"]);
   });
 
   it("rejects malformed snapshots and runtime model state", () => {

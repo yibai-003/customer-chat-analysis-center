@@ -161,9 +161,14 @@ const receptionIssueRuleInput = z.object({
   exclusions: z.array(z.string().max(20000)).max(100),
   requiredEvidence: z.array(z.string().max(20000)).max(100),
   missingDataOutcome: z.enum(["not_applicable", "blocking_review", "informational"]),
+  evidenceSources: z.array(z.enum(["dialogue", "source_field", "knowledge", "backend_record"]))
+    .max(4)
+    .refine(sources => new Set(sources).size === sources.length, "证据来源重复")
+    .optional(),
 }).strict();
 export const receptionBusinessRulesInput = z.object({
   kind: z.literal("reception_quality"),
+  analysisProtocol: z.enum(["legacy", "strict", "v2"]).optional(),
   scoreBase: z.number().min(0).max(1000),
   gradeThresholds: z.array(z.object({
     grade: z.enum(["A", "B", "C", "D"]),

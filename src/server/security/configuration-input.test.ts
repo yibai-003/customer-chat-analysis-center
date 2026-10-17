@@ -7,10 +7,25 @@ import { createModelConfig } from "../services/model-config-service";
 import { upsertKnowledgeBase, upsertKnowledgeItem } from "../services/knowledge/knowledge-repository";
 import { createApp } from "../app";
 import { loginAdmin } from "../auth/test-admin";
+import { parseConfiguration, receptionBusinessRulesInput } from "./configuration-input";
+import { receptionV2IssueRules, sectionBusinessRules } from "../services/section-business-rules";
 
 beforeAll(() => initDb());
 const revision = () => db.prepare("SELECT revision FROM knowledge_sync_outbox").get().revision;
 describe("configuration writes validate before mutation", () => {
+  it("accepts only the declared V2 protocol and evidence sources", () => {
+    const receptionRules = sectionBusinessRules("reception");
+    expect(() => parseConfiguration(receptionBusinessRulesInput, {
+      ...receptionRules,
+      analysisProtocol: "v2",
+      issues: receptionV2IssueRules(),
+    })).not.toThrow();
+    expect(() => parseConfiguration(receptionBusinessRulesInput, {
+      ...receptionRules,
+      analysisProtocol: "v2",
+      issues: [{ ...receptionV2IssueRules()[0], evidenceSources: ["remote_database"] }],
+    })).toThrow("配置参数无效");
+  });
   it.each([{ type: "array" }, { executionType: "shell" }, { imageEnabled: "false" }, { isEnabled: 1 }, { candidateLimit: 31 }, { key: "__proto__" }, { key: "constructor" }])("rejects invalid field input %j without dirtying the snapshot", patch => {
     const before = revision();
     expect(() => upsertField({ sectionId: "refund", key: "合法字段", label: "字段", type: "string", ...patch } as any)).toThrow();

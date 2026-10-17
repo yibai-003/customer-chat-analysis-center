@@ -12,6 +12,7 @@ import type {
 } from "../../shared/types";
 import { cpus } from "node:os";
 import { initDb, db } from "../db/client";
+import { applyReceptionQualityProtocolV2 } from "../db/migrations/030-reception-quality-protocol-v2";
 import {
   createPlatform,
   getJob,
@@ -27,11 +28,15 @@ import { analyzeField } from "./field-analysis-service";
 import {
   activateSectionVersion,
   createDraftVersion,
+  deleteDraftSectionVersion,
   getJobSectionConfigVersion,
+  listSectionVersions,
   getSectionVersion,
   publishSectionVersion,
   updateDraftSectionVersion,
 } from "./section-config-version-service";
+import { receptionV2IssueRules } from "./section-business-rules";
+import { receptionAiSourceFields } from "./reception-quality-rules";
 import {
   importWorkbookStreaming,
   previewWorkbookStreaming,
@@ -281,12 +286,84 @@ function qualityFor(order: string, recordId?: string) {
   const record = getRecord(recordId!);
   const version = record ? getJobSectionConfigVersion(record.jobId) : undefined;
   const versionRules = version?.businessRules as {
-    issues?: Array<{ id: string; scope: string }>;
+    analysisProtocol?: string;
+    issues?: Array<{
+      id: string;
+      scope: string;
+      deduction?: number;
+      evidenceSources?: string[];
+    }>;
   } | undefined;
   const rules = versionRules?.issues ?? [];
   const checkedRuleIds = rules
     .filter((rule) => rule.scope === "preSale")
     .map((rule) => rule.id);
+  if (versionRules?.analysisProtocol === "v2") {
+    const scene = order === "RG-REVIEW" ? "售后" : "售前";
+    const ruleChecks = rules.map((rule) => {
+      const applicable = scene === "售前" ? rule.scope === "preSale" : rule.scope === "afterSale";
+      const issueId = order === "RG-SINGLE" ? "PRE_ANSWER_IRRELEVANT"
+        : order === "RG-MULTI-D" && rule.id === "PRE_ANSWER_IRRELEVANT" ? rule.id
+          : order === "RG-MULTI-D" && rule.id === "PRE_PASSIVE_SERVICE" ? rule.id
+            : undefined;
+      const violation = issueId === rule.id;
+      const evidenceText = factsFor(order).dialogueTurns[1].text;
+      const evidence: Array<{ source: string; id: string; quote?: string; value?: string }> = [];
+      let missingEvidenceSource = false;
+      for (const source of rule.evidenceSources ?? ["dialogue"]) {
+        if (source === "dialogue") {
+          evidence.push({ source, id: "T2", quote: evidenceText });
+        } else if (source === "source_field") {
+          const field = Object.entries(receptionAiSourceFields(record?.sourceFields ?? {}))[0];
+          if (field) evidence.push({ source, id: field[0], value: field[1] });
+          else missingEvidenceSource = true;
+        } else if (source === "knowledge") {
+          const knowledgeSnapshot = version?.knowledgeSnapshot as Array<{
+            id: string;
+            isEnabled?: boolean;
+            items?: Array<{ id: string; isEnabled?: boolean; values: Record<string, unknown> }>;
+          }> | undefined;
+          const base = knowledgeSnapshot?.find((candidate) =>
+            candidate.isEnabled !== false && Array.isArray(candidate.items)
+            && candidate.items.some((item) => item.isEnabled !== false));
+          const item = base?.items?.find((candidate) => candidate.isEnabled !== false);
+          if (base && item) {
+            evidence.push({
+              source,
+              id: `${base.id}/${item.id}`,
+              value: JSON.stringify(item.values),
+            });
+          } else {
+            missingEvidenceSource = true;
+          }
+        } else {
+          missingEvidenceSource = true;
+        }
+      }
+      return {
+        ruleId: rule.id,
+        status: !applicable ? "not_applicable"
+          : violation ? "violation"
+            : missingEvidenceSource ? "needs_review"
+              : "compliant",
+        evidence,
+        evidenceExplanation: violation && rule.id === "PRE_PASSIVE_SERVICE"
+          ? "客服明确拒绝继续接待"
+          : violation ? "客服没有回应尺码选择" : "受控 XLSX 会话原文证据",
+        reason: violation ? "客服回复未处理客户当前问题" : "未发现可确认的规则违规",
+      };
+    });
+    return {
+      scene,
+      checkedRuleIds: rules
+        .filter((rule) => scene === "售前" ? rule.scope === "preSale" : rule.scope === "afterSale")
+        .map((rule) => rule.id),
+      ruleChecks,
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.96,
+    };
+  }
   const base = {
     scene: "售前",
     checkedRuleIds,
@@ -401,6 +478,7 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
 
   beforeAll(async () => {
     initDb();
+    applyReceptionQualityProtocolV2(db);
     originalCurrentVersionId = getSection("reception")!.currentVersionId!;
     workspace = gateArtifactDir || await fs.mkdtemp(path.join(os.tmpdir(), "reception-xlsx-release-gate-"));
     await fs.mkdir(workspace, { recursive: true });
@@ -426,17 +504,75 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
     }
   });
 
+  it("declares backend evidence in V2 rules without adding workbook contract columns", () => {
+    const draft = createDraftVersion("reception");
+    const version = updateDraftSectionVersion(draft.id, {
+      businessRules: {
+        ...draft.businessRules,
+        analysisProtocol: "v2",
+        issues: receptionV2IssueRules(),
+      },
+    });
+    const rules = version.businessRules as {
+      analysisProtocol?: string;
+      issues: Array<{ id: string; evidenceSources?: string[] }>;
+      importContract: { resultColumns: string[] };
+    };
+    expect(rules.analysisProtocol).toBe("v2");
+    expect(rules.issues.find((item) => item.id === "POST_NO_REGISTRATION")?.evidenceSources)
+      .toEqual(["dialogue", "backend_record"]);
+    expect(version.sectionSnapshot.sourceFields).not.toContain("backend_record");
+    expect(rules.importContract.resultColumns).not.toContain("backend_record");
+    deleteDraftSectionVersion(draft.id);
+  });
+
   it("passes import, analysis, rollback isolation, retry, export and reread gates", async () => {
-    const historicalVersion = getSectionVersion(originalCurrentVersionId)!;
+    const currentVersion = getSectionVersion(originalCurrentVersionId)!;
+    expect(currentVersion.businessRules).toMatchObject({ analysisProtocol: "v2" });
+    const historicalVersion = listSectionVersions("reception").find((version) =>
+      version.status === "published"
+      && !("analysisProtocol" in version.businessRules))!;
+    expect(historicalVersion.id).not.toBe(currentVersion.id);
+    expect(historicalVersion.businessRules).not.toHaveProperty("analysisProtocol");
     const draft = createDraftVersion("reception");
     const nextRules = structuredClone(draft.businessRules) as {
+      analysisProtocol?: string;
       issues: Array<{ id: string; deduction: number }>;
     };
+    nextRules.analysisProtocol = "v2";
+    nextRules.issues = receptionV2IssueRules();
     nextRules.issues.find((item) => item.id === "PRE_ANSWER_IRRELEVANT")!.deduction = 17;
     updateDraftSectionVersion(draft.id, {
       businessRules: nextRules as unknown as Record<string, unknown>,
+      knowledgeSnapshot: [{
+        id: "release-gate-knowledge",
+        sectionId: "reception",
+        name: "受控 XLSX 完整知识快照",
+        originalFilename: "release-gate-knowledge.xlsx",
+        columns: [
+          { name: "商品名称", roles: ["search"] },
+          { name: "尺码说明", roles: ["result"] },
+        ],
+        itemCount: 1,
+        isEnabled: true,
+        createdAt: "2026-10-17T00:00:00.000Z",
+        updatedAt: "2026-10-17T00:00:00.000Z",
+        items: [{
+          id: "release-gate-knitwear",
+          knowledgeBaseId: "release-gate-knowledge",
+          pathKey: "针织衫",
+          searchText: "针织衫 按详情页尺码表选择",
+          isEnabled: true,
+          values: { 品类: "服饰", 商品名称: "针织衫", 尺码说明: "按详情页尺码表选择" },
+          sourceImportId: null,
+          sourceRowNumber: 2,
+          createdAt: "2026-10-17T00:00:00.000Z",
+          updatedAt: "2026-10-17T00:00:00.000Z",
+        }],
+      }],
     });
     const newVersion = publishSectionVersion(draft.id);
+    expect(newVersion.businessRules).toMatchObject({ analysisProtocol: "v2" });
     const newVersionKnowledgeHash = hash(newVersion.knowledgeSnapshot);
     const newVersionRulesHash = hash(newVersion.businessRules);
     const platform = createPlatform({
@@ -471,6 +607,9 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
       platform,
     );
     expect(taskOne.sectionConfigVersionId).toBe(newVersion.id);
+    expect(getJobSectionConfigVersion(taskOne.id)?.businessRules)
+      .toMatchObject({ analysisProtocol: "v2" });
+    expect(getJobSectionConfigVersion(taskOne.id)?.id).toBe(newVersion.id);
     expect(listRecords(taskOne.id).map((record) => record.rowNumber)).toEqual([2, 3, 4, 5]);
 
     vi.mocked(callModelPool).mockImplementation(
@@ -670,6 +809,7 @@ describe("realistic anonymized reception XLSX release gate", { timeout: 40_000 }
       grade: "D",
     });
     expect(getRecord(retryRecord.id)?.conversationId).toBe(idsBeforeRetry["RG-MULTI-D"]);
+    expect(getJobSectionConfigVersion(taskOne.id)?.id).toBe(newVersion.id);
     for (const record of listRecords(taskOne.id)) {
       expect(record.conversationId).toBe(idsBeforeRetry[record.sourceFields["订单号"]]);
     }

@@ -16,6 +16,7 @@ import {
 } from "../security/configuration-input";
 import { sectionBusinessRules } from "./section-business-rules";
 import { sectionExportSettings } from "./section-export-settings";
+import { RECEPTION_EVIDENCE_SOURCES } from "./reception-quality-rules";
 
 const now = () => new Date().toISOString();
 
@@ -306,6 +307,21 @@ function validateVersionSnapshot(version: Pick<
 
   if (version.sectionId === "reception" || businessRules.kind === "reception_quality") {
     const checked = parseConfiguration(receptionBusinessRulesInput, businessRules);
+    if (checked.analysisProtocol === "v2") {
+      const allowedEvidenceSources = new Set<string>(RECEPTION_EVIDENCE_SOURCES);
+      for (const issue of checked.issues) {
+        const sources = issue.evidenceSources;
+        if (!sources?.length || sources.some((source) => !source.trim())) {
+          throw new Error(`接待质检规则缺少证据来源：${issue.id}`);
+        }
+        if (new Set(sources).size !== sources.length) {
+          throw new Error(`接待质检规则证据来源重复：${issue.id}`);
+        }
+        if (sources.some((source) => !allowedEvidenceSources.has(source))) {
+          throw new Error(`接待质检规则证据来源无效：${issue.id}`);
+        }
+      }
+    }
     const grades = new Set(checked.gradeThresholds.map((item) => item.grade));
     for (const grade of ["A", "B", "C", "D"] as const) {
       if (!grades.has(grade)) throw new Error(`接待质检缺少 ${grade} 级阈值`);
