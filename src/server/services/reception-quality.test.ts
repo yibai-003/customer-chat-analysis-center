@@ -1,20 +1,80 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildReceptionQualityV2Messages,
   buildReceptionQualityMessages,
   deriveReceptionConversationFacts,
   deriveReceptionQualityFields,
   parseReceptionQuality,
+  parseReceptionQualityV2,
   parseReceptionScreenshotFacts,
+  receptionKnowledgeSnapshotContext,
   type ReceptionScene,
+  type ReceptionV2RuleCheck,
+  type ReceptionV2EvidenceRef,
   type ReceptionScreenshotFacts,
 } from "./reception-quality";
 import {
+  receptionV2IssueRules,
   receptionBusinessRules,
   sectionBusinessRules,
   type ReceptionBusinessRules,
 } from "./section-business-rules";
 
 const canonicalRules = receptionBusinessRules(sectionBusinessRules("reception"));
+
+describe("reception quality protocol contracts", () => {
+  it("builds V2 evidence metadata without changing the legacy rule catalog", () => {
+    const legacy = receptionBusinessRules(sectionBusinessRules("reception")).issues;
+    const v2 = receptionV2IssueRules();
+    expect(v2).not.toBe(legacy);
+    expect(v2.find((rule) => rule.id === "POST_NO_REGISTRATION")?.evidenceSources)
+      .toEqual(["dialogue", "backend_record"]);
+    expect(v2.find((rule) => rule.id === "PRE_ANSWER_IRRELEVANT")?.evidenceSources)
+      .toEqual(["dialogue"]);
+    expect(legacy.find((rule) => rule.id === "POST_NO_REGISTRATION")?.evidenceSources)
+      .toBeUndefined();
+  });
+
+  it("deep-copies V2 rule criteria arrays from the legacy catalog", () => {
+    const legacy = receptionBusinessRules(sectionBusinessRules("reception")).issues;
+    const v2 = receptionV2IssueRules();
+    const legacyRule = legacy.find((rule) => rule.id === "POST_BAD_PROCESS_OR_PRIVACY")!;
+    const v2Rule = v2.find((rule) => rule.id === "POST_BAD_PROCESS_OR_PRIVACY")!;
+
+    v2Rule.applicableWhen.push("临时适用条件");
+    v2Rule.triggerWhen.push("临时触发条件");
+    v2Rule.exclusions.push("临时排除条件");
+    v2Rule.requiredEvidence.push("临时证据要求");
+
+    expect(legacyRule.applicableWhen).not.toContain("临时适用条件");
+    expect(legacyRule.triggerWhen).not.toContain("临时触发条件");
+    expect(legacyRule.exclusions).not.toContain("临时排除条件");
+    expect(legacyRule.requiredEvidence).not.toContain("临时证据要求");
+  });
+});
+
+function completeV2RuleChecks(
+  rules: ReceptionBusinessRules,
+  scene: ReceptionScene,
+  override: Pick<ReceptionV2RuleCheck, "status">,
+): ReceptionV2RuleCheck[] {
+  return rules.issues.map((rule) => ({
+    ruleId: rule.id,
+    status: scene === "混合" || scene === "无法判断"
+      || (scene === "售前" && rule.scope === "preSale")
+      || (scene === "售后" && rule.scope === "afterSale")
+      ? override.status
+      : "not_applicable",
+    evidence: override.status === "violation"
+      && (scene === "混合" || scene === "无法判断"
+        || (scene === "售前" && rule.scope === "preSale")
+        || (scene === "售后" && rule.scope === "afterSale"))
+      ? [{ source: "dialogue", id: "T2", quote: "请看详情页" }]
+      : [],
+    evidenceExplanation: "受控测试证据说明",
+    reason: "受控测试判定理由",
+  }));
+}
 
 function checkedRuleIds(
   scene: ReceptionScene,
@@ -247,6 +307,378 @@ describe("reception screenshot facts", () => {
 });
 
 describe("reception quality", () => {
+  it.each([
+    ["售前", ["PRE_ANSWER_IRRELEVANT", "POST_NO_REPLY"]],
+    ["售后", ["PRE_ANSWER_IRRELEVANT", "POST_NO_REPLY"]],
+    ["混合", ["PRE_ANSWER_IRRELEVANT", "POST_NO_REPLY"]],
+    ["无法判断", ["PRE_ANSWER_IRRELEVANT", "POST_NO_REPLY"]],
+  ] as const)("V2 prompt keeps the complete catalog when sceneHints is %s", (hint, sentinels) => {
+    const text = JSON.stringify(buildReceptionQualityV2Messages({
+      field: qualityField(),
+      screenshotFacts: { ...completeFacts(), sceneHints: [hint] },
+      sourceFields: {},
+    }));
+    for (const id of sentinels) expect(text).toContain(id);
+    expect(text).toContain("完整规则目录");
+  });
+
+  it("rejects incomplete V2 coverage and invalid evidence instead of scoring an issue", () => {
+    const raw = JSON.stringify({
+      scene: "售前",
+      checkedRuleIds: ["PRE_ANSWER_IRRELEVANT"],
+      ruleChecks: [{
+        ruleId: "PRE_ANSWER_IRRELEVANT",
+        status: "violation",
+        evidence: [{ source: "dialogue", id: "T99", quote: "不存在的原文" }],
+        evidenceExplanation: "无法回溯",
+        reason: "无法回溯",
+      }],
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    });
+    const result = parseReceptionQualityV2(raw, { screenshotFacts: completeFacts(), sourceFields: {} });
+    expect(result.preSaleIssues).toEqual([]);
+    expect(result.totalDeduction).toBe(0);
+    expect(result.reviewRequired).toBe(true);
+    expect(result.unverifiableItems).toEqual(expect.arrayContaining([
+      expect.stringContaining("规则覆盖不完整"),
+      expect.stringContaining("证据"),
+    ]));
+  });
+
+  it("rejects unknown and duplicate checked rule IDs while treating missing known coverage as review", () => {
+    const v2Rules = { ...canonicalRules, analysisProtocol: "v2" as const, issues: receptionV2IssueRules() };
+    const checks = completeV2RuleChecks(v2Rules, "售前", { status: "compliant" });
+    const response = {
+      scene: "售前",
+      checkedRuleIds: checkedRuleIds("售前", v2Rules),
+      ruleChecks: checks,
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    };
+    const options = {
+      screenshotFacts: completeFacts(),
+      businessRules: v2Rules as unknown as Record<string, unknown>,
+    };
+    expect(() => parseReceptionQualityV2(JSON.stringify({
+      ...response,
+      checkedRuleIds: [...response.checkedRuleIds, "NOT_IN_CATALOG"],
+    }), options)).toThrow("目录外问题 ID");
+    expect(() => parseReceptionQualityV2(JSON.stringify({
+      ...response,
+      checkedRuleIds: [...response.checkedRuleIds, response.checkedRuleIds[0]],
+    }), options)).toThrow("重复问题 ID");
+    const missingKnown = parseReceptionQualityV2(JSON.stringify({
+      ...response,
+      checkedRuleIds: response.checkedRuleIds.slice(1),
+    }), options);
+    expect(missingKnown.reviewRequired).toBe(true);
+    expect(missingKnown.unverifiableItems).toContain("checkedRuleIds 与适用规则集合不一致");
+  });
+
+  it("rejects an otherwise valid violation with an empty dialogue quote", () => {
+    const v2Rules = { ...canonicalRules, analysisProtocol: "v2" as const, issues: receptionV2IssueRules() };
+    const checks = completeV2RuleChecks(v2Rules, "售前", { status: "compliant" });
+    const answerCheck = checks.find((check) => check.ruleId === "PRE_ANSWER_IRRELEVANT")!;
+    answerCheck.status = "violation";
+    answerCheck.evidence = [{ source: "dialogue", id: "T2", quote: "" }];
+    const raw = JSON.stringify({
+      scene: "售前",
+      checkedRuleIds: checkedRuleIds("售前", v2Rules),
+      ruleChecks: checks,
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    });
+    expect(() => parseReceptionQualityV2(raw, {
+      screenshotFacts: completeFacts(),
+      businessRules: v2Rules as unknown as Record<string, unknown>,
+    })).toThrow("Schema");
+  });
+
+  it("derives V2 deductions locally and preserves normalized structured evidence", () => {
+    const v2Rules = {
+      ...canonicalRules,
+      analysisProtocol: "v2" as const,
+      issues: receptionV2IssueRules(),
+    };
+    const checks = completeV2RuleChecks(v2Rules, "售前", { status: "compliant" });
+    const answerCheck = checks.find((check) => check.ruleId === "PRE_ANSWER_IRRELEVANT")!;
+    answerCheck.status = "violation";
+    answerCheck.evidence = [{ source: "dialogue", id: "T2", quote: "请看详情页" }];
+    const result = parseReceptionQualityV2(JSON.stringify({
+      scene: "售前",
+      checkedRuleIds: checkedRuleIds("售前", v2Rules),
+      ruleChecks: checks,
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    }), {
+      screenshotFacts: completeFacts(),
+      sourceFields: {},
+      businessRules: v2Rules as unknown as Record<string, unknown>,
+    });
+    expect(result).toMatchObject({ analysisProtocol: "v2", totalDeduction: 10, score: 90, grade: "B" });
+    expect(result.preSaleIssues).toHaveLength(1);
+    expect(result.preSaleIssues[0]).toMatchObject({
+      issueId: "PRE_ANSWER_IRRELEVANT",
+      evidenceRefs: [{ source: "dialogue", id: "T2", quote: "请看详情页" }],
+    });
+    expect(deriveReceptionQualityFields(result)["问题点-售前"])
+      .toContain('"source":"dialogue"');
+  });
+
+  it.each(["violation", "compliant"] as const)(
+    "requires a valid knowledge citation for POST_BAD_PROCESS_OR_PRIVACY before %s is deterministic",
+    (status) => {
+      const v2Rules = {
+        ...canonicalRules,
+        analysisProtocol: "v2" as const,
+        issues: receptionV2IssueRules(),
+      };
+      const checks = completeV2RuleChecks(v2Rules, "售后", { status: "compliant" });
+      const target = checks.find((check) => check.ruleId === "POST_BAD_PROCESS_OR_PRIVACY")!;
+      target.status = status;
+      target.evidence = [{ source: "dialogue", id: "T2", quote: "请看详情页" }];
+      const result = parseReceptionQualityV2(JSON.stringify({
+        scene: "售后",
+        checkedRuleIds: checkedRuleIds("售后", v2Rules),
+        ruleChecks: checks,
+        blockingUnverifiableItems: [],
+        informationalUnverifiableItems: [],
+        confidence: 0.9,
+      }), {
+        screenshotFacts: completeFacts(),
+        sourceFields: {},
+        businessRules: v2Rules as unknown as Record<string, unknown>,
+        knowledgeSnapshot: [{
+          id: "bound-base",
+          name: "版本知识库",
+          isEnabled: true,
+          items: [{ id: "bound-item", isEnabled: true, values: { 规则: "隐私处理要求" } }],
+        }],
+      });
+
+      expect(result.unverifiableItems)
+        .toContain("聊天处理错误、信息泄露或劣质服务：缺少 knowledge 证据引用");
+      expect(result.reviewRequired).toBe(true);
+      if (status === "violation") {
+        expect(result.afterSaleIssues.map((qualityIssue) => qualityIssue.issueId))
+          .not.toContain("POST_BAD_PROCESS_OR_PRIVACY");
+      }
+    },
+  );
+
+  it("accepts POST_BAD_PROCESS_OR_PRIVACY when its dialogue and bound knowledge citations are valid", () => {
+    const v2Rules = {
+      ...canonicalRules,
+      analysisProtocol: "v2" as const,
+      issues: receptionV2IssueRules(),
+    };
+    const checks = completeV2RuleChecks(v2Rules, "售后", { status: "compliant" });
+    const target = checks.find((check) => check.ruleId === "POST_BAD_PROCESS_OR_PRIVACY")!;
+    target.status = "violation";
+    target.evidence = [
+      { source: "dialogue", id: "T2", quote: "请看详情页" },
+      {
+        source: "knowledge",
+        id: "bound-base/bound-item",
+        value: JSON.stringify({ 规则: "隐私处理要求" }),
+      },
+    ];
+    const result = parseReceptionQualityV2(JSON.stringify({
+      scene: "售后",
+      checkedRuleIds: checkedRuleIds("售后", v2Rules),
+      ruleChecks: checks,
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    }), {
+      screenshotFacts: completeFacts(),
+      sourceFields: {},
+      businessRules: v2Rules as unknown as Record<string, unknown>,
+      knowledgeSnapshot: [{
+        id: "bound-base",
+        name: "版本知识库",
+        isEnabled: true,
+        items: [{ id: "bound-item", isEnabled: true, values: { 规则: "隐私处理要求" } }],
+      }],
+    });
+
+    expect(result.afterSaleIssues.map((qualityIssue) => qualityIssue.issueId))
+      .toContain("POST_BAD_PROCESS_OR_PRIVACY");
+  });
+
+  it.each(["violation", "compliant"] as const)(
+    "requires a valid source-field citation for PRE_NO_ORDER_GUIDANCE before %s is deterministic",
+    (status) => {
+      const v2Rules = {
+        ...canonicalRules,
+        analysisProtocol: "v2" as const,
+        issues: receptionV2IssueRules(),
+      };
+      const checks = completeV2RuleChecks(v2Rules, "售前", { status: "compliant" });
+      const target = checks.find((check) => check.ruleId === "PRE_NO_ORDER_GUIDANCE")!;
+      target.status = status;
+      target.evidence = [{ source: "dialogue", id: "T2", quote: "请看详情页" }];
+      const result = parseReceptionQualityV2(JSON.stringify({
+        scene: "售前",
+        checkedRuleIds: checkedRuleIds("售前", v2Rules),
+        ruleChecks: checks,
+        blockingUnverifiableItems: [],
+        informationalUnverifiableItems: [],
+        confidence: 0.9,
+      }), {
+        screenshotFacts: completeFacts(),
+        sourceFields: { 商品名称: "测试商品" },
+        businessRules: v2Rules as unknown as Record<string, unknown>,
+      });
+
+      expect(result.unverifiableItems).toContain("未及时催拍：缺少 source_field 证据引用");
+      expect(result.reviewRequired).toBe(true);
+      if (status === "violation") {
+        expect(result.preSaleIssues.map((qualityIssue) => qualityIssue.issueId))
+          .not.toContain("PRE_NO_ORDER_GUIDANCE");
+      }
+    },
+  );
+
+  it("accepts PRE_NO_ORDER_GUIDANCE when its allowed source-field and dialogue citations are valid", () => {
+    const v2Rules = {
+      ...canonicalRules,
+      analysisProtocol: "v2" as const,
+      issues: receptionV2IssueRules(),
+    };
+    const checks = completeV2RuleChecks(v2Rules, "售前", { status: "compliant" });
+    const target = checks.find((check) => check.ruleId === "PRE_NO_ORDER_GUIDANCE")!;
+    target.status = "violation";
+    target.evidence = [
+      { source: "dialogue", id: "T2", quote: "请看详情页" },
+      { source: "source_field", id: "商品名称", value: "测试商品" },
+    ];
+    const result = parseReceptionQualityV2(JSON.stringify({
+      scene: "售前",
+      checkedRuleIds: checkedRuleIds("售前", v2Rules),
+      ruleChecks: checks,
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    }), {
+      screenshotFacts: completeFacts(),
+      sourceFields: { 商品名称: "测试商品" },
+      businessRules: v2Rules as unknown as Record<string, unknown>,
+    });
+
+    expect(result.preSaleIssues.map((qualityIssue) => qualityIssue.issueId)).toContain("PRE_NO_ORDER_GUIDANCE");
+  });
+
+  it.each([
+    {
+      ruleId: "POST_BAD_PROCESS_OR_PRIVACY",
+      scene: "售后" as const,
+      citation: { source: "knowledge", id: "bound-base/bound-item", value: "{}" } satisfies ReceptionV2EvidenceRef,
+      sourceFields: {} as Record<string, string>,
+      knowledgeSnapshot: [{
+        id: "bound-base",
+        name: "版本知识库",
+        isEnabled: true,
+        items: [{ id: "bound-item", isEnabled: true, values: { 规则: "隐私处理要求" } }],
+      }],
+    },
+    {
+      ruleId: "PRE_NO_ORDER_GUIDANCE",
+      scene: "售前" as const,
+      citation: { source: "source_field", id: "商品名称", value: "其他商品" } satisfies ReceptionV2EvidenceRef,
+      sourceFields: { 商品名称: "测试商品" },
+      knowledgeSnapshot: [],
+    },
+  ])("blocks $ruleId when its required source citation has the wrong value", ({
+    ruleId, scene, citation, sourceFields, knowledgeSnapshot,
+  }) => {
+    const v2Rules = {
+      ...canonicalRules,
+      analysisProtocol: "v2" as const,
+      issues: receptionV2IssueRules(),
+    };
+    const checks = completeV2RuleChecks(v2Rules, scene, { status: "compliant" });
+    const target = checks.find((check) => check.ruleId === ruleId)!;
+    target.status = "violation";
+    target.evidence = [
+      { source: "dialogue", id: "T2", quote: "请看详情页" },
+      citation,
+    ];
+    const result = parseReceptionQualityV2(JSON.stringify({
+      scene,
+      checkedRuleIds: checkedRuleIds(scene, v2Rules),
+      ruleChecks: checks,
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    }), {
+      screenshotFacts: completeFacts(),
+      sourceFields,
+      knowledgeSnapshot,
+      businessRules: v2Rules as unknown as Record<string, unknown>,
+    });
+
+    expect(result.reviewRequired).toBe(true);
+    expect(result.unverifiableItems).toContain(`${v2Rules.issues.find((rule) => rule.id === ruleId)!.name}：证据引用无法回溯或内容不匹配`);
+    expect([...result.preSaleIssues, ...result.afterSaleIssues].map((qualityIssue) => qualityIssue.issueId))
+      .not.toContain(ruleId);
+  });
+
+  it("downgrades backend-dependent compliant/violation checks when the workbook has no backend credentials", () => {
+    const v2Rules = {
+      ...canonicalRules,
+      analysisProtocol: "v2" as const,
+      issues: receptionV2IssueRules(),
+    };
+    const checks = completeV2RuleChecks(v2Rules, "售后", { status: "compliant" });
+    const result = parseReceptionQualityV2(JSON.stringify({
+      scene: "售后",
+      checkedRuleIds: v2Rules.issues.filter((rule) => rule.scope === "afterSale").map((rule) => rule.id),
+      ruleChecks: checks,
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    }), {
+      screenshotFacts: completeFacts(),
+      sourceFields: {},
+      businessRules: v2Rules as unknown as Record<string, unknown>,
+    });
+    expect(result.afterSaleIssues).toEqual([]);
+    expect(result.reviewRequired).toBe(true);
+    expect(result.unverifiableItems).toEqual(expect.arrayContaining([
+      expect.stringContaining("后台"),
+    ]));
+
+    const backendChecks = completeV2RuleChecks(v2Rules, "售后", { status: "compliant" });
+    const registration = backendChecks.find((check) => check.ruleId === "POST_NO_REGISTRATION")!;
+    registration.status = "violation";
+    registration.evidence = [
+      { source: "dialogue", id: "T2", quote: "请看详情页" },
+      { source: "backend_record", id: "registration-123" },
+    ];
+    const emittedBackendReference = parseReceptionQualityV2(JSON.stringify({
+      scene: "售后",
+      checkedRuleIds: checkedRuleIds("售后", v2Rules),
+      ruleChecks: backendChecks,
+      blockingUnverifiableItems: [],
+      informationalUnverifiableItems: [],
+      confidence: 0.9,
+    }), {
+      screenshotFacts: completeFacts(),
+      sourceFields: {},
+      businessRules: v2Rules as unknown as Record<string, unknown>,
+    });
+    expect(emittedBackendReference.afterSaleIssues.map((qualityIssue) => qualityIssue.issueId))
+      .not.toContain("POST_NO_REGISTRATION");
+    expect(emittedBackendReference.unverifiableItems).toContain(
+      "漏登记：缺少后台凭证，当前无法核验后台记录",
+    );
+  });
   it("requires every confirmed issue rule to carry a positive deduction", () => {
     expect(canonicalRules.issues.every((rule) => rule.deduction > 0)).toBe(true);
     expect(canonicalRules.issues.filter((rule) => rule.forceD).every((rule) => rule.deduction >= 5)).toBe(true);
@@ -470,6 +902,36 @@ describe("reception quality", () => {
     expect(text).not.toContain('"deduction"');
     expect(text).not.toContain('"forceD"');
     expect(text).not.toContain('"grade"');
+  });
+
+  it("preserves strict knowledge context shape while omitting oversized bases as whole JSON units", () => {
+    const serialized = receptionKnowledgeSnapshotContext([
+      {
+        id: "small",
+        name: "小库",
+        isEnabled: true,
+        items: [{ id: "small-item", isEnabled: true, values: { 规则: "小库内容" } }],
+      },
+      {
+        id: "large",
+        name: "大库",
+        isEnabled: true,
+        items: [{ id: "large-item", isEnabled: true, values: { text: "y".repeat(25_000) } }],
+      },
+    ] as never);
+    const parsed = JSON.parse(serialized) as Array<{ name: string; items: unknown[] }>;
+    expect(parsed).toEqual([{ name: "小库", items: [{ 规则: "小库内容" }] }]);
+    expect(serialized).not.toContain("large-item");
+    expect(serialized.length).toBeLessThanOrEqual(20_000);
+  });
+
+  it("keeps the compatibility wrapper parseable for oversized snapshots", () => {
+    const serialized = receptionKnowledgeSnapshotContext([{
+      id: "oversized", name: "超大库", isEnabled: true,
+      items: [{ id: "item", isEnabled: true, values: { text: "y".repeat(25_000) } }],
+    }] as never);
+    expect(() => JSON.parse(serialized)).not.toThrow();
+    expect(serialized).not.toContain("截断");
   });
 
   it("marks incomplete coverage and untraceable evidence for review without retaining the issue", () => {

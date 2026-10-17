@@ -2,6 +2,7 @@ import {
   RECEPTION_COMPLETE_HISTORY_REQUIRED_COLUMNS,
   RECEPTION_ISSUE_RULES,
   RECEPTION_RESULT_COLUMNS,
+  type ReceptionEvidenceSource,
   type ReceptionIssueRule,
 } from "./reception-quality-rules";
 import { RECEPTION_V4_RESULT_FIELDS } from "./reception-quality-v4-prompts";
@@ -15,11 +16,50 @@ export interface ReceptionImportContract {
 
 export interface ReceptionBusinessRules {
   kind: "reception_quality";
+  analysisProtocol?: ReceptionQualityProtocol;
   scoreBase: number;
   gradeThresholds: Array<{ grade: "A" | "B" | "C" | "D"; minScore: number }>;
   forceDGrade: "D";
   issues: ReceptionIssueRule[];
   importContract: ReceptionImportContract;
+}
+
+export type ReceptionQualityProtocol = "legacy" | "strict" | "v2";
+
+const knowledgeRuleIds = new Set([
+  "PRE_FALSE_PROMOTION",
+  "PRE_PRODUCT_KNOWLEDGE_ERROR",
+  "PRE_CAMPAIGN_ERROR",
+  "PRE_BUSINESS_RULE_ERROR",
+  "POST_BAD_PROCESS_OR_PRIVACY",
+  "POST_SOP_VIOLATION",
+]);
+const backendRuleIds = new Set([
+  "POST_NO_REGISTRATION",
+  "POST_NO_NOTE",
+  "POST_NO_RESEND",
+  "POST_REGISTRATION_ERROR",
+  "POST_CHAT_CAUSED_COMPLAINT",
+  "POST_REFUND_COMPLAINT_ERROR",
+  "POST_REFUND_REJECT_NO_EVIDENCE",
+]);
+const sourceFieldRuleIds = new Set(["PRE_NO_ORDER_GUIDANCE"]);
+
+export function receptionV2IssueRules(): ReceptionIssueRule[] {
+  return RECEPTION_ISSUE_RULES.map((rule) => {
+    const evidenceSources: ReceptionEvidenceSource[] = ["dialogue"];
+    if (knowledgeRuleIds.has(rule.id)) evidenceSources.push("knowledge");
+    if (backendRuleIds.has(rule.id)) evidenceSources.push("backend_record");
+    if (sourceFieldRuleIds.has(rule.id)) evidenceSources.push("source_field");
+    return {
+      ...rule,
+      applicableWhen: [...rule.applicableWhen],
+      triggerWhen: [...rule.triggerWhen],
+      exclusions: [...rule.exclusions],
+      requiredEvidence: [...rule.requiredEvidence],
+      evidenceSources,
+    };
+  });
 }
 
 function genericImportContract(sourceFields: string[]): GenericImportContract {

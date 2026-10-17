@@ -4,8 +4,20 @@ import type {
   SectionConfigVersion,
 } from "../../shared/types";
 import { alignReceptionIssueValues } from "../../shared/reception-quality-results";
-import { receptionAiSourceFields } from "./reception-quality-rules";
-import { receptionBusinessRules, type ReceptionBusinessRules } from "./section-business-rules";
+import {
+  receptionAiSourceFields,
+  RECEPTION_EVIDENCE_SOURCES,
+  type ReceptionEvidenceSource,
+} from "./reception-quality-rules";
+import {
+  receptionBusinessRules,
+  receptionV2IssueRules,
+  type ReceptionBusinessRules,
+} from "./section-business-rules";
+import { buildReceptionKnowledgeContext } from "./reception-knowledge-context";
+import {
+  RECEPTION_V2_QUALITY_PROMPT,
+} from "./reception-quality-v2-prompts";
 
 export type ReceptionScene = "售前" | "售后" | "混合" | "无法判断";
 export type ReceptionSpeaker = "客户" | "客服" | "机器人" | "系统" | "无法判断";
@@ -41,10 +53,28 @@ export interface ReceptionIssue {
   forceD: boolean;
   violationCount: number;
   suggestion: string;
+  evidenceRefs?: ReceptionV2EvidenceRef[];
+}
+
+export type ReceptionV2RuleStatus = "violation" | "compliant" | "needs_review" | "not_applicable";
+
+export interface ReceptionV2EvidenceRef {
+  source: ReceptionEvidenceSource;
+  id: string;
+  quote?: string;
+  value?: string;
+}
+
+export interface ReceptionV2RuleCheck {
+  ruleId: string;
+  status: ReceptionV2RuleStatus;
+  evidence: ReceptionV2EvidenceRef[];
+  evidenceExplanation: string;
+  reason: string;
 }
 
 export interface ReceptionQualityAnalysis {
-  analysisProtocol: "legacy" | "strict";
+  analysisProtocol: "legacy" | "strict" | "v2";
   scene: ReceptionScene;
   checkedRuleIds: string[];
   preSaleIssues: ReceptionIssue[];
@@ -97,6 +127,30 @@ const qualityResponseSchema = z.object({
   checkedRuleIds: z.array(z.string().trim().min(1).max(120)).max(200),
   preSaleIssues: z.array(qualityIssueSchema).max(50),
   afterSaleIssues: z.array(qualityIssueSchema).max(50),
+  blockingUnverifiableItems: stringArray,
+  informationalUnverifiableItems: stringArray,
+  confidence: z.number().min(0).max(1),
+}).strict();
+
+const v2EvidenceRefSchema = z.object({
+  source: z.enum(RECEPTION_EVIDENCE_SOURCES),
+  id: z.string().trim().min(1).max(500),
+  quote: shortText.optional(),
+  value: z.string().max(20_000).optional(),
+}).strict();
+
+const v2RuleCheckSchema = z.object({
+  ruleId: z.string().trim().min(1).max(120),
+  status: z.enum(["violation", "compliant", "needs_review", "not_applicable"]),
+  evidence: z.array(v2EvidenceRefSchema).max(50),
+  evidenceExplanation: shortText,
+  reason: shortText,
+}).strict();
+
+const v2QualityResponseSchema = z.object({
+  scene: z.enum(["售前", "售后", "混合", "无法判断"]),
+  checkedRuleIds: z.array(z.string().trim().min(1).max(120)).max(200),
+  ruleChecks: z.array(v2RuleCheckSchema).max(200),
   blockingUnverifiableItems: stringArray,
   informationalUnverifiableItems: stringArray,
   confidence: z.number().min(0).max(1),
@@ -525,12 +579,243 @@ export function parseReceptionQuality(
   };
 }
 
+function v2BusinessRules(value?: Record<string, unknown>): ReceptionBusinessRules {
+  const rules = receptionBusinessRules(value);
+  return value?.analysisProtocol === "v2"
+    ? rules
+    : { ...rules, analysisProtocol: "v2", issues: receptionV2IssueRules() };
+}
+
+function v2Applicable(scene: ReceptionScene, scope: "preSale" | "afterSale") {
+  return scene === "混合" || scene === "无法判断"
+    || (scene === "售前" && scope === "preSale")
+    || (scene === "售后" && scope === "afterSale");
+}
+
+function v2KnowledgeItems(context: ReturnType<typeof buildReceptionKnowledgeContext>) {
+  try {
+    const bases = JSON.parse(context.serialized) as Array<{
+      baseId: string;
+      items: Array<{ itemId: string; values: Record<string, unknown> }>;
+    }>;
+    return new Map(bases.flatMap((base) => base.items.map((item) => [
+      `${base.baseId}/${item.itemId}`,
+      JSON.stringify(item.values),
+    ] as const)));
+  } catch {
+    return new Map<string, string>();
+  }
+}
+
+export function parseReceptionQualityV2(
+  raw: string,
+  options: {
+    screenshotFacts?: unknown;
+    sourceFields?: Record<string, string>;
+    knowledgeSnapshot?: SectionConfigVersion["knowledgeSnapshot"];
+    businessRules?: Record<string, unknown>;
+  } = {},
+): ReceptionQualityAnalysis {
+  const businessRules = v2BusinessRules(options.businessRules);
+  const parsed = parseJsonObject(raw, "统一质检 V2");
+  const checked = v2QualityResponseSchema.safeParse(parsed);
+  if (!checked.success) throw schemaError("统一质检 V2", checked.error);
+
+  const rules = businessRules.issues;
+  const knownRuleIds = new Set(rules.map((rule) => rule.id));
+  const checksById = new Map<string, z.infer<typeof v2RuleCheckSchema>>();
+  for (const check of checked.data.ruleChecks) {
+    if (!knownRuleIds.has(check.ruleId)) throw new Error(`规则检查包含目录外问题 ID：${check.ruleId}`);
+    if (checksById.has(check.ruleId)) throw new Error(`模型返回重复问题 ID：${check.ruleId}`);
+    checksById.set(check.ruleId, check);
+  }
+
+  const expectedIds = expectedRuleIds(checked.data.scene, rules);
+  const expectedSet = new Set(expectedIds);
+  const listedIds = checked.data.checkedRuleIds;
+  const listedSet = new Set(listedIds);
+  const unknownChecked = listedIds.find((id) => !knownRuleIds.has(id));
+  if (unknownChecked) throw new Error(`已检查规则包含目录外问题 ID：${unknownChecked}`);
+  if (listedIds.length !== listedSet.size) throw new Error("已检查规则包含重复问题 ID");
+  const coverageProblems: string[] = [];
+  const missingChecks = rules.filter((rule) => !checksById.has(rule.id));
+  if (missingChecks.length) coverageProblems.push(`规则覆盖不完整：缺少 ${missingChecks.length} 项规则检查`);
+  if (listedIds.length !== listedSet.size
+    || listedSet.size !== expectedSet.size
+    || [...expectedSet].some((id) => !listedSet.has(id))) {
+    coverageProblems.push("checkedRuleIds 与适用规则集合不一致");
+  }
+  const coverageValid = coverageProblems.length === 0;
+
+  const facts = screenshotFactsValue(options.screenshotFacts);
+  const turns = Array.isArray(facts.dialogueTurns) ? facts.dialogueTurns : [];
+  const turnsById = new Map(turns.map((turn) => [turn.id, turn]));
+  const sourceFields = receptionAiSourceFields(options.sourceFields ?? {});
+  const knowledgeContext = buildReceptionKnowledgeContext(options.knowledgeSnapshot);
+  const knowledgeItems = v2KnowledgeItems(knowledgeContext);
+  const blocking = [
+    ...checked.data.blockingUnverifiableItems,
+    ...coverageProblems,
+    ...(Array.isArray(facts.reviewReasons) ? facts.reviewReasons : []),
+  ];
+  const informational = [...checked.data.informationalUnverifiableItems];
+  if (!knowledgeContext.complete) {
+    blocking.push(`知识库上下文不完整：省略 ${knowledgeContext.omittedItemCount} 条知识条目`);
+  }
+
+  const acceptedIssues: ReceptionIssue[] = [];
+  for (const rule of rules) {
+    const check = checksById.get(rule.id);
+    if (!check) continue;
+    const applicable = v2Applicable(checked.data.scene, rule.scope);
+    if (!applicable && check.status !== "not_applicable") {
+      blocking.push(`${rule.name}：当前场景不适用，但模型未标记 not_applicable`);
+      continue;
+    }
+    if (applicable && check.status === "not_applicable") {
+      blocking.push(`${rule.name}：适用规则被标记为 not_applicable`);
+      continue;
+    }
+    if (!applicable) continue;
+
+    let invalidRef = false;
+    let hasDialogueRef = false;
+    let hasBackendRef = false;
+    const validEvidenceSources = new Set<ReceptionEvidenceSource>();
+    for (const ref of check.evidence) {
+      if (ref.source === "dialogue") {
+        const turn = turnsById.get(ref.id);
+        if (!turn || typeof ref.quote !== "string" || !turn.text.includes(ref.quote)) {
+          invalidRef = true;
+          continue;
+        }
+        hasDialogueRef = true;
+        validEvidenceSources.add("dialogue");
+      } else if (ref.source === "source_field") {
+        if (!(ref.id in sourceFields) || typeof ref.value !== "string" || sourceFields[ref.id] !== ref.value) {
+          invalidRef = true;
+        } else {
+          validEvidenceSources.add("source_field");
+        }
+      } else if (ref.source === "knowledge") {
+        const expectedValue = knowledgeItems.get(ref.id);
+        if (!expectedValue || typeof ref.value !== "string" || expectedValue !== ref.value) {
+          invalidRef = true;
+        } else {
+          validEvidenceSources.add("knowledge");
+        }
+      } else {
+        hasBackendRef = true;
+      }
+    }
+    if (invalidRef) blocking.push(`${rule.name}：证据引用无法回溯或内容不匹配`);
+
+    const declaredSources: ReceptionEvidenceSource[] = rule.evidenceSources?.length
+      ? rule.evidenceSources
+      : ["dialogue"];
+    let unavailableBlockingSource = false;
+    for (const source of declaredSources) {
+      if (source === "backend_record") {
+        blocking.push(`${rule.name}：缺少后台凭证，当前无法核验后台记录`);
+        unavailableBlockingSource = true;
+        continue;
+      }
+      const available = source === "dialogue" ? turns.length > 0
+        : source === "source_field" ? Object.keys(sourceFields).length > 0
+          : source === "knowledge" ? knowledgeItems.size > 0 && knowledgeContext.complete
+            : false;
+      if (!available) {
+        blocking.push(`${rule.name}：缺少 ${source} 证据来源`);
+        unavailableBlockingSource = true;
+      } else if (!validEvidenceSources.has(source)) {
+        blocking.push(`${rule.name}：缺少 ${source} 证据引用`);
+        unavailableBlockingSource = true;
+      }
+    }
+
+    if (check.status === "needs_review") {
+      blocking.push(`${rule.name}：规则结论需要人工复核`);
+      continue;
+    }
+    if (check.status === "compliant") {
+      if (invalidRef || unavailableBlockingSource || hasBackendRef) {
+        if (hasBackendRef && !unavailableBlockingSource) {
+          blocking.push(`${rule.name}：后台凭证不可用，不能确认合规`);
+        }
+      }
+      continue;
+    }
+    if (check.status !== "violation") continue;
+    if (!coverageValid || invalidRef || unavailableBlockingSource || hasBackendRef || !hasDialogueRef) {
+      if (!hasDialogueRef) blocking.push(`${rule.name}：违规结论缺少有效对话证据`);
+      if (hasBackendRef && !unavailableBlockingSource) blocking.push(`${rule.name}：后台凭证不可用，不能确认违规`);
+      continue;
+    }
+    const dialogueRefs = check.evidence.filter((ref) => ref.source === "dialogue");
+    acceptedIssues.push({
+      issueId: rule.id,
+      name: rule.name,
+      dimension: rule.dimension,
+      chatQuotes: unique(dialogueRefs.flatMap((ref) => ref.quote ? [ref.quote] : [])),
+      evidenceIds: unique(dialogueRefs.map((ref) => ref.id)),
+      evidenceExplanation: check.evidenceExplanation,
+      reason: check.reason,
+      deduction: rule.deduction,
+      forceD: rule.forceD,
+      violationCount: rule.violationCount,
+      suggestion: rule.suggestion,
+      evidenceRefs: check.evidence,
+    });
+  }
+
+  const orderedIssues = acceptedIssues.toSorted((left, right) =>
+    rules.find((rule) => rule.id === left.issueId)!.priority
+      - rules.find((rule) => rule.id === right.issueId)!.priority);
+  const preSaleIssues = orderedIssues.filter((issue) =>
+    rules.find((rule) => rule.id === issue.issueId)!.scope === "preSale");
+  const afterSaleIssues = orderedIssues.filter((issue) =>
+    rules.find((rule) => rule.id === issue.issueId)!.scope === "afterSale");
+  const totalDeduction = orderedIssues.reduce((sum, issue) => sum + issue.deduction, 0);
+  const score = Math.max(0, businessRules.scoreBase - totalDeduction);
+  const hasDLevelIssue = orderedIssues.some((issue) => issue.forceD);
+  const grade = calculateGrade(score, hasDLevelIssue, businessRules);
+  return {
+    analysisProtocol: "v2",
+    scene: checked.data.scene,
+    checkedRuleIds: listedIds,
+    preSaleIssues,
+    afterSaleIssues,
+    unverifiableItems: unique(blocking),
+    informationalUnverifiableItems: unique(informational),
+    suggestion: unique(orderedIssues.map((issue) => issue.suggestion)).join("；"),
+    confidence: checked.data.confidence,
+    score,
+    totalDeduction,
+    grade,
+    hasDLevelIssue,
+    hasAfterSaleViolation: afterSaleIssues.length > 0,
+    labels: orderedIssues.map((issue) => issue.name),
+    dimensions: orderedIssues.map((issue) => issue.dimension),
+    deductions: orderedIssues.map((issue) => issue.deduction),
+    conversationStartTime: typeof facts.conversationStartTime === "string"
+      ? facts.conversationStartTime
+      : "",
+    conversationRoundCount: typeof facts.conversationRoundCount === "number"
+      ? facts.conversationRoundCount
+      : 0,
+    reviewRequired: checked.data.scene === "无法判断"
+      || checked.data.confidence < 0.5
+      || blocking.length > 0,
+  };
+}
+
 function issueReport(issues: ReceptionIssue[]) {
   if (!issues.length) return "";
   return issues.map((issue, index) => [
     `${index + 1}. ${issue.name}`,
     `相关原文：${issue.chatQuotes.join("；")}`,
     `证据说明：${issue.evidenceExplanation}`,
+    ...(issue.evidenceRefs?.length ? [`结构化证据：${JSON.stringify(issue.evidenceRefs)}`] : []),
     `判定理由：${issue.reason}`,
   ].join("\n")).join("\n\n");
 }
@@ -566,26 +851,24 @@ export function deriveReceptionQualityFields(quality: ReceptionQualityAnalysis):
 }
 
 export function receptionKnowledgeSnapshotContext(
-  snapshot: SectionConfigVersion["knowledgeSnapshot"] = [],
+  snapshot: SectionConfigVersion["knowledgeSnapshot"] | undefined = [],
 ) {
-  const bases = snapshot.flatMap((base) => {
-    if (!base || typeof base !== "object" || base.isEnabled === false) return [];
+  const included: Array<{ name: string; items: Record<string, unknown>[] }> = [];
+  for (const base of Array.isArray(snapshot) ? snapshot : []) {
+    if (!base || typeof base !== "object" || base.isEnabled === false) continue;
     const items = Array.isArray(base.items)
-      ? base.items.flatMap((item) => {
-        if (!item || typeof item !== "object" || item.isEnabled === false) return [];
-        return item.values && typeof item.values === "object"
-          ? [item.values]
-          : [];
-      })
+      ? base.items.flatMap((item) => item && typeof item === "object"
+        && item.isEnabled !== false
+        && item.values && typeof item.values === "object" && !Array.isArray(item.values)
+        ? [item.values as Record<string, unknown>]
+        : [])
       : [];
-    return items.length
-      ? [{ name: String(base.name ?? ""), items }]
-      : [];
-  });
-  const serialized = JSON.stringify(bases);
-  return serialized.length <= 20_000
-    ? serialized
-    : `${serialized.slice(0, 20_000)}…（版本知识快照内容已按提示词上限截断）`;
+    if (!items.length) continue;
+    const candidate = { name: String(base.name ?? ""), items };
+    const next = [...included, candidate];
+    if (JSON.stringify(next).length <= 20_000) included.push(candidate);
+  }
+  return JSON.stringify(included);
 }
 
 export function buildReceptionQualityMessages(input: {
@@ -640,6 +923,67 @@ export function buildReceptionQualityMessages(input: {
     {
       role: "system",
       content: "你是客服接待流程质检助手。原文至上，只能选择版本目录内问题，只返回符合指定 Schema 的合法 JSON。",
+    },
+    { role: "user", content: [{ type: "text", text }] },
+  ];
+}
+
+export function buildReceptionQualityV2Messages(input: {
+  field: AnalysisField;
+  screenshotFacts: unknown;
+  sourceFields: Record<string, string>;
+  businessRules?: Record<string, unknown>;
+  knowledgeSnapshot?: SectionConfigVersion["knowledgeSnapshot"];
+}): Array<{ role: "system" | "user"; content: unknown }> {
+  const rules = v2BusinessRules(input.businessRules).issues;
+  const knowledgeContext = buildReceptionKnowledgeContext(input.knowledgeSnapshot);
+  const catalog = rules.map((rule) => ({
+    id: rule.id,
+    name: rule.name,
+    scope: rule.scope === "preSale" ? "售前" : "售后",
+    criterion: rule.criterion,
+    applicableWhen: rule.applicableWhen,
+    triggerWhen: rule.triggerWhen,
+    exclusions: rule.exclusions,
+    requiredEvidence: rule.requiredEvidence,
+    missingDataOutcome: rule.missingDataOutcome,
+    evidenceSources: rule.evidenceSources?.length ? rule.evidenceSources : ["dialogue"],
+  }));
+  const knowledgeStatus = {
+    complete: knowledgeContext.complete,
+    includedBaseIds: knowledgeContext.includedBaseIds,
+    omittedBaseIds: knowledgeContext.omittedBaseIds,
+    omittedItemCount: knowledgeContext.omittedItemCount,
+  };
+  const responseShape = {
+    scene: "售前|售后|混合|无法判断",
+    checkedRuleIds: ["所有适用规则 ID，且与非 not_applicable ruleChecks 对应"],
+    ruleChecks: [{
+      ruleId: "PRE_ANSWER_IRRELEVANT",
+      status: "violation|compliant|needs_review|not_applicable",
+      evidence: [{ source: "dialogue", id: "T2", quote: "精确原文片段" }],
+      evidenceExplanation: "证据如何满足或缺少规则要求",
+      reason: "规则判定理由",
+    }],
+    blockingUnverifiableItems: [],
+    informationalUnverifiableItems: [],
+    confidence: 0.8,
+  };
+  const text = [
+    "解析板块：接待流程质检 V2",
+    `版本字段提示词：${input.field.prompt}`,
+    RECEPTION_V2_QUALITY_PROMPT,
+    `完整规则目录：${JSON.stringify(catalog)}`,
+    `任务绑定版本知识上下文状态：${JSON.stringify(knowledgeStatus)}`,
+    `任务绑定版本知识快照：${knowledgeContext.serialized}`,
+    `统一截图事实：${JSON.stringify(input.screenshotFacts)}`,
+    `辅助字段：${JSON.stringify(receptionAiSourceFields(input.sourceFields))}`,
+    `只返回严格 JSON，不得增加字段：${JSON.stringify(responseShape)}`,
+  ].join("\n");
+  return [
+    {
+      role: "system",
+      content: "你是客服接待流程质检助手。严格执行完整规则目录和逐项证据契约，只返回符合指定 Schema 的合法 JSON。",
     },
     { role: "user", content: [{ type: "text", text }] },
   ];

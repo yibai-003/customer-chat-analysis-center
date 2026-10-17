@@ -30,6 +30,7 @@ import { applyReceptionV5DerivedResults } from "./026-reception-v5-derived-resul
 import { applyReceptionV5LiveCoreSync } from "./027-reception-v5-live-core-sync";
 import { applyReceptionIssueRowExport } from "./028-reception-issue-row-export";
 import { revertReceptionIssueRowExport } from "./029-revert-reception-issue-row-export";
+import { applyReceptionQualityProtocolV2 } from "./030-reception-quality-protocol-v2";
 
 export interface Migration { version: number; name: string; up: (db: any) => void }
 export const migrations: Migration[] = [
@@ -61,8 +62,9 @@ export const migrations: Migration[] = [
   { version: 27, name: "reception-v5-live-core-sync", up: applyReceptionV5LiveCoreSync },
   { version: 28, name: "reception-issue-row-export", up: applyReceptionIssueRowExport },
   { version: 29, name: "revert-reception-issue-row-export", up: revertReceptionIssueRowExport },
+  { version: 30, name: "reception-quality-protocol-v2", up: applyReceptionQualityProtocolV2 },
 ];
-export const currentSchemaVersion = 29;
+export const currentSchemaVersion = 30;
 export function appliedMigrations(db: any): { version: number; name: string; applied_at: string }[] {
   if (!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'").get()) return [];
   return db.prepare("SELECT version,name,applied_at FROM schema_migrations ORDER BY version").all();

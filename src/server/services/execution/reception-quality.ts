@@ -1,9 +1,11 @@
 import {
   buildReceptionScreenshotFactsMessages,
   buildReceptionQualityMessages,
+  buildReceptionQualityV2Messages,
   deriveReceptionQualityFields,
   parseReceptionScreenshotFacts,
   parseReceptionQuality,
+  parseReceptionQualityV2,
   type ReceptionScreenshotFacts,
   type ReceptionQualityAnalysis,
 } from "../reception-quality";
@@ -16,14 +18,18 @@ import {
   createStructuredDeriveHandler,
   type StructuredFieldDefinition,
 } from "./structured";
+import type { SectionConfigVersion } from "../../../shared/types";
 import { alignReceptionIssueValues } from "../../../shared/reception-quality-results";
+import { receptionBusinessRules, type ReceptionQualityProtocol } from "../section-business-rules";
 import { registerFieldExecutionHandler } from "./registry";
 
 interface ReceptionSource {
   screenshotFacts: unknown;
   fieldKey: string;
-  strictProtocol: boolean;
+  analysisProtocol: ReceptionQualityProtocol;
   businessRules: Record<string, unknown>;
+  knowledgeSnapshot: SectionConfigVersion["knowledgeSnapshot"];
+  sourceFields: Record<string, string>;
 }
 
 interface ReceptionScreenshotSource {
@@ -54,14 +60,19 @@ const receptionScreenshotDefinition: StructuredFieldDefinition<ReceptionScreensh
 
 const receptionQualityDefinition: StructuredFieldDefinition<ReceptionSource, ReceptionQualityAnalysis> = {
   key: "统一质检分析",
-  prepare({ field, configVersion, dependencies }) {
+  prepare({ field, configVersion, dependencies, sourceFields }) {
+    const strictProtocol = configVersion.fieldsSnapshot.some((candidate) =>
+      candidate.key === "截图内容总结"
+      && candidate.executionType === "reception_screenshot_facts");
     return {
       screenshotFacts: dependencies["截图内容总结"],
       fieldKey: field.key,
-      strictProtocol: configVersion.fieldsSnapshot.some((candidate) =>
-        candidate.key === "截图内容总结"
-        && candidate.executionType === "reception_screenshot_facts"),
+      analysisProtocol: receptionBusinessRules(configVersion.businessRules).analysisProtocol === "v2"
+        ? "v2"
+        : strictProtocol ? "strict" : "legacy",
       businessRules: configVersion.businessRules,
+      knowledgeSnapshot: configVersion.knowledgeSnapshot,
+      sourceFields,
     };
   },
   buildMessages(input, source) {
@@ -72,7 +83,8 @@ const receptionQualityDefinition: StructuredFieldDefinition<ReceptionSource, Rec
       businessRules: input.configVersion.businessRules,
       knowledgeSnapshot: input.configVersion.knowledgeSnapshot,
     };
-    return source.strictProtocol
+    if (source.analysisProtocol === "v2") return buildReceptionQualityV2Messages(messageInput);
+    return source.analysisProtocol === "strict"
       ? buildReceptionQualityMessages(messageInput)
       : buildLegacyReceptionQualityMessages(messageInput);
   },
@@ -81,7 +93,14 @@ const receptionQualityDefinition: StructuredFieldDefinition<ReceptionSource, Rec
       screenshotFacts: source.screenshotFacts,
       businessRules: source.businessRules,
     };
-    return source.strictProtocol
+    if (source.analysisProtocol === "v2") {
+      return parseReceptionQualityV2(raw, {
+        ...options,
+        sourceFields: source.sourceFields,
+        knowledgeSnapshot: source.knowledgeSnapshot,
+      });
+    }
+    return source.analysisProtocol === "strict"
       ? parseReceptionQuality(raw, options)
       : parseLegacyReceptionQuality(raw, source.fieldKey, options);
   },
@@ -93,6 +112,9 @@ const receptionQualityDefinition: StructuredFieldDefinition<ReceptionSource, Rec
     .map((issue) => [
       ...issue.chatQuotes,
       issue.evidenceExplanation,
+      ...(issue.evidenceRefs?.length
+        ? [`结构化证据：${JSON.stringify(issue.evidenceRefs)}`]
+        : []),
       issue.reason,
     ].join("\n")).join("\n"),
 };

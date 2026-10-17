@@ -1,5 +1,8 @@
 export type ReceptionIssueScope = "preSale" | "afterSale";
 
+export const RECEPTION_EVIDENCE_SOURCES = ["dialogue", "source_field", "knowledge", "backend_record"] as const;
+export type ReceptionEvidenceSource = (typeof RECEPTION_EVIDENCE_SOURCES)[number];
+
 export const RECEPTION_EXCEL_FIELDS = [
   "平台", "店铺", "日期", "客服", "客户ID", "分组", "平台店铺商品编码", "商品名称", "聊天截图", "订单号",
   "颜色款式", "品类", "问题点-售前", "问题点-售后", "有无违规-售后", "客服问题 识别问题并打标签",
@@ -58,6 +61,7 @@ export interface ReceptionIssueRule {
   exclusions: string[];
   requiredEvidence: string[];
   missingDataOutcome: "not_applicable" | "blocking_review" | "informational";
+  evidenceSources?: ReceptionEvidenceSource[];
 }
 
 type RuleDetail = Pick<ReceptionIssueRule,
